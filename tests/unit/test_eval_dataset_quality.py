@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import torch
+from scripts.eval_dataset_quality import evaluate_dataset
 
 
 def test_eval_dataset_quality_smoke(tmp_path: Path) -> None:
@@ -10,9 +11,6 @@ def test_eval_dataset_quality_smoke(tmp_path: Path) -> None:
     Creates a small synthetic canonical dataset on disk and verifies that the
     dataset-level evaluator runs and returns the expected top-level keys.
     """
-
-    from scripts.eval_dataset_quality import evaluate_dataset  # noqa: WPS433
-
     data = []
     for _ in range(3):
         T, D = 8, 20

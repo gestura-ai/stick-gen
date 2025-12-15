@@ -143,7 +143,10 @@ def physics_loss(physics_output, physics_targets):
     )
 
     # Phase 2: Physics-aware loss function (Standard)
-    physics_output = outputs["physics"]
+    
+    # Phase 2: Physics-aware loss function (Standard)
+    # physics_output is already passed in argument
+
     # physics_targets would be needed here, currently reusing what we have or skipping if not available
     # For now, we keep the existing logic but wrap the new layer
     

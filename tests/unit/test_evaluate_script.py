@@ -1,5 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
+from scripts.evaluate import evaluate_model
+from scripts.eval_dataset_quality import evaluate_dataset
 
 
 def test_evaluate_model_uses_eval_metrics():
@@ -9,8 +11,6 @@ def test_evaluate_model_uses_eval_metrics():
     executes without errors and returns the expected metric keys, including
     those backed by src.eval.metrics.
     """
-    from scripts.evaluate import evaluate_model  # noqa: WPS433
-
     class DummyModel(torch.nn.Module):
         def __init__(self):
             super().__init__()

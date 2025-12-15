@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from typing import List, Dict, Optional, Tuple
 from src.model.transformer import StickFigureTransformer
+from src.data_gen.schema import ActionType
 from src.data_gen.renderer import Renderer, StickFigure, RenderStyle
 from src.data_gen.story_engine import StoryGenerator
 from src.data_gen.llm_story_engine import LLMStoryGenerator
@@ -313,6 +314,8 @@ class InferenceGenerator:
     def generate_with_timeline(
         self,
         prompt: str,
+        action_timeline: Dict[int, ActionType],
+        initial_action: ActionType = ActionType.IDLE,
         output_path: str = "output.mp4",
         refine: Optional[bool] = None
     ) -> str:
