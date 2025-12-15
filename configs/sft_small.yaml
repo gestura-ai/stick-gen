@@ -1,0 +1,136 @@
+# Stick-Gen SFT Configuration - Small Variant
+# Supervised Fine-Tuning on curated high-quality data
+# Designed to be initialized from a pretrained checkpoint
+
+# Model Variant Metadata
+metadata:
+  variant: "sft_small"
+  display_name: "Stick-Gen Small (SFT)"
+  expected_params: 5_600_000  # 5.6M base parameters
+  recommended_hardware:
+    cpu: "4+ cores"
+    ram: "8-16GB"
+    gpu: "Not required (but recommended)"
+  use_cases:
+    - "Fine-tuning on curated data"
+    - "Instruction-following improvements"
+    - "Quality-focused training"
+
+# Model Architecture (matches small.yaml)
+model:
+  input_dim: 20
+  d_model: 256
+  nhead: 8
+  num_layers: 6
+  output_dim: 20
+  embedding_dim: 1024
+  dropout: 0.1
+  num_actions: 64
+
+# Training Settings (SFT-specific: lower LR, fewer epochs)
+training:
+  stage: "sft"              # Training stage identifier
+  batch_size: 1
+  grad_accum_steps: 64
+  epochs: 15                # Fewer epochs than pretraining
+  learning_rate: 0.0001     # Lower LR for fine-tuning (1e-4 vs 3e-4)
+  warmup_epochs: 2          # Shorter warmup
+  max_grad_norm: 1.0
+  resume_from: null         # For continuing SFT training
+  init_from: null           # For initializing from pretrained checkpoint (weights only)
+
+# LoRA Settings (optional, disabled by default)
+lora:
+  enabled: false            # Set to true to use LoRA fine-tuning
+  rank: 8                   # Low-rank dimension
+  alpha: 16                 # Scaling factor (typically 2x rank)
+  dropout: 0.05             # LoRA-specific dropout
+  target_modules:           # Regex patterns for modules to adapt
+    - "transformer_encoder"
+    - "pose_decoder"
+
+# Loss Weights (can emphasize action/physics for SFT)
+loss_weights:
+  temporal: 0.1
+  action: 0.2               # Slightly higher for SFT
+  physics: 0.25             # Slightly higher for SFT
+  diffusion: 0.0
+
+# Physics Settings
+physics:
+  enabled: true
+  velocity_weight: 1.0
+  acceleration_weight: 0.5
+  momentum_weight: 0.3
+
+# Diffusion Settings
+diffusion:
+  enabled: false
+
+# Dataset Paths (SFT uses curated SFT dataset)
+data:
+  train_data: "data/curated/sft_data_embedded.pt"  # Default to SFT dataset
+  curated_pretrain_data: "data/curated/pretrain_data_embedded.pt"
+  curated_sft_data: "data/curated/sft_data_embedded.pt"
+  checkpoint_dir: "checkpoints/sft_small"
+  log_dir: "logs/sft_small"
+
+# Data Generation Settings (inherited from small.yaml)
+data_generation:
+  num_samples: 10000
+  output_path: "data/train_data.pt"
+  embedded_path: "data/train_data_embedded.pt"
+  merged_path: "data/train_data_merged.pt"
+  augmentation:
+    enabled: true
+    multiplier: 4
+  sequence:
+    duration_seconds: 10.0
+    fps: 25
+    max_actors: 3
+  llm:
+    use_mock: true
+    llm_ratio: 0.2
+
+# Data Curation Settings (SFT uses stricter quality thresholds)
+data_curation:
+  # Merge step settings (merge_datasets.py)
+  merge:
+    balance_sources: true        # Enable source balancing
+    max_source_fraction: 0.35    # Allow slightly higher per-source for small datasets
+    filter_artifacts: true       # Remove artifacts during merge
+    max_artifact_score: 0.35     # Stricter for SFT quality
+    min_frames: 25               # Min sequence length
+    max_frames: 500              # Max sequence length
+  # Curation step settings (prepare_curated_datasets.py)
+  curation:
+    min_quality_pretrain: 0.5    # Not used for SFT
+    min_quality_sft: 0.8         # SFT quality threshold
+    min_camera_stability_sft: 0.6
+    balance_max_fraction: 0.3    # Max fraction per action in SFT
+
+# Device Settings
+device:
+  type: "auto"              # Auto-detect GPU/CPU
+  num_workers: 0
+  pin_memory: false
+
+# Logging Settings
+logging:
+  level: "INFO"
+  log_interval: 10
+  save_interval: 5
+  verbose_file: "training_verbose.log"
+
+# Optimization
+optimization:
+  optimizer: "AdamW"
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# CPU Optimization
+cpu:
+  num_threads: 8
+  use_mkldnn: true
+

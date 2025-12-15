@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Media files (test outputs)
+*.mp4
+*.png
+*.gif
+
+# Model checkpoints
+checkpoints/
+*.pth
+*.pt.bak
+
+# Data (except essential files)
+/data/
+!data/.gitkeep
+./data
+# Allow tracking of essential metadata
+!data/amass_descriptions.json
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# Virtual environments
+venv/
+env/
+.env

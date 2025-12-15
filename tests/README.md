@@ -1,0 +1,119 @@
+# Stick-Gen Tests
+
+This directory contains all tests for the stick-gen project, organized by category.
+
+## 📁 Test Organization
+
+### Unit Tests (`unit/`)
+Tests for individual components and functions:
+- **test_action_conditioning.py** - Action conditioning system tests
+- **test_diffusion.py** - Diffusion model tests
+- **test_physics.py** - Physics computation tests
+
+### Integration Tests (`integration/`)
+Tests for component integration and end-to-end workflows:
+- **test_amass_integration.py** - AMASS dataset integration tests
+- **test_integration_all_features.py** - All features integration tests
+- **test_pipeline.py** - Full pipeline tests
+
+### Feature Tests (`features/`)
+Tests for specific features:
+- **test_expression_transitions.py** - Expression transition tests
+- **test_facial_expressions.py** - Facial expression system tests
+- **test_improvements.py** - System improvements tests
+- **test_speech_animation.py** - Speech animation tests
+
+### Performance Tests (`performance/`)
+Performance benchmarking and profiling:
+- **test_performance_benchmark.py** - Performance benchmarks
+
+## 🚀 Running Tests
+
+### Run All Tests
+```bash
+cd /Users/bc/gestura/stick-gen
+python3.9 -m pytest tests/
+```
+
+### Run Specific Test Category
+```bash
+# Unit tests only
+python3.9 -m pytest tests/unit/
+
+# Integration tests only
+python3.9 -m pytest tests/integration/
+
+# Feature tests only
+python3.9 -m pytest tests/features/
+
+# Performance tests only
+python3.9 -m pytest tests/performance/
+```
+
+### Run Specific Test File
+```bash
+python3.9 -m pytest tests/unit/test_physics.py
+```
+
+### Run with Verbose Output
+```bash
+python3.9 -m pytest tests/ -v
+```
+
+### Run with Coverage
+```bash
+python3.9 -m pytest tests/ --cov=src --cov-report=html
+```
+
+## 📊 Test Requirements
+
+Install test dependencies:
+```bash
+pip install pytest pytest-cov
+```
+
+## 🎯 Test Guidelines
+
+1. **Naming Convention**: All test files must start with `test_`
+2. **Test Functions**: All test functions must start with `test_`
+3. **Assertions**: Use clear, descriptive assertion messages
+4. **Fixtures**: Use pytest fixtures for common setup/teardown
+5. **Mocking**: Mock external dependencies when appropriate
+6. **Documentation**: Add docstrings to complex test functions
+
+## 📝 Writing New Tests
+
+When adding new tests:
+1. Choose the appropriate category (unit/integration/features/performance)
+2. Follow the naming convention
+3. Add clear docstrings
+4. Include both positive and negative test cases
+5. Update this README if adding a new test file
+
+## 🐛 Debugging Tests
+
+Run tests with debugging:
+```bash
+# Drop into debugger on failure
+python3.9 -m pytest tests/ --pdb
+
+# Show print statements
+python3.9 -m pytest tests/ -s
+
+# Run only failed tests from last run
+python3.9 -m pytest tests/ --lf
+```
+
+## 📈 Test Coverage
+
+Current test coverage can be viewed by running:
+```bash
+python3.9 -m pytest tests/ --cov=src --cov-report=term-missing
+```
+
+## 🔗 Related Documentation
+
+- [Architecture Documentation](../docs/architecture/)
+- [Feature Documentation](../docs/features/)
+- [Training Guide](../docs/training/TRAINING_GUIDE.md)
+

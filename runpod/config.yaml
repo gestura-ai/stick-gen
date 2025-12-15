@@ -1,0 +1,140 @@
+# Stick-Gen RunPod Endpoint Configuration
+# Gestura AI - https://gestura.ai
+
+# Endpoint Settings
+endpoint:
+  name: "stick-gen"
+  description: "Text-to-Animation Stick Figure Generator by Gestura AI"
+  
+# Docker Image (GitHub Container Registry)
+docker:
+  image: "gestura-ai/stick-gen:latest"
+  registry: "ghcr.io"
+  # Full image path: ghcr.io/gestura-ai/stick-gen:latest
+  # After first push, make public at: https://github.com/orgs/gestura-ai/packages/container/stick-gen/settings
+
+# GPU Configuration
+gpu:
+  # Recommended: RTX 3090, RTX 4090, A100
+  type: "NVIDIA RTX A4000"  # Good balance of cost/performance
+  count: 1
+  min_vram_gb: 16
+
+# Worker Settings
+worker:
+  min_workers: 0           # Scale to zero when idle
+  max_workers: 3           # Maximum concurrent workers
+  idle_timeout: 300        # Seconds before scaling down (5 min)
+  
+# Environment Variables
+environment:
+  MODEL_VARIANT: "medium"  # Options: small, medium, large
+  MODEL_PATH: "/workspace/models/model_checkpoint.pth"
+  CONFIG_PATH: "/workspace/configs/medium.yaml"
+  DEVICE: "cuda"
+  # Grok API Key (referenced from RunPod Secrets)
+  GROK_API_KEY: "{{ RUNPOD_SECRET_GROK_API_KEY }}"
+  
+# Volume Mounts (for persistent storage)
+volumes:
+  - name: "models"
+    mount_path: "/workspace/models"
+    size_gb: 10
+  - name: "data"
+    mount_path: "/workspace/data"
+    size_gb: 50
+
+# Training Infrastructure Configuration
+training:
+  # Network Volume for training data
+  # Complete pipeline requires ~140GB:
+  #   - Raw datasets (AMASS, InterHuman, NTU-RGB+D, etc.): ~92 GB
+  #   - Canonical/processed datasets: ~24 GB
+  #   - Embedded training datasets: ~17 GB
+  #   - Checkpoints (all 9 models): ~4 GB
+  #   - Logs and intermediate files: ~3.5 GB
+  network_volume:
+    name: "stick-gen-training-data"
+    size_gb: 200  # Recommended: 200GB for full pipeline + 30% buffer
+    region: "US"  # Options: US, EU, etc.
+    mount_path: "/runpod-volume"
+
+  # Data paths (relative to mount_path)
+  data_paths:
+    amass: "/runpod-volume/data/amass"
+    style_100: "/runpod-volume/data/100Style"
+    smpl_models: "/runpod-volume/data/smpl_models"
+
+  # Training Pod configuration
+  pod:
+    name: "stick-gen-training"
+    gpu_type: "NVIDIA RTX A5000"  # Cost-effective for small/medium models
+    container_disk_gb: 50
+    # GPU options by model size:
+    # - small (5.6M): RTX 3060, RTX 3070, RTX A4000
+    # - medium (15.8M): RTX 3090, RTX A5000, A100 40GB
+    # - large (28M): A100 80GB, H100
+
+  # Environment variables for training
+  environment:
+    MODEL_VARIANT: "${MODEL_VARIANT:-medium}"
+    DATA_PATH: "/runpod-volume/data"
+    # Optional: Path to the training dataset file consumed by src.train.train.
+    # Defaults to "$DATA_PATH/train_data_final.pt" but can be pointed at a
+    # curated, embedding-augmented dataset such as
+    # "/runpod-volume/data/curated/pretrain_data_embedded.pt".
+    TRAIN_DATA_PATH: "/runpod-volume/data/train_data_final.pt"
+    AMASS_PATH: "/runpod-volume/data/amass"
+    STYLE_PATH: "/runpod-volume/data/100Style"
+    SMPL_PATH: "/runpod-volume/data/smpl_models"
+    OUTPUT_PATH: "/runpod-volume/outputs"
+    DEVICE: "cuda"
+    WANDB_MODE: "online"  # Set to "disabled" if not using W&B
+
+# Network Settings
+network:
+  port: 8000
+  timeout_seconds: 300     # 5 minute timeout for long generations
+
+# Cost Optimization
+cost:
+  spot_instances: true     # Use spot instances for training
+  auto_shutdown: true      # Shutdown when idle
+  max_cost_per_hour: 2.0   # USD limit
+
+# Model Variants (for reference)
+variants:
+  small:
+    params: "5.6M"
+    d_model: 256
+    recommended_gpu: "RTX 3060"
+
+  medium:
+    params: "15.8M"
+    d_model: 384
+    recommended_gpu: "RTX 3090"
+
+  large:
+    params: "28M"
+    d_model: 512
+    recommended_gpu: "A100"
+
+# API Examples
+api_examples:
+  generate:
+    method: "POST"
+    path: "/run"
+    body:
+      input:
+        prompt: "A person walking confidently"
+        num_frames: 60
+        camera:
+          x: 0.0
+          y: 0.0
+          zoom: 1.0
+          
+  stream:
+    method: "GET"
+    path: "/stream/{job_id}"
+    description: "Stream results for long-running jobs"
+

@@ -1,0 +1,141 @@
+# Stick-Gen Training Configuration - GPU Optimized
+# Optimized for GPU training with 8GB+ VRAM
+
+# Model Variant Metadata
+metadata:
+  variant: "large"
+  display_name: "Stick-Gen Large"
+  expected_params: 44_500_000  # 44.5M parameters (SwiGLU + RMSNorm architecture)
+  recommended_hardware:
+    cpu: "Not recommended"
+    ram: "32GB+"
+    gpu: "8GB+ VRAM (NVIDIA RTX 3060 or better)"
+  inference:
+    batch_size: 16
+    avg_latency_ms: 200   # Approximate on RTX 3060
+    throughput_fps: 5.0   # Sequences per second
+  use_cases:
+    - "High-quality production deployment"
+    - "Research requiring best performance"
+    - "GPU-accelerated workflows"
+    - "Maximum animation quality"
+
+# Model Architecture (full size)
+# Uses modern LLM architecture: RMSNorm + SwiGLU + Pre-Norm
+model:
+  input_dim: 20
+  d_model: 512            # Larger model for GPU (44.5M params)
+  nhead: 16               # More attention heads
+  num_layers: 10          # Deeper network
+  output_dim: 20
+  embedding_dim: 1024
+  dropout: 0.1
+  num_actions: 64
+
+# Training Settings (GPU-optimized)
+training:
+  batch_size: 16          # Larger batch size for GPU
+  grad_accum_steps: 4     # Less accumulation needed
+  epochs: 100             # More epochs for better convergence
+  learning_rate: 0.0005   # Higher LR for larger batches
+  warmup_epochs: 10
+  max_grad_norm: 1.0
+  resume_from: null       # Optional: checkpoint path for continued pretraining/resume
+
+# Loss Weights
+loss_weights:
+  temporal: 0.1
+  action: 0.15
+  physics: 0.2
+  diffusion: 0.1          # Enabled for GPU
+  diff_physics: 0.1       # Differentiable physics loss weight (Brax)
+
+# Physics Settings
+physics:
+  enabled: true
+  velocity_weight: 1.0
+  acceleration_weight: 0.5
+  momentum_weight: 0.3
+
+# Diffusion Settings
+diffusion:
+  enabled: true           # Enabled for GPU training
+  learning_rate: 0.0001
+  timesteps: 1000
+
+# LoRA Settings (Low-Rank Adaptation)
+lora:
+  enabled: true           # Enable LoRA for efficient fine-tuning
+  rank: 16                # Higher rank for larger model
+  alpha: 32.0             # LoRA alpha scaling
+  dropout: 0.05           # LoRA dropout
+  target_modules: ["transformer_encoder", "pose_decoder"]
+
+
+# Dataset Paths
+data:
+  train_data: "data/train_data_final.pt"               # Legacy combined dataset (embedding-augmented)
+  curated_pretrain_data: "data/curated/pretrain_data_embedded.pt"  # Curated pretraining dataset (with embeddings)
+  curated_sft_data: "data/curated/sft_data_embedded.pt"            # Curated SFT dataset (with embeddings)
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+
+# Data Generation Settings
+data_generation:
+  num_samples: 100000          # Large dataset for production training
+  output_path: "data/train_data.pt"
+  embedded_path: "data/train_data_embedded.pt"
+  merged_path: "data/train_data_merged.pt"
+  augmentation:
+    enabled: true
+    multiplier: 4
+  sequence:
+    duration_seconds: 10.0
+    fps: 25
+    max_actors: 3
+  llm:
+    use_mock: true
+    llm_ratio: 0.2
+
+# Data Curation Settings (for curated pipeline)
+data_curation:
+  # Merge step settings (merge_datasets.py)
+  merge:
+    balance_sources: true        # Enable source balancing
+    max_source_fraction: 0.25    # Stricter: no source > 25% for large models
+    filter_artifacts: true       # Remove artifacts during merge
+    max_artifact_score: 0.35     # Stricter artifact threshold for quality
+    min_frames: 25               # Min sequence length
+    max_frames: 500              # Max sequence length
+  # Curation step settings (prepare_curated_datasets.py)
+  curation:
+    min_quality_pretrain: 0.5    # Lower bar for pretraining
+    min_quality_sft: 0.85        # Higher quality bar for large model SFT
+    min_camera_stability_sft: 0.65
+    balance_max_fraction: 0.25   # Stricter action balance for large model
+
+# Device Settings
+device:
+  type: "cuda"
+  num_workers: 4          # Parallel data loading
+  pin_memory: true        # Faster GPU transfer
+
+# Logging Settings
+logging:
+  level: "INFO"
+  log_interval: 10
+  save_interval: 5
+  verbose_file: "training_verbose.log"
+
+# Optimization
+optimization:
+  optimizer: "AdamW"
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# CPU Optimization (not used for GPU)
+cpu:
+  num_threads: 4
+  use_mkldnn: false
+

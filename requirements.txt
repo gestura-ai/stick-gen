@@ -1,0 +1,31 @@
+# Core ML/AI
+torch>=2.0.0
+transformers>=4.30.0
+numpy<2  # Pin to 1.x for compatibility with scipy, scikit-learn, matplotlib, sentence-transformers
+
+# Text embeddings
+sentence-transformers>=2.2.0
+
+# Visualization
+matplotlib>=3.5.0
+pycairo>=1.20.0
+manim>=0.17.0
+
+# Utilities
+tqdm>=4.65.0
+pyyaml>=6.0  # For configuration file loading
+
+# SMPL/AMASS processing
+chumpy>=0.70  # For SMPL model loading
+scipy>=1.9.0  # For scientific computing
+
+# BVH/Motion Capture processing
+bvh>=0.3  # For 100STYLE BVH file parsing
+
+# LLM Integration
+openai>=1.0.0
+python-dotenv>=1.0.0
+ollama>=0.1.0
+
+# Web Interface
+gradio>=4.0.0
