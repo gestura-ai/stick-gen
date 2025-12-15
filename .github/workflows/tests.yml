@@ -32,6 +32,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install chumpy --no-build-isolation
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install pytest pytest-cov black ruff
         
