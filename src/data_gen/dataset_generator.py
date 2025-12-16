@@ -402,6 +402,10 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
     torch.save(data, output_path)
     print("Done.")
 
+    # Return the resolved output path so callers (e.g., CLI tools) can
+    # discover where the dataset was written without re-parsing configs.
+    return output_path
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic training dataset")
     parser.add_argument(

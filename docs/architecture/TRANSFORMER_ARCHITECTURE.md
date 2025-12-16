@@ -13,11 +13,13 @@ The stick-gen Transformer uses:
 
 ## Model Variants
 
-| Variant | Parameters | d_model | Layers | Heads | Use Case |
-|---------|------------|---------|--------|-------|----------|
-| **Small** | 7.2M | 256 | 6 | 8 | CPU-friendly, edge devices |
-| **Medium** | 20.5M | 384 | 8 | 12 | Recommended default |
-| **Large** | 44.5M | 512 | 10 | 16 | Maximum quality |
+> See [MODEL_SIZES.md](../MODEL_SIZES.md) for detailed parameter breakdowns.
+
+| Variant | Motion-Only | Multimodal | d_model | Layers | Heads | Use Case |
+|---------|-------------|------------|---------|--------|-------|----------|
+| **Small** | 7.2M | 11.7M | 256 | 6 | 8 | CPU-friendly, edge devices |
+| **Medium** | 20.6M | 25.1M | 384 | 8 | 12 | Recommended default |
+| **Large** | 44.6M | 71.3M | 512 | 10 | 16 | Maximum quality |
 
 ## Transformer Layer (Pre-Norm + RMSNorm + RoPE + SwiGLU)
 

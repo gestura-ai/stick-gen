@@ -45,6 +45,13 @@ Each variant config (`configs/small.yaml`, `configs/base.yaml`,
   - `data.curated_pretrain_data`: recommended curated pretraining dataset.
   - `data.curated_sft_data`: curated SFT dataset.
 
+
+Parallax 2.5D augmentation is configured via additional `data` keys (see
+`docs/architecture/RENDERING.md`): `data.use_parallax_augmentation`,
+`data.parallax_root`, and `data.parallax_image_size`. These control whether
+multi-view PNG frames and their `metadata.json` sidecars are used alongside
+the standard motion-only `.pt` datasets for multimodal training.
+
 `src/train/train.py` takes an optional `--data_path` CLI argument (or
 `TRAIN_DATA_PATH` env var on RunPod) to override the dataset path from the
 config. This is how you switch between legacy and curated datasets.
@@ -154,9 +161,11 @@ balancing. SFT typically:
 
 Pre-built SFT configs are available:
 
-- `configs/sft_small.yaml` - 7.2M params, 15 epochs, lr=1e-4
-- `configs/sft_medium.yaml` - 20.5M params, 20 epochs, lr=1e-4
-- `configs/sft_large.yaml` - 44.5M params, 25 epochs, lr=5e-5
+- `configs/sft_small.yaml` - 7.2M/11.7M params, 15 epochs, lr=1e-4
+- `configs/sft_medium.yaml` - 20.6M/25.1M params, 20 epochs, lr=1e-4
+- `configs/sft_large.yaml` - 44.6M/71.3M params, 25 epochs, lr=5e-5
+
+> See [../MODEL_SIZES.md](../MODEL_SIZES.md) for detailed parameter breakdowns.
 
 These configs include:
 

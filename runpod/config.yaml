@@ -53,9 +53,10 @@ training:
   #   - Embedded training datasets: ~17 GB
   #   - Checkpoints (all 9 models): ~4 GB
   #   - Logs and intermediate files: ~3.5 GB
+  #   - 2.5D Parallax PNG data (if generated): ~20-50 GB depending on views/frames
   network_volume:
     name: "stick-gen-training-data"
-    size_gb: 200  # Recommended: 200GB for full pipeline + 30% buffer
+    size_gb: 250  # Recommended: 250GB for full pipeline with parallax + 30% buffer
     region: "US"  # Options: US, EU, etc.
     mount_path: "/runpod-volume"
 
@@ -64,6 +65,7 @@ training:
     amass: "/runpod-volume/data/amass"
     style_100: "/runpod-volume/data/100Style"
     smpl_models: "/runpod-volume/data/smpl_models"
+    parallax: "/runpod-volume/data/2.5d_parallax"  # 2.5D parallax PNG + metadata
 
   # Training Pod configuration
   pod:
@@ -74,6 +76,39 @@ training:
     # - small (5.6M): RTX 3060, RTX 3070, RTX A4000
     # - medium (15.8M): RTX 3090, RTX A5000, A100 40GB
     # - large (28M): A100 80GB, H100
+
+  # 2.5D Parallax Augmentation Pipeline
+  # Enabled by default in configs/*.yaml (data.use_parallax_augmentation: true)
+  # Requires Node.js runtime and npm packages (three, pngjs, gl)
+  parallax:
+    enabled: true
+    views_per_motion: 250      # Camera trajectories per motion sequence
+    frames_per_view: 4         # PNG frames per camera trajectory
+    image_size: [256, 256]     # [H, W] output PNG dimensions
+    # Storage estimate: ~20-50GB for 500k samples with default settings
+    # CPU-bound (Node.js renderer), GPU optional for training
+
+  # Multimodal Training Configuration
+  # When data.use_parallax_augmentation: true in configs/*.yaml, the training
+  # pipeline will use MultimodalParallaxDataset instead of StickFigureDataset.
+  # This enables image-conditioned motion generation from 2.5D parallax frames.
+  multimodal:
+    # See docs/MODEL_SIZES.md for detailed parameter breakdowns
+    # Image encoder architecture for processing parallax PNG frames
+    # Options: lightweight_cnn (~2.1M params), resnet (~11.7M), mini_vit (~4-5M)
+    image_encoder_arch: "lightweight_cnn"
+    # Feature fusion strategy for combining text, image, and camera embeddings
+    # Options: concat (~2.1M), gated (~2.4M, recommended), film (~2.2M), cross_attention (~15M)
+    fusion_strategy: "gated"
+    # Image loading backend
+    # Options: pil (slower, more compatible), torchvision (faster, requires GPU)
+    image_backend: "pil"
+    # Total parameter overhead for multimodal (image encoder + fusion)
+    # small/medium + lightweight_cnn + gated: +4.5M params
+    # large + resnet + cross_attention: +26.7M params
+    # Additional GPU VRAM required (approximate)
+    # small/medium multimodal: +1-2GB, large multimodal: +4-6GB
+    estimated_vram_overhead_gb: 2.0
 
   # Environment variables for training
   environment:
@@ -88,6 +123,7 @@ training:
     STYLE_PATH: "/runpod-volume/data/100Style"
     SMPL_PATH: "/runpod-volume/data/smpl_models"
     OUTPUT_PATH: "/runpod-volume/outputs"
+    PARALLAX_ROOT: "/runpod-volume/data/2.5d_parallax"  # 2.5D parallax data
     DEVICE: "cuda"
     WANDB_MODE: "online"  # Set to "disabled" if not using W&B
 

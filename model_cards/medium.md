@@ -113,7 +113,7 @@ Stick-Gen is available in three variants optimized for different hardware and us
 | **[Stick-Gen Medium](https://huggingface.co/GesturaAI/stick-gen-medium)** | 20.5M | CPU (8+ cores, 16-32GB RAM) or GPU (4GB+ VRAM) | ~1.5s per animation | Standard deployment, balanced quality/performance |
 | **[Stick-Gen Large](https://huggingface.co/GesturaAI/stick-gen-large)** | 44.5M | GPU (8GB+ VRAM) | ~0.2s per animation | High-quality production, maximum animation quality |
 
-**This model card describes the Medium variant (20.5M parameters).**
+**This model card describes the Medium variant (20.6M motion-only / 25.1M multimodal).**
 
 ### Choosing a Variant
 
@@ -250,7 +250,7 @@ This model uses a **transformer encoder architecture** with multi-head self-atte
 | **Normalization** | RMSNorm | Root Mean Square normalization (Pre-Norm) |
 | **Activation** | SwiGLU | Gated Linear Unit with Swish (SiLU) |
 | **Dropout** | 0.1 | Applied to attention and FFN |
-| **Total Parameters** | 20,500,000 | 20.5M parameters |
+| **Total Parameters** | 20,595,646 / 25,064,936 | 20.6M (motion-only) / 25.1M (multimodal) |
 
 ### Input/Output Specifications
 
@@ -298,7 +298,7 @@ The model supports optional camera conditioning for cinematic direction:
 
 This model is designed as a **base model for fine-tuning**:
 
-- ✅ **Production-ready size** (20.5M params) balances quality and fine-tuning efficiency
+- ✅ **Production-ready size** (20.6M/25.1M params) balances quality and fine-tuning efficiency
 - ✅ **Transformer architecture** allows attention-based transfer learning
 - ✅ **Multi-task heads** can be frozen or fine-tuned independently
 - ✅ **Action conditioning** supports domain-specific action vocabularies
@@ -584,7 +584,7 @@ Training the Stick-Gen Base model has the following estimated environmental impa
 
 ### Sustainability Considerations
 
-- **Model Efficiency**: Smaller variants (Small: 7.2M params) available for reduced computational requirements
+- **Model Efficiency**: Smaller variants (Small: 7.2M/11.7M params) available for reduced computational requirements
 - **Inference Efficiency**: CPU-compatible for deployment without GPU requirements
 - **Training Efficiency**: Gradient accumulation used to enable training on consumer hardware
 - **Reusability**: Pre-trained model reduces need for users to train from scratch
@@ -749,18 +749,22 @@ We gratefully acknowledge:
 
 - **GitHub Repository**: [github.com/gestura-ai/stick-gen](https://github.com/gestura-ai/stick-gen)
 - **Documentation**: [github.com/gestura-ai/stick-gen/tree/main/docs](https://github.com/gestura-ai/stick-gen/tree/main/docs)
-- **Model Variants**:
-  - [Stick-Gen Small](https://huggingface.co/gestura-ai/stick-gen-small) (7.2M params)
-  - [Stick-Gen Medium](https://huggingface.co/gestura-ai/stick-gen-medium) (20.5M params) - **This model**
-  - [Stick-Gen Large](https://huggingface.co/gestura-ai/stick-gen-large) (44.5M params)
+- **Model Variants** (motion-only / multimodal):
+  - [Stick-Gen Small](https://huggingface.co/gestura-ai/stick-gen-small) (7.2M / 11.7M params)
+  - [Stick-Gen Medium](https://huggingface.co/gestura-ai/stick-gen-medium) (20.6M / 25.1M params) - **This model**
+  - [Stick-Gen Large](https://huggingface.co/gestura-ai/stick-gen-large) (44.6M / 71.3M params)
 - **Paper**: Coming soon
 - **Demo**: Coming soon
 
 ## Changelog
 
+### Version 1.1.0 (2025-12-16)
+- Added multimodal image conditioning (2.5D parallax)
+- Updated parameter counts: 20.6M (motion-only), 25.1M (multimodal)
+
 ### Version 1.0.0 (2025-12-09)
 - Initial release
-- 20.5M parameter medium model
+- 20.6M parameter medium model
 - Trained on 55,592 samples (50K synthetic + 5.6K AMASS)
 - 6 facial expressions with smooth transitions
 - Speech animation support

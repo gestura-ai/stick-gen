@@ -1,1 +1,17 @@
-{}
+{
+  "name": "stick-gen",
+  "version": "1.0.0",
+  "description": "Node.js dependencies for Stick-Gen 2.5D parallax augmentation pipeline",
+  "private": true,
+  "dependencies": {
+    "three": "^0.160.0",
+    "pngjs": "^7.0.0",
+    "gl": "^6.0.2"
+  },
+  "scripts": {
+    "render-parallax": "node src/data_gen/renderers/threejs_parallax_renderer.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

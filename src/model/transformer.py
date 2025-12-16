@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -266,10 +270,14 @@ class RoPETransformerEncoderLayer(nn.Module):
 class StickFigureTransformer(nn.Module):
     """Main Transformer model for stick-figure motion generation.
 
-    This is the ~11M parameter model used across training, evaluation,
-    and inference. It supports:
+    Model sizes (see docs/MODEL_SIZES.md for details):
+    - Small:  7.2M (motion-only) / 11.7M (multimodal)
+    - Medium: 20.6M (motion-only) / 25.1M (multimodal)
+    - Large:  44.6M (motion-only) / 71.3M (multimodal)
 
+    It supports:
     - Text conditioning via a projected 1024-dim embedding
+    - Optional image conditioning (multimodal 2.5D parallax)
     - Optional action conditioning (Phase 1)
     - Optional camera conditioning
     - Multiple decoder heads (pose, position, velocity, physics, environment)
@@ -285,23 +293,32 @@ class StickFigureTransformer(nn.Module):
         embedding_dim: int = 1024,
         dropout: float = 0.1,
         num_actions: int = 60,
+        # Multimodal image conditioning parameters
+        enable_image_conditioning: bool = False,
+        image_encoder_arch: str = "lightweight_cnn",
+        image_size: tuple[int, int] = (256, 256),
+        fusion_strategy: str = "gated",
     ) -> None:
         """Initialize the Transformer.
 
-               Args:
-                   input_dim: Input motion dimension. Default 20 for the canonical
-                       stick-figure schema (5 segments
-        4 coordinates). Legacy
-                       configs may use 10 (5 joints
-        2 coords).
-                   d_model: Transformer model dimension (384 for ~11M params).
-                   nhead: Number of attention heads.
-                   num_layers: Number of Transformer encoder layers.
-                   output_dim: Output motion dimension (usually equal to ``input_dim``).
-                   embedding_dim: Text embedding dimension
-                       (1024 for BAAI/bge-large-en-v1.5).
-                   dropout: Dropout rate.
-                   num_actions: Number of action types for action conditioning (Phase 1).
+        Args:
+            input_dim: Input motion dimension. Default 20 for the canonical
+                stick-figure schema (5 segments × 4 coordinates). Legacy
+                configs may use 10 (5 joints × 2 coords).
+            d_model: Transformer model dimension (256/384/512 for small/medium/large).
+            nhead: Number of attention heads.
+            num_layers: Number of Transformer encoder layers.
+            output_dim: Output motion dimension (usually equal to ``input_dim``).
+            embedding_dim: Text embedding dimension
+                (1024 for BAAI/bge-large-en-v1.5).
+            dropout: Dropout rate.
+            num_actions: Number of action types for action conditioning (Phase 1).
+            enable_image_conditioning: If True, enable image encoder and fusion.
+            image_encoder_arch: Image encoder architecture
+                ("lightweight_cnn", "resnet", "mini_vit").
+            image_size: Expected input image size (H, W).
+            fusion_strategy: Feature fusion strategy
+                ("concat", "gated", "film", "cross_attention").
         """
 
         super().__init__()
@@ -309,6 +326,35 @@ class StickFigureTransformer(nn.Module):
         self.d_model = d_model
         self.output_dim = output_dim
         self.num_actions = num_actions
+        self.enable_image_conditioning = enable_image_conditioning
+        self.embedding_dim = embedding_dim
+
+        # Image encoder and fusion (optional multimodal support)
+        self.image_encoder: Optional[nn.Module] = None
+        self.fusion_module: Optional[nn.Module] = None
+
+        if enable_image_conditioning:
+            from src.model.image_encoder import create_image_encoder
+            from src.model.fusion import create_fusion_module
+
+            # Build kwargs for image encoder based on architecture
+            encoder_kwargs: dict = {}
+            if image_encoder_arch == "mini_vit":
+                encoder_kwargs["img_size"] = image_size[0]
+
+            self.image_encoder = create_image_encoder(
+                architecture=image_encoder_arch,
+                output_dim=embedding_dim,
+                **encoder_kwargs,
+            )
+            self.fusion_module = create_fusion_module(
+                strategy=fusion_strategy,
+                text_dim=embedding_dim,
+                image_dim=embedding_dim,
+                camera_dim=7,  # pos_xyz, target_xyz, fov
+                output_dim=embedding_dim,
+                dropout=dropout,
+            )
 
         # Project pre-trained text embedding to d_model (e.g. 1024 2 384)
         self.text_projection = nn.Sequential(
@@ -441,8 +487,10 @@ class StickFigureTransformer(nn.Module):
         action_sequence: torch.Tensor | None = None,
         camera_data: torch.Tensor | None = None,
         partner_motion: torch.Tensor | None = None,
+        image_tensor: torch.Tensor | None = None,
+        image_camera_pose: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor] | torch.Tensor:
-        """Forward pass with multi-task outputs, action & camera conditioning.
+        """Forward pass with multi-task outputs, action, camera, & image conditioning.
 
         Args:
             motion: [seq_len, batch_size, input_dim]
@@ -451,15 +499,38 @@ class StickFigureTransformer(nn.Module):
             action_sequence: Optional [seq_len, batch_size] action indices.
             camera_data: Optional [seq_len, batch_size, 3] camera state
                 (x, y, zoom) per frame.
-            partner_motion: Optional [seq_len, batch_size, input_dim] motion of interacting partner.
+            partner_motion: Optional [seq_len, batch_size, input_dim] motion
+                of interacting partner.
+            image_tensor: Optional [batch_size, 3, H, W] 2.5D parallax image.
+                Only used when enable_image_conditioning=True.
+            image_camera_pose: Optional [batch_size, 7] camera pose for the image
+                (pos_xyz, target_xyz, fov). Only used with image_tensor.
         """
+
+        # Multimodal fusion: combine text embedding with image features if available
+        if self.enable_image_conditioning and image_tensor is not None:
+            assert self.image_encoder is not None
+            assert self.fusion_module is not None
+
+            # Encode image to feature vector
+            image_features = self.image_encoder(image_tensor)  # [batch, embedding_dim]
+
+            # Fuse text + image + camera into unified conditioning
+            fused_embedding = self.fusion_module(
+                text_features=text_embedding,
+                image_features=image_features,
+                camera_pose=image_camera_pose,
+            )  # [batch, embedding_dim]
+        else:
+            # Motion-only mode: use text embedding directly
+            fused_embedding = text_embedding
 
         # Embed motion
         motion_emb = self.motion_embedding(motion)  # [seq, batch, d_model]
         # No absolute positional encoding (RoPE is applied in attention)
 
-        # Project text embedding and broadcast as first token
-        text_emb = self.text_projection(text_embedding)  # [batch, d_model]
+        # Project (fused) text embedding and broadcast as first token
+        text_emb = self.text_projection(fused_embedding)  # [batch, d_model]
         text_emb = text_emb.unsqueeze(0)  # [1, batch, d_model]
 
         conditioned_motion = motion_emb
@@ -472,7 +543,7 @@ class StickFigureTransformer(nn.Module):
             )  # [seq, batch, d_model]
             conditioned_motion = conditioned_motion + action_features
 
-        # Camera conditioning
+        # Camera conditioning (per-frame, different from image_camera_pose)
         if camera_data is not None:
             camera_features = self.camera_projection(
                 camera_data

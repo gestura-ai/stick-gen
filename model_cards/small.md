@@ -52,23 +52,23 @@ model-index:
 
 # Stick-Gen Small: Lightweight Text-to-Animation Model
 
-**Variant**: Small (7.2M parameters)
+**Variant**: Small (7.2M motion-only / 11.7M multimodal)
 **Optimized for**: Budget CPU deployment, edge devices, development/testing
 
 This is the **Small variant** of Stick-Gen, optimized for resource-constrained environments. For other variants, see:
-- [Stick-Gen Medium](https://huggingface.co/GesturaAI/stick-gen-medium) (20.5M params) - Recommended for most use cases
-- [Stick-Gen Large](https://huggingface.co/GesturaAI/stick-gen-large) (44.5M params) - Maximum quality
+- [Stick-Gen Medium](https://huggingface.co/GesturaAI/stick-gen-medium) (20.6M/25.1M params) - Recommended for most use cases
+- [Stick-Gen Large](https://huggingface.co/GesturaAI/stick-gen-large) (44.6M/71.3M params) - Maximum quality
 
 ## Quick Facts
 
-| Specification | Value |
-|---------------|-------|
-| **Parameters** | 7,200,000 (7.2M) |
-| **Model Size** | 27.5 MB (FP32) |
-| **Hardware** | CPU (4+ cores, 8-16GB RAM) |
-| **Inference Speed** | ~2.0s per animation (CPU) |
-| **Training Time** | ~1,000 hours (30 epochs) |
-| **Use Cases** | Budget deployment, edge devices, testing |
+| Specification | Motion-Only | Multimodal |
+|---------------|-------------|------------|
+| **Parameters** | 7,248,894 (7.2M) | 11,718,184 (11.7M) |
+| **Model Size** | ~29 MB (FP32) / ~15 MB (FP16) | ~47 MB (FP32) / ~24 MB (FP16) |
+| **Hardware** | CPU (4+ cores, 8-16GB RAM) | CPU/GPU (8GB+ RAM) |
+| **Inference Speed** | ~2.0s per animation (CPU) | ~2.5s per animation (CPU) |
+| **Training Time** | ~1,000 hours (30 epochs) | ~1,200 hours (30 epochs) |
+| **Use Cases** | Budget deployment, edge devices, testing | Multimodal conditioning |
 
 ## Model Architecture
 
@@ -87,7 +87,7 @@ This model uses a **transformer encoder architecture** with multi-head self-atte
 | **Normalization** | RMSNorm | Root Mean Square normalization (Pre-Norm) |
 | **Activation** | SwiGLU | Gated Linear Unit with Swish (SiLU) |
 | **Dropout** | 0.1 | Applied to attention and FFN |
-| **Total Parameters** | 7,200,000 | 7.2M parameters |
+| **Total Parameters** | 7,248,894 / 11,718,184 | 7.2M (motion-only) / 11.7M (multimodal) |
 
 ### Input/Output Specifications
 
@@ -112,7 +112,7 @@ The model uses multiple output heads for comprehensive motion understanding:
 
 This model is designed as a **base model for fine-tuning**:
 
-- ✅ **Compact size** (7.2M params) enables fast fine-tuning on consumer hardware
+- ✅ **Compact size** (7.2M/11.7M params) enables fast fine-tuning on consumer hardware
 - ✅ **Transformer architecture** allows attention-based transfer learning
 - ✅ **Multi-task heads** can be frozen or fine-tuned independently
 - ✅ **Action conditioning** supports domain-specific action vocabularies
@@ -122,7 +122,8 @@ This model is designed as a **base model for fine-tuning**:
 
 | Metric | Small | Medium | Difference |
 |--------|-------|--------|------------|
-| Parameters | 7.2M | 20.5M | -65% |
+| Parameters (motion-only) | 7.2M | 20.6M | -65% |
+| Parameters (multimodal) | 11.7M | 25.1M | -53% |
 | Model Size | 27.5 MB | 78.3 MB | -65% |
 | Inference (CPU) | ~2.0s | ~1.5s | +33% slower |
 | Memory (RAM) | 4GB | 8GB | -50% |
