@@ -17,9 +17,9 @@ import torch.nn as nn
 
 from src.model.transformer import (
     RMSNorm,
-    SwiGLU,
     RoPETransformerEncoderLayer,
     StickFigureTransformer,
+    SwiGLU,
 )
 
 

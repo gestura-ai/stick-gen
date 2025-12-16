@@ -7,7 +7,6 @@ low while exercising the full training entrypoint and resume logic.
 
 import os
 import shutil
-import tempfile
 
 import torch
 
@@ -127,7 +126,7 @@ def test_checkpoint_resume_roundtrip(tmp_path):
     # Override epochs via a temporary config copy
     first_cfg = str(workdir / "configs" / "tiny_test_first.yaml")
     shutil.copy(cfg_path, first_cfg)
-    with open(first_cfg, "r", encoding="utf-8") as f:
+    with open(first_cfg, encoding="utf-8") as f:
         text = f.read().replace("epochs: 2", "epochs: 1")
     with open(first_cfg, "w", encoding="utf-8") as f:
         f.write(text)
@@ -165,4 +164,4 @@ def test_missing_checkpoint_raises(tmp_path):
         # Expected path
         return
 
-    assert False, "Expected FileNotFoundError when resuming from missing checkpoint"
+    raise AssertionError("Expected FileNotFoundError when resuming from missing checkpoint")

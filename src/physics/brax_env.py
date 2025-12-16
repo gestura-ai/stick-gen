@@ -1,7 +1,5 @@
-import brax
-from brax import envs
-from brax.envs import math as brax_math
 import jax.numpy as jnp
+from brax import envs
 
 
 class StickFigureEnv(envs.Env):
@@ -50,7 +48,7 @@ class StickFigureEnv(envs.Env):
             inertia { x: 0.1 y: 0.1 z: 0.1 }
             colliders { capsule { radius: 0.08 length: 0.5 } }
         }
-        
+
         joints {
           name: "l_hip"
           parent: "torso"
@@ -87,7 +85,7 @@ class StickFigureEnv(envs.Env):
             child_offset { y: 0.25 }
             rotation { z: 90 }
         }
-        
+
         actuators {
             name: "l_hip"
             joint: "l_hip"
@@ -112,7 +110,7 @@ class StickFigureEnv(envs.Env):
             strength: 50.0
             torque: 50.0
         }
-        
+
         gravity { z: -9.8 }
         dt: 0.02
         substeps: 4

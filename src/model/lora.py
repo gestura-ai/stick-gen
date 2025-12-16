@@ -13,7 +13,7 @@ Reference: https://arxiv.org/abs/2106.09685
 
 import math
 import re
-from typing import List, Optional, Iterator
+from collections.abc import Iterator
 
 import torch
 import torch.nn as nn
@@ -92,7 +92,7 @@ class LoRALinear(nn.Module):
         return self.base_layer.weight + (self.lora_B @ self.lora_A) * self.scaling
 
     @property
-    def bias(self) -> Optional[torch.Tensor]:
+    def bias(self) -> torch.Tensor | None:
         """Return bias from base layer."""
         return self.base_layer.bias
 
@@ -132,7 +132,7 @@ def _set_submodule(model: nn.Module, target: str, new_module: nn.Module) -> None
 
 def inject_lora_adapters(
     model: nn.Module,
-    target_modules: List[str],
+    target_modules: list[str],
     rank: int = 8,
     alpha: float = 16.0,
     dropout: float = 0.0,

@@ -18,11 +18,11 @@ Joint Mapping:
     - RightUpLeg/RightFoot -> Right hip/foot
 """
 
-import os
 import glob
-import torch
+import os
+
 import numpy as np
-from typing import Dict, Optional
+import torch
 from tqdm import tqdm
 
 try:
@@ -78,7 +78,7 @@ class BVHForwardKinematics:
         self.bvh = bvh
         self.joint_tree = self._build_joint_tree()
 
-    def _build_joint_tree(self) -> Dict[str, dict]:
+    def _build_joint_tree(self) -> dict[str, dict]:
         """Build hierarchical joint tree from BVH."""
         tree = {}
         for joint in self.bvh.get_joints():
@@ -99,7 +99,7 @@ class BVHForwardKinematics:
 
         return tree
 
-    def compute_frame_positions(self, frame_idx: int) -> Dict[str, np.ndarray]:
+    def compute_frame_positions(self, frame_idx: int) -> dict[str, np.ndarray]:
         """Compute world positions for all joints at a given frame."""
         positions = {}
 
@@ -163,7 +163,7 @@ class BVHForwardKinematics:
             return R.identity()
 
 
-def extract_stick_figure_pose(positions: Dict[str, np.ndarray], scale: float = 0.01) -> np.ndarray:
+def extract_stick_figure_pose(positions: dict[str, np.ndarray], scale: float = 0.01) -> np.ndarray:
     """
     Extract stick figure joint positions from full skeleton.
 
@@ -186,7 +186,7 @@ def extract_stick_figure_pose(positions: Dict[str, np.ndarray], scale: float = 0
     return pose
 
 
-def convert_bvh_file(bvh_path: str, target_fps: int = 25) -> Optional[dict]:
+def convert_bvh_file(bvh_path: str, target_fps: int = 25) -> dict | None:
     """
     Convert a single BVH file to Stick-Gen format.
 
@@ -197,7 +197,7 @@ def convert_bvh_file(bvh_path: str, target_fps: int = 25) -> Optional[dict]:
         return None
 
     try:
-        with open(bvh_path, 'r') as f:
+        with open(bvh_path) as f:
             bvh = Bvh(f.read())
 
         # Get file info
@@ -274,7 +274,7 @@ def resample_motion(motion: np.ndarray, source_fps: float, target_fps: float) ->
 def convert_100style(input_dir: str = "data/100STYLE",
                      output_path: str = "data/100style_processed.pt",
                      target_fps: int = 25,
-                     max_files: Optional[int] = None) -> None:
+                     max_files: int | None = None) -> None:
     """
     Convert 100STYLE dataset to Stick-Gen format.
 

@@ -1,12 +1,12 @@
 import argparse
 import os
-from typing import List, Dict, Any
+from typing import Any
 
 import torch
 from sentence_transformers import SentenceTransformer
 
 
-def load_canonical(path: str) -> List[Dict[str, Any]]:
+def load_canonical(path: str) -> list[dict[str, Any]]:
     if not os.path.exists(path):
         raise FileNotFoundError(f"Canonical file not found: {path}")
     data = torch.load(path)
@@ -15,7 +15,7 @@ def load_canonical(path: str) -> List[Dict[str, Any]]:
     return data
 
 
-def add_embeddings(samples: List[Dict[str, Any]], model_name: str, batch_size: int = 64) -> None:
+def add_embeddings(samples: list[dict[str, Any]], model_name: str, batch_size: int = 64) -> None:
     """In-place addition of a 1024-d text embedding to each sample.
 
     This mirrors the behavior in scripts/prepare_data.py, but is generic over
@@ -24,7 +24,7 @@ def add_embeddings(samples: List[Dict[str, Any]], model_name: str, batch_size: i
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = SentenceTransformer(model_name, device=device)
 
-    texts: List[str] = [s.get("description", "") for s in samples]
+    texts: list[str] = [s.get("description", "") for s in samples]
     all_embeddings = []
 
     for i in range(0, len(texts), batch_size):

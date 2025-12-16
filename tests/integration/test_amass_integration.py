@@ -13,10 +13,6 @@ import sys
 
 sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
-import torch
-import pytest
-import numpy as np
-from pathlib import Path
 
 
 def test_amass_converter():

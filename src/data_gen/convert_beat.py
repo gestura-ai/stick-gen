@@ -17,18 +17,18 @@ The dataset includes:
 We focus on extracting gesture motion with speech/text alignment.
 """
 
-import os
 import json
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+import os
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -45,41 +45,41 @@ BEAT_EMOTION_TO_ACTION = {
 }
 
 
-def _parse_bvh_to_stick(bvh_path: str, target_fps: int = 30) -> Optional[torch.Tensor]:
+def _parse_bvh_to_stick(bvh_path: str, target_fps: int = 30) -> torch.Tensor | None:
     """Parse BVH file and extract stick figure representation.
-    
+
     BEAT uses a 75-joint skeleton. We extract key joints for our 5-segment
     stick figure: torso, left/right arms, left/right legs.
-    
+
     Returns:
         Tensor of shape [T, 20] or None if parsing fails
     """
     try:
-        with open(bvh_path, "r") as f:
+        with open(bvh_path) as f:
             content = f.read()
-        
+
         # Parse BVH header and motion data
         lines = content.strip().split("\n")
-        
+
         # Find MOTION section
         motion_idx = None
         for i, line in enumerate(lines):
             if line.strip() == "MOTION":
                 motion_idx = i
                 break
-        
+
         if motion_idx is None:
             logger.debug(f"No MOTION section in {bvh_path}")
             return None
-        
+
         # Parse frame info
         frames_line = lines[motion_idx + 1].strip()
         frame_time_line = lines[motion_idx + 2].strip()
-        
+
         num_frames = int(frames_line.split(":")[1].strip())
         frame_time = float(frame_time_line.split(":")[1].strip())
         source_fps = 1.0 / frame_time if frame_time > 0 else 30.0
-        
+
         # Parse motion data
         motion_data = []
         for i in range(motion_idx + 3, motion_idx + 3 + num_frames):
@@ -87,26 +87,26 @@ def _parse_bvh_to_stick(bvh_path: str, target_fps: int = 30) -> Optional[torch.T
                 break
             values = [float(v) for v in lines[i].strip().split()]
             motion_data.append(values)
-        
+
         motion_np = np.array(motion_data, dtype=np.float32)
-        
+
         if motion_np.shape[0] < 10:
             return None
-        
+
         # BEAT skeleton: extract key joint positions
         # Typical BVH has 3 channels per joint (rotation) + root position
         # We'll use a simplified extraction based on joint indices
-        
+
         # For BEAT's 75-joint skeleton, approximate key joints:
         # Root: 0-2, Spine: ~9-11, Neck: ~36-38
         # LeftShoulder: ~39-41, LeftElbow: ~42-44, LeftWrist: ~45-47
         # RightShoulder: ~63-65, RightElbow: ~66-68, RightWrist: ~69-71
         # LeftHip: ~3-5, LeftKnee: ~6-8, LeftAnkle: ~9-11
         # RightHip: ~12-14, RightKnee: ~15-17, RightAnkle: ~18-20
-        
+
         T = motion_np.shape[0]
         D = motion_np.shape[1]
-        
+
         # Simplified: use first 20 dims or construct from available
         if D >= 20:
             stick = motion_np[:, :20]
@@ -114,30 +114,30 @@ def _parse_bvh_to_stick(bvh_path: str, target_fps: int = 30) -> Optional[torch.T
             # Pad if needed
             stick = np.zeros((T, 20), dtype=np.float32)
             stick[:, :D] = motion_np
-        
+
         # Normalize to reasonable range
         stick = (stick - stick.mean()) / (stick.std() + 1e-8) * 0.1
-        
+
         # Resample to target FPS if needed
         if abs(source_fps - target_fps) > 1:
             target_frames = int(T * target_fps / source_fps)
             indices = np.linspace(0, T - 1, target_frames).astype(int)
             stick = stick[indices]
-        
+
         return torch.from_numpy(stick.astype(np.float32))
-        
+
     except Exception as e:
         logger.debug(f"Failed to parse {bvh_path}: {e}")
         return None
 
 
-def _load_text_annotation(txt_path: str) -> List[str]:
+def _load_text_annotation(txt_path: str) -> list[str]:
     """Load text transcription from BEAT annotation file."""
     if not os.path.exists(txt_path):
         return []
-    
+
     try:
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             content = f.read().strip()
         # BEAT text files may have timestamps, extract just text
         lines = []
@@ -157,7 +157,7 @@ def _load_emotion_label(json_path: str) -> str:
         return "neutral"
 
     try:
-        with open(json_path, "r") as f:
+        with open(json_path) as f:
             data = json.load(f)
         return data.get("emotion", "neutral")
     except Exception:
@@ -166,11 +166,11 @@ def _load_emotion_label(json_path: str) -> str:
 
 def _build_sample(
     motion: torch.Tensor,
-    texts: List[str],
+    texts: list[str],
     emotion: str,
     clip_id: str,
     fps: int = 30,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build canonical sample from BEAT data."""
     physics = compute_basic_physics(motion, fps=fps)
 
@@ -211,7 +211,7 @@ def convert_beat(
     fps: int = 30,
     max_clips: int = -1,
     physics_threshold: float = 2.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Convert BEAT dataset to canonical format.
 
     Expected directory structure:
@@ -246,9 +246,9 @@ def convert_beat(
     validator.max_velocity *= physics_threshold
     validator.max_acceleration *= physics_threshold
 
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
     skipped = 0
-    emotion_counts: Dict[str, int] = {}
+    emotion_counts: dict[str, int] = {}
 
     for i, bvh_path in enumerate(bvh_files):
         if i % 200 == 0:
@@ -292,7 +292,7 @@ def convert_beat(
     logger.info(f"Emotion distribution: {emotion_counts}")
 
     # Report action distribution
-    action_counts: Dict[str, int] = {}
+    action_counts: dict[str, int] = {}
     for s in samples:
         label = s.get("action_label", "idle")
         action_counts[label] = action_counts.get(label, 0) + 1

@@ -1,6 +1,7 @@
-import torch
 import sys
 from pathlib import Path
+
+import torch
 
 # Add project root
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -35,7 +36,7 @@ def test_multi_actor_forward_pass():
 
     # Forward pass WITHOUT partner (backward compatibility)
     try:
-        output_solo = model(motion=motion, text_embedding=embedding)
+        model(motion=motion, text_embedding=embedding)
         print("✅ Forward pass without partner_motion successful!")
     except Exception as e:
         print(f"❌ Solo forward pass failed: {e}")

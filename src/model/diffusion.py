@@ -15,11 +15,11 @@ References:
 - DDIM: https://arxiv.org/abs/2010.02502
 """
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
-from typing import Optional, Tuple
 
 
 class DDPMScheduler:
@@ -228,9 +228,11 @@ class PoseRefinementUNet(nn.Module):
     def __init__(
         self,
         pose_dim: int = 20,  # 5 lines × 4 coords
-        hidden_dims: list = [64, 128, 256],
+        hidden_dims: list = None,
         time_emb_dim: int = 128,
     ):
+        if hidden_dims is None:
+            hidden_dims = [64, 128, 256]
         super().__init__()
         self.pose_dim = pose_dim
 
@@ -362,7 +364,7 @@ class DiffusionRefinementModule:
     def refine_poses(
         self,
         transformer_output: torch.Tensor,
-        text_embedding: Optional[torch.Tensor] = None,
+        text_embedding: torch.Tensor | None = None,
         num_inference_steps: int = 50,
         guidance_scale: float = 1.0,
     ) -> torch.Tensor:

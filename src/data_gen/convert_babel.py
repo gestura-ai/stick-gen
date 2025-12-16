@@ -12,17 +12,16 @@ Requirements:
 - BABEL annotations (provides action labels)
 """
 
-import os
 import json
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+import os
+from typing import Any
 
-import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import AMASSConverter, compute_basic_physics
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ BABEL_TO_STICKGEN = {
     "jumping": ActionType.JUMP,
     "hop": ActionType.JUMP,
     "skip": ActionType.JUMP,
-    
+
     # Sitting/Standing
     "sit": ActionType.SIT,
     "sit down": ActionType.SIT,
@@ -54,13 +53,13 @@ BABEL_TO_STICKGEN = {
     "lie": ActionType.LIE_DOWN,
     "lie down": ActionType.LIE_DOWN,
     "lying": ActionType.LIE_DOWN,
-    
+
     # Dancing
     "dance": ActionType.DANCE,
     "dancing": ActionType.DANCE,
     "spin": ActionType.DANCE,
     "twirl": ActionType.DANCE,
-    
+
     # Gestures
     "wave": ActionType.WAVE,
     "waving": ActionType.WAVE,
@@ -68,7 +67,7 @@ BABEL_TO_STICKGEN = {
     "pointing": ActionType.POINT,
     "clap": ActionType.CLAP,
     "clapping": ActionType.CLAP,
-    
+
     # Fighting
     "punch": ActionType.PUNCH,
     "punching": ActionType.PUNCH,
@@ -77,14 +76,14 @@ BABEL_TO_STICKGEN = {
     "fight": ActionType.FIGHT,
     "fighting": ActionType.FIGHT,
     "dodge": ActionType.DODGE,
-    
+
     # Sports
     "throw": ActionType.THROWING,
     "throwing": ActionType.THROWING,
     "catch": ActionType.CATCHING,
     "catching": ActionType.CATCHING,
     "kick ball": ActionType.KICKING,
-    
+
     # Movement
     "climb": ActionType.CLIMBING,
     "climbing": ActionType.CLIMBING,
@@ -92,20 +91,20 @@ BABEL_TO_STICKGEN = {
     "crawling": ActionType.CRAWLING,
     "swim": ActionType.SWIMMING,
     "swimming": ActionType.SWIMMING,
-    
+
     # Emotions
     "celebrate": ActionType.CELEBRATE,
     "celebrating": ActionType.CELEBRATE,
     "laugh": ActionType.LAUGH,
     "cry": ActionType.CRY,
     "crying": ActionType.CRY,
-    
+
     # Daily activities
     "eat": ActionType.EATING,
     "eating": ActionType.EATING,
     "drink": ActionType.DRINKING,
     "drinking": ActionType.DRINKING,
-    
+
     # Communication
     "talk": ActionType.TALK,
     "talking": ActionType.TALK,
@@ -115,31 +114,31 @@ BABEL_TO_STICKGEN = {
 def _map_babel_action(babel_action: str) -> ActionType:
     """Map BABEL action label to Stick-Gen ActionType."""
     action_lower = babel_action.lower().strip()
-    
+
     # Direct lookup
     if action_lower in BABEL_TO_STICKGEN:
         return BABEL_TO_STICKGEN[action_lower]
-    
+
     # Fuzzy matching - check if any key is substring
     for key, action_type in BABEL_TO_STICKGEN.items():
         if key in action_lower or action_lower in key:
             return action_type
-    
+
     return ActionType.IDLE
 
 
-def _load_babel_annotations(babel_path: str) -> Dict[str, Any]:
+def _load_babel_annotations(babel_path: str) -> dict[str, Any]:
     """Load BABEL annotation JSON file."""
-    with open(babel_path, "r", encoding="utf-8") as f:
+    with open(babel_path, encoding="utf-8") as f:
         return json.load(f)
 
 
 def _get_segment_actions(
-    annotations: Dict[str, Any],
+    annotations: dict[str, Any],
     seq_name: str,
     num_frames: int,
     fps: float = 30.0,
-) -> Tuple[torch.Tensor, List[str], str]:
+) -> tuple[torch.Tensor, list[str], str]:
     """Extract per-frame actions from BABEL annotations.
 
     Returns:
@@ -209,11 +208,11 @@ def _get_segment_actions(
 def _build_sample(
     motion: torch.Tensor,
     actions: torch.Tensor,
-    action_labels: List[str],
+    action_labels: list[str],
     description: str,
     seq_name: str,
     fps: int = 30,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build canonical sample from BABEL data."""
     physics = compute_basic_physics(motion, fps=fps)
 
@@ -250,7 +249,7 @@ def convert_babel(
     fps: int = 30,
     max_sequences: int = -1,
     physics_threshold: float = 2.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Convert BABEL-annotated AMASS sequences to canonical format.
 
     Args:
@@ -275,7 +274,7 @@ def convert_babel(
     validator.max_velocity *= physics_threshold
     validator.max_acceleration *= physics_threshold
 
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
     skipped = 0
 
     seq_names = list(annotations.keys())
@@ -330,7 +329,7 @@ def convert_babel(
     logger.info(f"Converted {len(samples)}/{len(seq_names)} sequences ({skipped} skipped)")
 
     # Report action distribution
-    action_counts: Dict[str, int] = {}
+    action_counts: dict[str, int] = {}
     for s in samples:
         for label in s.get("action_labels", ["idle"]):
             action_counts[label] = action_counts.get(label, 0) + 1

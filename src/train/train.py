@@ -1,17 +1,19 @@
+import argparse
+import logging
 import os
+import random
+import sys
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from src.model.transformer import StickFigureTransformer
+
 from src.data_gen.schema import NUM_ACTIONS
-from src.train.config import TrainingConfig
-import numpy as np
-import logging
-import sys
-import random
-import argparse
 from src.model.physics_layer import DifferentiablePhysicsLoss
+from src.model.transformer import StickFigureTransformer
+from src.train.config import TrainingConfig
 
 # Configure logging
 # Set to DEBUG for verbose output, INFO for normal output
@@ -30,9 +32,9 @@ logger.info(f"Logging initialized at level: {logging.getLevelName(LOG_LEVEL)}")
 # Phase 3: Diffusion refinement (optional)
 try:
     from src.model.diffusion import (
-        PoseRefinementUNet,
         DDPMScheduler,
         DiffusionRefinementModule,
+        PoseRefinementUNet,
     )
 
     DIFFUSION_AVAILABLE = True
@@ -43,11 +45,11 @@ except ImportError:
 # LoRA support (optional)
 try:
     from src.model.lora import (
-        inject_lora_adapters,
+        count_lora_parameters,
         freeze_base_model,
         get_lora_parameters,
-        count_lora_parameters,
         get_lora_state_dict,
+        inject_lora_adapters,
     )
 
     LORA_AVAILABLE = True
@@ -126,9 +128,9 @@ def physics_loss(physics_output, physics_targets):
     pred_ax, pred_ay = physics_output[:, :, 2], physics_output[:, :, 3]
     pred_mx, pred_my = physics_output[:, :, 4], physics_output[:, :, 5]
 
-    target_vx, target_vy = physics_targets[:, :, 0], physics_targets[:, :, 1]
-    target_ax, target_ay = physics_targets[:, :, 2], physics_targets[:, :, 3]
-    target_mx, target_my = physics_targets[:, :, 4], physics_targets[:, :, 5]
+    _target_vx, _target_vy = physics_targets[:, :, 0], physics_targets[:, :, 1]
+    _target_ax, _target_ay = physics_targets[:, :, 2], physics_targets[:, :, 3]
+    _target_mx, _target_my = physics_targets[:, :, 4], physics_targets[:, :, 5]
 
     # 1. Basic MSE loss for all physics parameters
     mse_loss = nn.MSELoss()(physics_output, physics_targets)
@@ -673,7 +675,7 @@ def train(
         num_workers=num_workers,
         pin_memory=effective_pin_memory,
     )
-    test_loader = DataLoader(
+    DataLoader(
         test_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
@@ -690,8 +692,6 @@ def train(
     print("=" * 60)
 
     # Track metrics
-    train_metrics_history = []
-    val_metrics_history = []
     for epoch in range(start_epoch, EPOCHS):
         # Training
         model.train()
@@ -748,17 +748,17 @@ def train(
                 logger.debug(f"  actions_seq shape: {actions_seq.shape}")
             else:
                 actions_seq = None
-                logger.debug(f"  actions_seq: None")
+                logger.debug("  actions_seq: None")
 
             # Forward pass with multi-task outputs and action conditioning
-            logger.debug(f"  Running forward pass...")
+            logger.debug("  Running forward pass...")
             outputs = model(
                 data, embedding, return_all_outputs=True, action_sequence=actions_seq
             )
             logger.debug(f"  Forward pass complete. Output keys: {outputs.keys()}")
 
             # Compute multi-task loss (Phase 2: includes physics)
-            logger.debug(f"  Computing multi-task loss...")
+            logger.debug("  Computing multi-task loss...")
             loss, loss_components = multi_task_loss(outputs, target, actions, physics)
             logger.debug(f"  Loss computed: {loss.item():.6f}")
 
@@ -766,12 +766,12 @@ def train(
             logger.debug(f"  Scaling loss by 1/{GRAD_ACCUM_STEPS}")
             loss = loss / GRAD_ACCUM_STEPS
 
-            logger.debug(f"  Running backward pass...")
+            logger.debug("  Running backward pass...")
             loss.backward()
-            logger.debug(f"  Backward pass complete")
+            logger.debug("  Backward pass complete")
 
             # Accumulate losses (convert tensors to scalars)
-            logger.debug(f"  Accumulating losses...")
+            logger.debug("  Accumulating losses...")
             total_train_loss += loss.item() * GRAD_ACCUM_STEPS
             total_pose_loss += loss_components["pose_loss"].item()
             total_temporal_loss += loss_components["temporal_loss"].item()
@@ -828,11 +828,11 @@ def train(
                     model.parameters(), max_norm=MAX_GRAD_NORM
                 )
 
-                logger.debug(f"  Optimizer step")
+                logger.debug("  Optimizer step")
                 optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
-                logger.debug(f"  Gradients zeroed")
+                logger.debug("  Gradients zeroed")
 
                 # Print progress every 10 gradient steps
                 if ((batch_idx + 1) // GRAD_ACCUM_STEPS) % 10 == 0:
@@ -845,9 +845,9 @@ def train(
                     )
 
         # Step optimizer if there are remaining gradients
-        logger.debug(f"Checking for remaining gradients...")
+        logger.debug("Checking for remaining gradients...")
         if (batch_idx + 1) % GRAD_ACCUM_STEPS != 0:
-            logger.debug(f"  Final gradient step for remaining batches")
+            logger.debug("  Final gradient step for remaining batches")
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=MAX_GRAD_NORM)
             optimizer.step()
             optimizer.zero_grad()

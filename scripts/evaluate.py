@@ -14,10 +14,9 @@ Usage:
     python scripts/evaluate.py --checkpoint checkpoints/best_model.pth --data data/train_data_final.pt
 """
 
-import os
-import sys
 import argparse
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -30,13 +29,13 @@ from tqdm import tqdm
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.model.transformer import StickFigureTransformer
-from src.data_gen.schema import NUM_ACTIONS, IDX_TO_ACTION
+from src.data_gen.schema import IDX_TO_ACTION, NUM_ACTIONS
 from src.eval.metrics import (
+    compute_camera_metrics,
     compute_motion_temporal_metrics,
     compute_physics_consistency_metrics,
-    compute_camera_metrics,
 )
+from src.model.transformer import StickFigureTransformer
 
 
 class EvaluationDataset(Dataset):

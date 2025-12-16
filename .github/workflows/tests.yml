@@ -46,7 +46,7 @@ jobs:
         
     - name: Check formatting with Black
       run: |
-        black . --check --exclude="(templates|data)"
+        black . --check --exclude="(templates|data|.*\.md)"
         
     - name: Test with pytest
       run: |

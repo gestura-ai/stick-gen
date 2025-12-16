@@ -13,17 +13,17 @@ Usage:
     python generate_amass_descriptions.py
 """
 
-import torch
 import json
 from pathlib import Path
+
+import torch
 from tqdm import tqdm
+
 from src.data_gen.convert_amass import (
-    infer_action_from_filename,
     generate_description_from_action,
-    AMASS_ACTION_MAPPING,
+    infer_action_from_filename,
 )
-from src.data_gen.schema import ActionType, ACTION_TO_IDX
-import numpy as np
+from src.data_gen.schema import ACTION_TO_IDX
 
 
 def analyze_motion_quality(motion_tensor):
@@ -177,7 +177,7 @@ def main():
     print("GENERATION COMPLETE")
     print("=" * 70)
 
-    print(f"\n📊 Quality Statistics:")
+    print("\n📊 Quality Statistics:")
     print(f"  Total sequences: {quality_stats['total']}")
     print(
         f"  Valid: {quality_stats['valid']} ({quality_stats['valid']/quality_stats['total']*100:.1f}%)"
@@ -189,13 +189,13 @@ def main():
     print(f"  Has Inf: {quality_stats['has_inf']}")
     print(f"  Low motion: {quality_stats['low_motion']}")
 
-    print(f"\n📁 Dataset Distribution:")
+    print("\n📁 Dataset Distribution:")
     for dataset, count in sorted(
         dataset_counts.items(), key=lambda x: x[1], reverse=True
     ):
         print(f"  {dataset}: {count} sequences")
 
-    print(f"\n🎬 Action Distribution (Top 15):")
+    print("\n🎬 Action Distribution (Top 15):")
     for action, count in sorted(
         action_counts.items(), key=lambda x: x[1], reverse=True
     )[:15]:

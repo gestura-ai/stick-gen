@@ -10,20 +10,20 @@ Supports:
 Usage:
     # Export to all formats
     python export_model.py --input checkpoint.pth --output stick-gen-v1 --formats all
-    
+
     # Export to specific formats
     python export_model.py --input checkpoint.pth --output stick-gen-v1 --formats safetensors onnx
-    
+
     # Push to Hugging Face Hub
     python export_model.py --input checkpoint.pth --output stick-gen-v1 --push-to-hub gestura-ai/stick-gen-v1
 """
 
 import argparse
 import json
-import torch
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+
+import torch
 
 # ============================================================================
 # Configuration
@@ -178,7 +178,7 @@ def export_to_onnx(model_path: str, output_dir: Path) -> None:
 
     print(f"✓ Saved to {onnx_path}")
     print(f"✓ Model size: {onnx_path.stat().st_size / 1024 / 1024:.2f} MB")
-    print(f"✓ ONNX validation: PASSED")
+    print("✓ ONNX validation: PASSED")
 
 
 def export_to_torchscript(model_path: str, output_dir: Path) -> None:

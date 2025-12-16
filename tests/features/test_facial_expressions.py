@@ -6,8 +6,8 @@ you can visually inspect them. Pytest will still import this module when
 running the features suite, but there are no test functions here.
 """
 
-from src.data_gen.schema import FacialExpression, ActionType, Position, Scene
 from src.data_gen.renderer import Renderer
+from src.data_gen.schema import ActionType, FacialExpression, Position, Scene
 from src.data_gen.story_engine import create_actor_with_expression
 
 

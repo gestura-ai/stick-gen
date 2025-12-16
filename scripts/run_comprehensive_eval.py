@@ -17,9 +17,10 @@ Usage:
 import argparse
 import json
 import sys
-import torch
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import torch
 
 # Add project root to path to ensure imports work
 project_root = Path(__file__).resolve().parent.parent
@@ -27,12 +28,12 @@ sys.path.append(str(project_root))
 
 try:
     from src.eval.metrics import (
+        compute_motion_diversity,
+        compute_motion_features,
+        compute_motion_realism_score,
         compute_motion_temporal_metrics,
         compute_physics_consistency_metrics,
-        compute_motion_diversity,
         compute_synthetic_artifact_score,
-        compute_motion_realism_score,
-        compute_motion_features,
     )
 
     # Mocking DataValidator if not available/configured to avoid dependency hell in this script
@@ -64,7 +65,7 @@ def load_model_and_generate(checkpoint_path: str, num_samples: int) -> torch.Ten
     return generate_mock_data(num_samples)
 
 
-def run_evaluation(motions: torch.Tensor) -> Dict[str, Any]:
+def run_evaluation(motions: torch.Tensor) -> dict[str, Any]:
     """Run all metrics on the provided motion tensor."""
     print("Running evaluation suite...")
 
@@ -131,7 +132,7 @@ def main():
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
 
-    print(f"\n✅ Evaluation Complete!")
+    print("\n✅ Evaluation Complete!")
     print(f"Report saved to: {output_path.absolute()}")
     print("\nSummary Results:")
     print(json.dumps(results["summary"], indent=2))

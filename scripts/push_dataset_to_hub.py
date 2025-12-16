@@ -9,7 +9,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -29,9 +28,9 @@ def main():
     args = parser.parse_args()
 
     print(f"🚀 Uploading dataset to {args.repo_id}...")
-    
+
     api = HfApi(token=args.token)
-    
+
     # Create repo
     try:
         url = create_repo(args.repo_id, repo_type="dataset", private=args.private, exist_ok=True, token=args.token)

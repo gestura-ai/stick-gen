@@ -20,21 +20,23 @@ Usage:
 """
 
 import argparse
+import csv
 import json
 import os
 import sys
 import time
-import csv
-import torch
 from pathlib import Path
+
+import torch
 from tqdm import tqdm
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from sentence_transformers import SentenceTransformer
+
 from src.model.transformer import StickFigureTransformer
 from src.train.config import TrainingConfig
-from sentence_transformers import SentenceTransformer
 
 
 def load_model(checkpoint_path: str, config_path: str, device: str = "cpu"):
@@ -83,7 +85,7 @@ def load_prompts(prompts_file: str = None, prompts_list: list = None):
     """Load prompts from file or list."""
     if prompts_file:
         print(f"Loading prompts from {prompts_file}...")
-        with open(prompts_file, "r") as f:
+        with open(prompts_file) as f:
             prompts = [line.strip() for line in f if line.strip()]
         print(f"  Loaded {len(prompts)} prompts")
         return prompts

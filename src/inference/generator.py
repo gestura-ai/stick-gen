@@ -1,22 +1,21 @@
 import logging
+
 import torch
-import numpy as np
-from typing import List, Dict, Optional, Tuple
-from src.model.transformer import StickFigureTransformer
-from src.data_gen.schema import ActionType
-from src.data_gen.renderer import Renderer, StickFigure, RenderStyle
-from src.data_gen.story_engine import StoryGenerator
+from transformers import AutoModel, AutoTokenizer
+
 from src.data_gen.llm_story_engine import LLMStoryGenerator
-from src.data_gen.schema import ActionType, ACTION_TO_IDX, NUM_ACTIONS
-from transformers import AutoTokenizer, AutoModel
+from src.data_gen.renderer import Renderer
+from src.data_gen.schema import ACTION_TO_IDX, NUM_ACTIONS, ActionType
+from src.data_gen.story_engine import StoryGenerator
 from src.inference.exporter import MotionExporter
+from src.model.transformer import StickFigureTransformer
 
 # Phase 3: Diffusion refinement (optional)
 try:
     from src.model.diffusion import (
-        PoseRefinementUNet,
         DDPMScheduler,
         DiffusionRefinementModule,
+        PoseRefinementUNet,
     )
 
     DIFFUSION_AVAILABLE = True
@@ -46,7 +45,7 @@ class InferenceGenerator:
         diffusion_model_path="diffusion_unet.pth",
         diffusion_steps=20,
         enable_safety_check=False,
-        safety_config: Optional[SafetyCriticConfig] = None,
+        safety_config: SafetyCriticConfig | None = None,
     ):
         """
         Initialize inference generator
@@ -109,7 +108,7 @@ class InferenceGenerator:
         # Phase 3: Initialize diffusion refinement module (optional)
         self.diffusion_module = None
         if self.use_diffusion:
-            print(f"\nLoading Diffusion Refinement Module (Phase 3)...")
+            print("\nLoading Diffusion Refinement Module (Phase 3)...")
             print(f"  - Denoising steps: {self.diffusion_steps}")
             try:
                 unet = PoseRefinementUNet(
@@ -146,9 +145,9 @@ class InferenceGenerator:
     def check_motion_safety(
         self,
         motion: torch.Tensor,
-        physics: Optional[torch.Tensor] = None,
-        quality_score: Optional[float] = None,
-    ) -> Tuple[bool, Optional[SafetyCriticResult]]:
+        physics: torch.Tensor | None = None,
+        quality_score: float | None = None,
+    ) -> tuple[bool, SafetyCriticResult | None]:
         """
         Check if generated motion passes safety/quality checks.
 
@@ -210,9 +209,9 @@ class InferenceGenerator:
     def generate_with_actions(
         self,
         prompt: str,
-        action_sequence: List[ActionType],
+        action_sequence: list[ActionType],
         output_path: str = "output.mp4",
-        refine: Optional[bool] = None,
+        refine: bool | None = None,
         style: str = "normal",  # Added style
         camera_mode: str = "static",  # Added camera_mode
     ) -> str:
@@ -348,10 +347,10 @@ class InferenceGenerator:
     def generate_with_timeline(
         self,
         prompt: str,
-        action_timeline: Dict[int, ActionType],
+        action_timeline: dict[int, ActionType],
         initial_action: ActionType = ActionType.IDLE,
         output_path: str = "output.mp4",
-        refine: Optional[bool] = None,
+        refine: bool | None = None,
     ) -> str:
         """
         Phase 1: Generate animation with action timeline (frame → action mapping).

@@ -2,9 +2,10 @@
 """
 Quick test to verify training can start and process first batch
 """
-import torch
-from torch.utils.data import Dataset, DataLoader
 import sys
+
+import torch
+from torch.utils.data import DataLoader, Dataset
 
 sys.path.insert(0, ".")
 
@@ -88,7 +89,7 @@ model = StickFigureTransformer(
     dropout=0.1,
     num_actions=60,
 )
-print(f"   ✅ Model created")
+print("   ✅ Model created")
 
 # Try to process first batch
 print("\n4. Processing first batch...")
@@ -96,7 +97,7 @@ for batch_idx, batch_data in enumerate(loader):
     print(f"   - Unpacking batch {batch_idx+1}...")
     data, embedding, target, actions, physics = batch_data
 
-    print(f"   - Data shapes (batch-first):")
+    print("   - Data shapes (batch-first):")
     print(f"     * data: {data.shape}")
     print(f"     * embedding: {embedding.shape}")
     print(f"     * target: {target.shape}")
@@ -111,23 +112,23 @@ for batch_idx, batch_data in enumerate(loader):
     if physics is not None:
         physics = physics.transpose(0, 1)  # [batch, seq, 6] -> [seq, batch, 6]
 
-    print(f"   - Data shapes (seq-first):")
+    print("   - Data shapes (seq-first):")
     print(f"     * data: {data.shape}")
     print(f"     * actions: {actions.shape if actions is not None else None}")
 
-    print(f"   - Running forward pass...")
+    print("   - Running forward pass...")
     with torch.no_grad():
         output = model(
             data, embedding, return_all_outputs=True, action_sequence=actions
         )
 
     print(f"   - Output keys: {output.keys()}")
-    print(f"   - Output shapes:")
+    print("   - Output shapes:")
     for key, value in output.items():
         if isinstance(value, torch.Tensor):
             print(f"     * {key}: {value.shape}")
 
-    print(f"\n   ✅ First batch processed successfully!")
+    print("\n   ✅ First batch processed successfully!")
     break
 
 print("\n" + "=" * 60)

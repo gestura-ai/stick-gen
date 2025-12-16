@@ -8,11 +8,10 @@ RunPod jobs or local inspection.
 from __future__ import annotations
 
 import html
+import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
-
-import json
+from typing import Any
 
 
 def _fmt(x: Any) -> str:
@@ -22,8 +21,8 @@ def _fmt(x: Any) -> str:
 
 
 def build_html_report(
-    model_results: Dict[str, Any],
-    dataset_results: Optional[Dict[str, Any]] = None,
+    model_results: dict[str, Any],
+    dataset_results: dict[str, Any] | None = None,
     title: str = "Stick-Gen Evaluation Report",
 ) -> str:
     """Render a minimal HTML report from evaluation JSON blobs."""
@@ -95,13 +94,13 @@ def build_html_report(
 def write_html_report(
     model_results_path: str,
     output_path: str,
-    dataset_results_path: Optional[str] = None,
+    dataset_results_path: str | None = None,
     title: str = "Stick-Gen Evaluation Report",
 ) -> None:
     """Load JSON files and write an HTML report to disk."""
 
     model_results = json.loads(Path(model_results_path).read_text())
-    dataset_results: Optional[Dict[str, Any]] = None
+    dataset_results: dict[str, Any] | None = None
     if dataset_results_path is not None:
         dataset_results = json.loads(Path(dataset_results_path).read_text())
 

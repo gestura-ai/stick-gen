@@ -12,9 +12,9 @@ This test creates a complex scene with multiple actors performing
 various actions with appropriate facial expressions and speech animation.
 """
 
-from src.data_gen.schema import ActionType, Position, Scene, ActorType
-from src.data_gen.story_engine import create_actor_with_expression
 from src.data_gen.renderer import Renderer
+from src.data_gen.schema import ActionType, Position, Scene
+from src.data_gen.story_engine import create_actor_with_expression
 
 
 def test_multi_actor_scene_with_expressions():

@@ -7,9 +7,10 @@ to ensure the new features don't significantly impact performance.
 """
 
 import time
-from src.data_gen.schema import ActionType, Position, Scene, Actor
-from src.data_gen.story_engine import create_actor_with_expression
+
 from src.data_gen.renderer import Renderer
+from src.data_gen.schema import ActionType, Actor, Position, Scene
+from src.data_gen.story_engine import create_actor_with_expression
 
 
 def benchmark_rendering(scene_name, scene, iterations=3):
@@ -180,16 +181,16 @@ if __name__ == "__main__":
     expressions_overhead = ((expressions_time - baseline_time) / baseline_time) * 100
     speech_overhead = ((speech_time - baseline_time) / baseline_time) * 100
 
-    print(f"\nPerformance Overhead:")
+    print("\nPerformance Overhead:")
     print(f"  Facial expressions: {expressions_overhead:+.1f}%")
     print(f"  Speech animation:   {speech_overhead:+.1f}%")
 
     # Success criteria: <5% overhead (negative is improvement)
     if expressions_overhead < 5 and speech_overhead < 5:
-        print(f"\n✅ PASS: Performance overhead is within acceptable range (<5%)")
+        print("\n✅ PASS: Performance overhead is within acceptable range (<5%)")
         if expressions_overhead < 0:
-            print(f"   Note: Facial expressions actually improved performance!")
+            print("   Note: Facial expressions actually improved performance!")
     else:
-        print(f"\n⚠️  WARNING: Performance overhead exceeds 5%")
+        print("\n⚠️  WARNING: Performance overhead exceeds 5%")
 
     print("\n" + "=" * 60)

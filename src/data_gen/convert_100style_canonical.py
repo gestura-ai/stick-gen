@@ -8,21 +8,21 @@ so we do not depend on BVH parsing libraries at runtime.
 """
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
 
 def _load_100style_txt(
     style_dir: str,
     target_frames: int = 250,
     max_sequences: int = 500,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Load 100STYLE motions from the public text format.
 
     This is a trimmed-down version of ``load_100style_txt`` in
@@ -36,9 +36,9 @@ def _load_100style_txt(
         raise FileNotFoundError(f"InputTrain.txt not found in {style_dir}")
 
     # Optional: frame ranges (not strictly required for fixed-length slices)
-    frame_ranges: List[tuple[int, int]] = []
+    frame_ranges: list[tuple[int, int]] = []
     if os.path.exists(frames_file):
-        with open(frames_file, "r") as f:
+        with open(frames_file) as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 2:
@@ -68,7 +68,7 @@ def _load_100style_txt(
     num_sequences = bone_data.shape[0] // target_frames
     num_sequences = min(num_sequences, max_sequences)
 
-    sequences: List[Dict[str, Any]] = []
+    sequences: list[dict[str, Any]] = []
     for i in range(num_sequences):
         start = i * target_frames
         end = start + target_frames
@@ -97,7 +97,7 @@ def _load_100style_txt(
     return sequences
 
 
-_STYLE_DESCRIPTIONS: Dict[str, str] = {
+_STYLE_DESCRIPTIONS: dict[str, str] = {
     "angry": "A person moving with angry, aggressive body language",
     "happy": "A person moving with happy, joyful energy",
     "sad": "A person moving with sad, dejected posture",
@@ -121,7 +121,7 @@ def _style_to_action(style: str) -> ActionType:
     return ActionType.WALK
 
 
-def _build_canonical_sample(item: Dict[str, Any], fps: int = 25) -> Dict[str, Any]:
+def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, Any]:
     motion = item["motion"]
     if not isinstance(motion, torch.Tensor):
         motion = torch.as_tensor(motion, dtype=torch.float32)
@@ -150,7 +150,7 @@ def _build_canonical_sample(item: Dict[str, Any], fps: int = 25) -> Dict[str, An
 
     physics = compute_basic_physics(motion, fps=fps)
 
-    sample: Dict[str, Any] = {
+    sample: dict[str, Any] = {
         "description": description,
         "motion": motion,
         "actions": actions,
@@ -173,12 +173,12 @@ def convert_100style_canonical(
     target_frames: int = 250,
     fps: int = 25,
     max_sequences: int = 500,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Convert 100STYLE into the canonical schema and save to disk."""
     sequences = _load_100style_txt(style_dir, target_frames, max_sequences)
     validator = DataValidator(fps=fps)
 
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
     for item in sequences:
         sample = _build_canonical_sample(item, fps=fps)
         # Only enforce physics constraints at conversion time; skeleton length

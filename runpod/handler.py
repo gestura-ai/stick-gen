@@ -7,8 +7,9 @@ using the trained StickFigureTransformer model.
 """
 
 import os
-import json
+
 import torch
+
 import runpod
 from runpod import RunPodLogger
 
@@ -38,12 +39,13 @@ def load_model():
     import sys
 
     sys.path.insert(0, "/workspace")
-    from src.model.transformer import StickFigureTransformer
-    from sentence_transformers import SentenceTransformer
     import yaml
+    from sentence_transformers import SentenceTransformer
+
+    from src.model.transformer import StickFigureTransformer
 
     # Load config
-    with open(CONFIG_PATH, "r") as f:
+    with open(CONFIG_PATH) as f:
         config = yaml.safe_load(f)
 
     model_config = config["model"]

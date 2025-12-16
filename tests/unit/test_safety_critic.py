@@ -11,17 +11,15 @@ Tests cover:
 - Batch evaluation
 """
 
-import pytest
 import torch
 
 from src.eval.safety_critic import (
     SafetyCritic,
     SafetyCriticConfig,
     SafetyCriticResult,
-    SafetyIssue,
     SafetyIssueType,
-    evaluate_motion_safety,
     batch_evaluate_safety,
+    evaluate_motion_safety,
 )
 
 

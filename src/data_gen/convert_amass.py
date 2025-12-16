@@ -11,18 +11,18 @@ Usage:
 
 import os
 from pathlib import Path
-from typing import Tuple, List, Dict, Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
+from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
 
 class AMASSConverter:
     """Convert AMASS SMPL data to stick figure format"""
-    
+
     # Map SMPL 22 joints to stick figure components
     # SMPL joint indices: https://github.com/vchoutas/smplx
     SMPL_TO_STICK_MAPPING = {
@@ -36,7 +36,7 @@ class AMASSConverter:
         'left_foot': 7,       # Left ankle/foot
         'right_foot': 8       # Right ankle/foot
     }
-    
+
     def __init__(self, smpl_model_path: str = 'data/smpl_models'):
         """
         Initialize AMASS converter
@@ -48,7 +48,7 @@ class AMASSConverter:
         self.smpl_model = None
         self.smplx_model = None
         self.current_model_type = None
-        
+
     def _detect_format(self, npz_path: str) -> str:
         """
         Detect AMASS file format (SMPL+H or SMPL-X)
@@ -137,8 +137,8 @@ class AMASSConverter:
             )
         except Exception as e:
             raise RuntimeError(f"Failed to load SMPL model: {e}")
-    
-    def load_amass_sequence(self, npz_path: str) -> Tuple[np.ndarray, np.ndarray, np.ndarray, str]:
+
+    def load_amass_sequence(self, npz_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
         """
         Load AMASS .npz file and detect format
 
@@ -162,23 +162,23 @@ class AMASSConverter:
         betas = data['betas'] if 'betas' in data else np.zeros(10)  # Body shape
 
         return poses, trans, betas, model_type
-    
+
     def smpl_to_stick_figure(self, smpl_joints: np.ndarray) -> np.ndarray:
         """
         Convert SMPL 22 joints to stick figure 5 lines
-        
+
         Args:
             smpl_joints: [num_frames, 22, 3] - SMPL joint positions (x, y, z)
-        
+
         Returns:
             stick_lines: [num_frames, 5, 4] - 5 lines (x1, y1, x2, y2)
         """
         num_frames = smpl_joints.shape[0]
         stick_lines = np.zeros((num_frames, 5, 4))
-        
+
         for f in range(num_frames):
             joints = smpl_joints[f]  # [22, 3]
-            
+
             # Extract 2D projection (x, y) - ignore z depth
             head = joints[self.SMPL_TO_STICK_MAPPING['head'], :2]
             l_shoulder = joints[self.SMPL_TO_STICK_MAPPING['left_shoulder'], :2]
@@ -189,20 +189,20 @@ class AMASSConverter:
             r_hand = joints[self.SMPL_TO_STICK_MAPPING['right_hand'], :2]
             l_foot = joints[self.SMPL_TO_STICK_MAPPING['left_foot'], :2]
             r_foot = joints[self.SMPL_TO_STICK_MAPPING['right_foot'], :2]
-            
+
             # Compute stick figure center points
             torso_center = (l_shoulder + r_shoulder) / 2
             hip_center = (l_hip + r_hip) / 2
-            
+
             # Define 5 lines (matching stick-gen schema)
             stick_lines[f, 0] = [*head, *torso_center]      # Line 0: Head to torso
             stick_lines[f, 1] = [*torso_center, *l_hand]    # Line 1: Left arm
             stick_lines[f, 2] = [*torso_center, *r_hand]    # Line 2: Right arm
             stick_lines[f, 3] = [*hip_center, *l_foot]      # Line 3: Left leg
             stick_lines[f, 4] = [*hip_center, *r_foot]      # Line 4: Right leg
-        
+
         return stick_lines
-    
+
     def convert_sequence(
         self,
         npz_path: str,
@@ -309,19 +309,19 @@ class AMASSConverter:
         # SMPL+H has 52 joints (22 body + 30 hands)
         # SMPL-X has 54 joints (22 body + 30 hands + 2 jaw)
         smpl_joints = smpl_joints[:, :22, :]  # [num_frames, 22, 3]
-        
+
         # Convert to stick figure
         stick_lines = self.smpl_to_stick_figure(smpl_joints)
-        
+
         # Resample to target FPS and duration
         target_frames = int(target_fps * target_duration)  # 250 frames
         current_frames = stick_lines.shape[0]
-        
+
         if current_frames != target_frames:
             # Resample using linear interpolation
             indices = np.linspace(0, current_frames - 1, target_frames)
             stick_lines_resampled = np.zeros((target_frames, 5, 4))
-            
+
             for i in range(5):
                 for j in range(4):
                     stick_lines_resampled[:, i, j] = np.interp(
@@ -329,15 +329,15 @@ class AMASSConverter:
                         np.arange(current_frames),
                         stick_lines[:, i, j]
                     )
-            
+
             stick_lines = stick_lines_resampled
-        
+
         # Flatten to [250, 20]
         motion_tensor = torch.tensor(
             stick_lines.reshape(target_frames, 20),
             dtype=torch.float32
         )
-        
+
         return motion_tensor
 
 
@@ -532,7 +532,7 @@ def build_canonical_sample(
     motion: torch.Tensor,
     npz_path: str,
     fps: int = 25,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a canonical sample dict for a single AMASS sequence.
 
     The output matches the format documented in docs/features/DATA_SCHEMA.md
@@ -549,7 +549,7 @@ def build_canonical_sample(
 
     rel_path = os.path.relpath(npz_path, start=os.getcwd())
 
-    sample: Dict[str, Any] = {
+    sample: dict[str, Any] = {
         "description": desc,
         "motion": motion,  # [T, 20]
         "actions": actions,  # [T]
@@ -570,8 +570,8 @@ def convert_amass_dataset(
     smpl_model_path: str = "data/smpl_models",
     target_fps: int = 25,
     target_duration: float = 10.0,
-    max_files: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    max_files: int | None = None,
+) -> list[dict[str, Any]]:
     """Convert AMASS dataset into canonical schema and save to disk.
 
     Returns the list of valid samples that were written.
@@ -588,7 +588,7 @@ def convert_amass_dataset(
     if max_files is not None:
         npz_files = npz_files[: max_files]
 
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
     num_total = 0
     num_valid = 0
 

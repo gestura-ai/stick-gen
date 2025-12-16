@@ -1,5 +1,3 @@
-import math
-from typing import Optional, Dict, Union, List
 
 import torch
 import torch.nn as nn
@@ -17,7 +15,7 @@ class RMSNorm(nn.Module):
 
     def __init__(
         self,
-        normalized_shape: Union[int, List[int], torch.Size],
+        normalized_shape: int | list[int] | torch.Size,
         eps: float = 1e-6,
         elementwise_affine: bool = True,
         device=None,
@@ -441,10 +439,10 @@ class StickFigureTransformer(nn.Module):
         motion: torch.Tensor,
         text_embedding: torch.Tensor,
         return_all_outputs: bool = False,
-        action_sequence: Optional[torch.Tensor] = None,
-        camera_data: Optional[torch.Tensor] = None,
-        partner_motion: Optional[torch.Tensor] = None,
-    ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
+        action_sequence: torch.Tensor | None = None,
+        camera_data: torch.Tensor | None = None,
+        partner_motion: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor] | torch.Tensor:
         """Forward pass with multi-task outputs, action & camera conditioning.
 
         Args:

@@ -4,10 +4,10 @@ Configuration loader for stick-gen training.
 Loads training configuration from YAML files and provides easy access to parameters.
 """
 
-import yaml
 import os
-from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import yaml
 
 
 class TrainingConfig:
@@ -23,7 +23,7 @@ class TrainingConfig:
         self.config_path = config_path
         self.config = self._load_config()
 
-    def _load_config(self) -> Dict[str, Any]:
+    def _load_config(self) -> dict[str, Any]:
         """Load configuration from YAML file."""
         if not os.path.exists(self.config_path):
             raise FileNotFoundError(
@@ -31,7 +31,7 @@ class TrainingConfig:
                 f"Available configs: config.yaml, config_cpu.yaml, config_gpu.yaml"
             )
 
-        with open(self.config_path, "r") as f:
+        with open(self.config_path) as f:
             config = yaml.safe_load(f)
 
         return config
@@ -64,52 +64,52 @@ class TrainingConfig:
         return value
 
     @property
-    def model(self) -> Dict[str, Any]:
+    def model(self) -> dict[str, Any]:
         """Get model configuration."""
         return self.config.get("model", {})
 
     @property
-    def training(self) -> Dict[str, Any]:
+    def training(self) -> dict[str, Any]:
         """Get training configuration."""
         return self.config.get("training", {})
 
     @property
-    def loss_weights(self) -> Dict[str, Any]:
+    def loss_weights(self) -> dict[str, Any]:
         """Get loss weights configuration."""
         return self.config.get("loss_weights", {})
 
     @property
-    def physics(self) -> Dict[str, Any]:
+    def physics(self) -> dict[str, Any]:
         """Get physics configuration."""
         return self.config.get("physics", {})
 
     @property
-    def diffusion(self) -> Dict[str, Any]:
+    def diffusion(self) -> dict[str, Any]:
         """Get diffusion configuration."""
         return self.config.get("diffusion", {})
 
     @property
-    def data(self) -> Dict[str, Any]:
+    def data(self) -> dict[str, Any]:
         """Get data paths configuration."""
         return self.config.get("data", {})
 
     @property
-    def device(self) -> Dict[str, Any]:
+    def device(self) -> dict[str, Any]:
         """Get device configuration."""
         return self.config.get("device", {})
 
     @property
-    def logging(self) -> Dict[str, Any]:
+    def logging(self) -> dict[str, Any]:
         """Get logging configuration."""
         return self.config.get("logging", {})
 
     @property
-    def optimization(self) -> Dict[str, Any]:
+    def optimization(self) -> dict[str, Any]:
         """Get optimization configuration."""
         return self.config.get("optimization", {})
 
     @property
-    def cpu(self) -> Dict[str, Any]:
+    def cpu(self) -> dict[str, Any]:
         """Get CPU optimization configuration."""
         return self.config.get("cpu", {})
 

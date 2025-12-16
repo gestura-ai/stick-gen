@@ -1,16 +1,16 @@
 import torch
 
 from src.eval.metrics import (
-    compute_motion_temporal_metrics,
     compute_camera_metrics,
-    compute_physics_consistency_metrics,
-    compute_text_alignment_from_embeddings,
-    compute_motion_features,
-    compute_motion_diversity,
-    compute_synthetic_artifact_score,
-    compute_motion_realism_score,
     compute_dataset_fid_statistics,
     compute_frechet_distance,
+    compute_motion_diversity,
+    compute_motion_features,
+    compute_motion_realism_score,
+    compute_motion_temporal_metrics,
+    compute_physics_consistency_metrics,
+    compute_synthetic_artifact_score,
+    compute_text_alignment_from_embeddings,
 )
 
 

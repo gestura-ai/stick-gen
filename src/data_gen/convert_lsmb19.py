@@ -1,16 +1,17 @@
 import os
-from typing import List, Dict, Any, Iterator, Tuple
+from collections.abc import Iterator
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
 from .convert_ntu_rgbd import NTU_ACTION_LABELS, _action_to_enum, joints_to_stick
+from .schema import ACTION_TO_IDX
+from .validator import DataValidator
 
 
-def _parse_sample_header(header: str) -> Dict[str, Any]:
+def _parse_sample_header(header: str) -> dict[str, Any]:
     """Parse a training-sample header like `S001C003P007R002A043_61`.
 
     The prefix is the usual NTU RGB+D clip id (SssCcccPpppRrrrAaaa) and the
@@ -44,7 +45,7 @@ def _parse_frame_line(line: str) -> np.ndarray:
     """
     s = line.strip()
     parts = [p for p in s.split(";") if p.strip()]
-    coords: List[List[float]] = []
+    coords: list[list[float]] = []
     for p in parts:
         xyz = [float(x) for x in p.split(",") if x.strip()]
         if not xyz:
@@ -68,16 +69,16 @@ def _parse_frame_line(line: str) -> np.ndarray:
 
 def _iter_training_samples(path: str,
                            protocol: str,
-                           max_samples: int = -1) -> Iterator[Tuple[Dict[str, Any], np.ndarray]]:
+                           max_samples: int = -1) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
     """Yield (meta, joints[T,25,3]) from an LSMB19 `*_training_samples.txt` file."""
     if not os.path.exists(path):
         return
 
     current_header: str | None = None
-    frames: List[np.ndarray] = []
+    frames: list[np.ndarray] = []
     yielded = 0
 
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         for raw in f:
             s = raw.strip()
             if not s:
@@ -105,8 +106,8 @@ def _iter_training_samples(path: str,
 
 
 def _build_canonical_sample_from_joints(joints: np.ndarray,
-                                        meta: Dict[str, Any],
-                                        fps: int) -> Dict[str, Any]:
+                                        meta: dict[str, Any],
+                                        fps: int) -> dict[str, Any]:
     """Convert [T,25,3] NTU-style joints to our canonical sample dict."""
     motion_np = joints_to_stick(joints)  # [T, 20]
     motion = torch.from_numpy(motion_np)
@@ -160,7 +161,7 @@ def convert_lsmb19(data_root: str,
     cv_train = os.path.join(data_root, "cv_training_samples.txt")
 
     validator = DataValidator(fps=fps)
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
 
     remaining = max_samples if max_samples > 0 else None
 

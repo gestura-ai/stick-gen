@@ -1,7 +1,7 @@
+import logging
+
 import torch
 import torch.nn as nn
-import numpy as np
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 try:
     import jax
     import jax.numpy as jnp
+
     from src.physics.brax_env import StickFigureEnv
 
     BRAX_AVAILABLE = True

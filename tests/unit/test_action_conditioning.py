@@ -4,17 +4,18 @@ Phase 1: Action-Conditioned Generation - Test Suite
 Tests for action conditioning functionality.
 """
 
-import torch
 import sys
 from pathlib import Path
+
+import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_gen.schema import (
-    ActionType,
     ACTION_TO_IDX,
     IDX_TO_ACTION,
     NUM_ACTIONS,
+    ActionType,
     generate_per_frame_actions,
 )
 from src.model.transformer import StickFigureTransformer
@@ -48,7 +49,7 @@ def test_per_frame_actions():
     assert per_frame[0] == ActionType.WALK
     assert per_frame[125] == ActionType.RUN
 
-    print(f"✓ Generated 250 frames correctly")
+    print("✓ Generated 250 frames correctly")
 
 
 def test_model_architecture():
@@ -72,7 +73,7 @@ def test_model_architecture():
     assert hasattr(model, "action_projection")
     assert hasattr(model, "action_predictor")
 
-    print(f"✓ All action components present")
+    print("✓ All action components present")
 
 
 def test_forward_pass():
@@ -109,7 +110,7 @@ def test_forward_pass():
     assert "action_logits" in outputs
     assert outputs["action_logits"].shape == (50, 2, NUM_ACTIONS)
 
-    print(f"✓ Forward pass successful")
+    print("✓ Forward pass successful")
 
 
 def run_all_tests():

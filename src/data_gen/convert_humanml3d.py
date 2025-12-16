@@ -9,20 +9,20 @@ HumanML3D Feature Layout (263 dimensions per frame):
 We extract the 22 joint positions and project to our 5-segment stick figure.
 """
 
+import glob
+import logging
 import os
 import re
-import glob
 import zipfile
-import logging
-from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -121,7 +121,7 @@ ACTION_KEYWORDS = {
 }
 
 
-def _load_normalization(stats_dir: str) -> Optional[Dict[str, np.ndarray]]:
+def _load_normalization(stats_dir: str) -> dict[str, np.ndarray] | None:
     """Load normalization statistics with error handling."""
     mean_path = os.path.join(stats_dir, "Mean.npy")
     std_path = os.path.join(stats_dir, "Std.npy")
@@ -141,18 +141,18 @@ def _load_normalization(stats_dir: str) -> Optional[Dict[str, np.ndarray]]:
         return None
 
 
-def _denorm(arr: np.ndarray, stats: Dict[str, np.ndarray]) -> np.ndarray:
+def _denorm(arr: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
     """Denormalize features using mean and std."""
     return arr * stats["std"] + stats["mean"]
 
 
-def _load_texts_from_zip(zip_path: str) -> Dict[str, List[str]]:
+def _load_texts_from_zip(zip_path: str) -> dict[str, list[str]]:
     """Load HumanML3D texts.zip into {clip_id: [lines...]}.
 
     Each text file contains multiple annotations separated by '#'.
     Format: "description#start_time#end_time" or just "description"
     """
-    mapping: Dict[str, List[str]] = {}
+    mapping: dict[str, list[str]] = {}
     if not os.path.exists(zip_path):
         logger.warning(f"texts.zip not found at {zip_path}")
         return mapping
@@ -185,7 +185,7 @@ def _load_texts_from_zip(zip_path: str) -> Dict[str, List[str]]:
     return mapping
 
 
-def _infer_action_from_text(texts: List[str]) -> ActionType:
+def _infer_action_from_text(texts: list[str]) -> ActionType:
     """Infer primary action type from text annotations using keyword matching."""
     if not texts:
         return ActionType.IDLE
@@ -194,7 +194,7 @@ def _infer_action_from_text(texts: List[str]) -> ActionType:
     combined = ' '.join(texts).lower()
 
     # Count matches for each action
-    action_scores: Dict[ActionType, int] = {}
+    action_scores: dict[ActionType, int] = {}
     for pattern, action in ACTION_KEYWORDS.items():
         matches = re.findall(pattern, combined, re.IGNORECASE)
         if matches:
@@ -287,7 +287,7 @@ def _features_to_stick(feats: np.ndarray) -> np.ndarray:
         pad = np.zeros((T, 20 - D), dtype=feats.dtype)
         arr = np.concatenate([feats, pad], axis=1)
     return arr.astype(np.float32)
-def _generate_camera_from_motion(motion: torch.Tensor) -> Optional[torch.Tensor]:
+def _generate_camera_from_motion(motion: torch.Tensor) -> torch.Tensor | None:
     """Generate basic camera data based on motion trajectory.
 
     Creates smooth camera that follows the center of motion.
@@ -329,10 +329,10 @@ def _generate_camera_from_motion(motion: torch.Tensor) -> Optional[torch.Tensor]
 
 
 def _build_sample(feats: np.ndarray,
-                  texts: List[str],
+                  texts: list[str],
                   clip_id: str,
                   stats_fps: int = 20,
-                  include_camera: bool = False) -> Dict[str, Any]:
+                  include_camera: bool = False) -> dict[str, Any]:
     """Build a canonical sample dict from HumanML3D features.
 
     Args:
@@ -379,7 +379,7 @@ def _build_sample(feats: np.ndarray,
     }
 
 
-def _process_single_clip(args: Tuple[str, Dict[str, np.ndarray], Dict[str, List[str]], int, bool, float]) -> Optional[Dict[str, Any]]:
+def _process_single_clip(args: tuple[str, dict[str, np.ndarray], dict[str, list[str]], int, bool, float]) -> dict[str, Any] | None:
     """Process a single clip (for parallel processing).
 
     Returns sample dict or None if validation fails.
@@ -432,7 +432,7 @@ def convert_humanml3d(
     include_camera: bool = False,
     physics_threshold: float = 2.0,
     num_workers: int = 1,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Convert HumanML3D preprocessed features into canonical schema.
 
     This implementation assumes the standard HumanML3D layout with
@@ -475,7 +475,7 @@ def convert_humanml3d(
         paths = paths[:max_clips]
         logger.info(f"Limited to {max_clips} clips")
 
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
     skipped = 0
 
     if num_workers > 1:
@@ -504,7 +504,7 @@ def convert_humanml3d(
     logger.info(f"Converted {len(samples)}/{len(paths)} clips ({skipped} skipped)")
 
     # Compute action distribution
-    action_counts: Dict[str, int] = {}
+    action_counts: dict[str, int] = {}
     for s in samples:
         label = s.get("action_label", "idle")
         action_counts[label] = action_counts.get(label, 0) + 1

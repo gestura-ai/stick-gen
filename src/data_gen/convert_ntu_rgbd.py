@@ -1,16 +1,15 @@
-import os
 import glob
-from typing import List, Dict, Any, Tuple
+import os
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
-
-NTU_ACTION_LABELS: Dict[int, str] = {
+NTU_ACTION_LABELS: dict[int, str] = {
     # Official NTU RGB+D 60 action names (1-indexed). We only use them
     # to build simple textual descriptions and coarse ActionType mapping.
     1: "drink water",
@@ -76,7 +75,7 @@ NTU_ACTION_LABELS: Dict[int, str] = {
 }
 
 
-def _parse_filename(path: str) -> Tuple[int, int, int, int, int, int]:
+def _parse_filename(path: str) -> tuple[int, int, int, int, int, int]:
     """Parse NTU file name `SssCcccPpppRrrrAaaa.skeleton`.
 
     Returns (setup_id, camera_id, performer_id, replication_id, action_id, ignored_idx).
@@ -99,13 +98,13 @@ def _read_skeleton_file(path: str) -> np.ndarray:
     the 3D joint positions and ignore orientations and other metadata.
     For frames with multiple bodies we keep the first body only.
     """
-    with open(path, "r") as f:
+    with open(path) as f:
         num_frames = int(f.readline())
-        frames: List[np.ndarray] = []
+        frames: list[np.ndarray] = []
         for _ in range(num_frames):
             num_bodies = int(f.readline())
             body_joints = None
-            for b in range(num_bodies):
+            for _b in range(num_bodies):
                 # Body info line (10 numbers), we ignore content.
                 _ = f.readline()
                 num_joints = int(f.readline())
@@ -171,8 +170,8 @@ def _action_to_enum(action_id: int) -> ActionType:
 
 
 def _build_canonical_sample(joints: np.ndarray,
-                            meta: Dict[str, Any],
-                            fps: int = 30) -> Dict[str, Any]:
+                            meta: dict[str, Any],
+                            fps: int = 30) -> dict[str, Any]:
     motion_np = joints_to_stick(joints)  # [T, 20]
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
@@ -207,7 +206,7 @@ def convert_ntu_rgbd(root_dir: str,
         paths = paths[:max_files]
 
     validator = DataValidator(fps=fps)
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
 
     for path in paths:
         setup, camera, performer, replication, action, _ = _parse_filename(path)

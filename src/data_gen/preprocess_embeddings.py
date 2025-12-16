@@ -1,10 +1,11 @@
-import torch
-import os
-import yaml
 import argparse
-from transformers import AutoModel, AutoTokenizer
-from tqdm import tqdm
+import os
+
+import torch
 import torch.nn.functional as F
+import yaml
+from tqdm import tqdm
+from transformers import AutoModel, AutoTokenizer
 
 
 def load_config(config_path: str = "configs/base.yaml") -> dict:
@@ -13,7 +14,7 @@ def load_config(config_path: str = "configs/base.yaml") -> dict:
         print(f"Warning: Config file {config_path} not found, using defaults")
         return {}
 
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 

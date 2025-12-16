@@ -1,15 +1,14 @@
-import os
 import glob
+import os
 import pickle
-from typing import List, Dict, Any
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
-
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
 # Very lightweight AIST++ converter that uses keypoints3d_optim to avoid
 # depending on SMPL models. We approximate our 5-line stick figure from 3D
@@ -79,8 +78,8 @@ def _infer_camera_feature(seq_name: str) -> torch.Tensor:
 
 def _build_sample(keypoints: np.ndarray,
                   seq_name: str,
-                  meta: Dict[str, Any],
-                  fps: int = 60) -> Dict[str, Any]:
+                  meta: dict[str, Any],
+                  fps: int = 60) -> dict[str, Any]:
     motion_np = keypoints3d_to_stick(keypoints)
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
@@ -130,7 +129,7 @@ def convert_aist_plusplus(root_dir: str,
     # extreme numerical glitches.
     validator.max_velocity = 300.0
     validator.max_acceleration = 6000.0
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
 
     for path in paths:
         seq_name = os.path.splitext(os.path.basename(path))[0]

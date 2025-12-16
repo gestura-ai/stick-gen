@@ -15,24 +15,24 @@ Usage:
     python scripts/train_runpod.py --resume-from checkpoints/model_checkpoint.pth
 """
 
-import os
-import sys
 import argparse
 import json
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from pathlib import Path
-from datetime import datetime
 from tqdm import tqdm
-import numpy as np
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.model.transformer import StickFigureTransformer
 from src.data_gen.schema import NUM_ACTIONS
+from src.model.transformer import StickFigureTransformer
 from src.train.config import TrainingConfig
 
 
@@ -172,7 +172,7 @@ def validate(model, loader, device):
     total_loss = 0.0
 
     with torch.no_grad():
-        for motion, embedding, targets, actions, physics, camera in loader:
+        for motion, embedding, targets, _actions, _physics, camera in loader:
             motion = motion.permute(1, 0, 2).to(device)
             embedding = embedding.to(device)
             targets = targets.permute(1, 0, 2).to(device)
@@ -292,7 +292,7 @@ def main():
     print(f"  d_model: {model_config['d_model']}")
     print(f"  layers: {model_config['num_layers']}")
     print(f"  heads: {model_config['nhead']}")
-    print(f"\nTraining:")
+    print("\nTraining:")
     print(f"  epochs: {args.epochs}")
     print(f"  batch_size: {batch_size}")
     print(f"  grad_accum: {grad_accum}")

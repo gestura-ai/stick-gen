@@ -12,16 +12,15 @@ Usage:
     python validate_amass_quality.py --samples 10
 """
 
-import torch
-import json
 import argparse
+import json
 import random
 from pathlib import Path
-from src.data_gen.renderer import StickFigure
-from src.data_gen.schema import ActionType, IDX_TO_ACTION
-import matplotlib.pyplot as plt
+
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 
 def render_sequence(motion_tensor, output_path, title="AMASS Sequence"):
@@ -38,7 +37,7 @@ def render_sequence(motion_tensor, output_path, title="AMASS Sequence"):
 
     # Initialize lines
     lines = []
-    for i in range(5):
+    for _i in range(5):
         (line,) = ax.plot([], [], "o-", linewidth=2, markersize=4)
         lines.append(line)
 
@@ -123,7 +122,7 @@ def main():
         print("Run generate_amass_descriptions.py first")
         return
 
-    with open(descriptions_file, "r") as f:
+    with open(descriptions_file) as f:
         descriptions = json.load(f)
 
     print(f"\nLoaded {len(descriptions)} sequence descriptions")
@@ -188,7 +187,7 @@ def main():
         quality["action"] = metadata["action"]
         quality_metrics.append(quality)
 
-        print(f"  Quality Metrics:")
+        print("  Quality Metrics:")
         print(f"    Smoothness: {quality['smoothness']:.4f}")
         print(f"    Consistency: {quality['consistency']:.4f}")
         print(f"    Motion Range: {quality['motion_range']:.4f}")
@@ -219,13 +218,13 @@ def main():
     avg_range = np.mean([m["motion_range"] for m in quality_metrics])
     avg_velocity = np.mean([m["avg_velocity"] for m in quality_metrics])
 
-    print(f"\n📊 Average Quality Metrics:")
+    print("\n📊 Average Quality Metrics:")
     print(f"  Smoothness: {avg_smoothness:.4f}")
     print(f"  Consistency: {avg_consistency:.4f}")
     print(f"  Motion Range: {avg_range:.4f}")
     print(f"  Avg Velocity: {avg_velocity:.4f}")
 
-    print(f"\n✅ Validation complete!")
+    print("\n✅ Validation complete!")
     print(f"✅ Videos saved to: {output_dir}")
 
     # Save quality metrics

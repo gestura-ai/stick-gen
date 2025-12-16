@@ -1,13 +1,13 @@
-import torch
-import sys
 import os
-import numpy as np
+import sys
+
+import torch
 
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
-from src.model.transformer import StickFigureTransformer
 from src.data_gen.renderer import Renderer
+from src.model.transformer import StickFigureTransformer
 
 
 def generate():
@@ -29,7 +29,7 @@ def generate():
 
     print("Generating sequence...")
     with torch.no_grad():
-        for i in range(50):  # Generate 50 frames (2 seconds)
+        for _i in range(50):  # Generate 50 frames (2 seconds)
             output = model(current_seq)
             # Take the last predicted frame
             next_frame = output[-1, :, :].unsqueeze(0)  # [1, 1, dim]

@@ -1,8 +1,17 @@
 import random
 import re
+
 from .schema import (
-    Scene, Actor, Position, ActionType, SceneObject, ObjectType, ActorType,
-    FacialExpression, MouthShape, FaceFeatures
+    ActionType,
+    Actor,
+    ActorType,
+    FaceFeatures,
+    FacialExpression,
+    MouthShape,
+    ObjectType,
+    Position,
+    Scene,
+    SceneObject,
 )
 
 # Action-to-Expression mapping (Phase 5)
@@ -347,7 +356,7 @@ class StoryGenerator:
 
         # Create baseball diamond
         for i, base_name in enumerate(["home", "first", "second", "third"]):
-            angle = i * 90
+            i * 90
             x = 2.5 * (1 if i % 2 == 1 else -1) if i > 0 else 0
             y = -2.5 if i == 0 else -2.5 + 2.5 * (i // 2)
             objects.append(SceneObject(
@@ -422,7 +431,7 @@ class StoryGenerator:
                 action_seq = [(0.0, ActionType.IDLE), (1.5, ActionType.CATCHING)]
             else:
                 # Fielders
-                angle = (i - 2) * 40 - 60
+                (i - 2) * 40 - 60
                 distance = random.uniform(3.0, 4.5)
                 pos = Position(
                     x=distance * (0.5 if i % 2 == 0 else -0.5),
@@ -477,7 +486,7 @@ class StoryGenerator:
         # Human explorer
         human_actions = [(0.0, ActionType.WALK), (2.0, ActionType.LOOKING_AROUND)]
         if narrative_beats:
-            for beat_name, start, end in narrative_beats:
+            for beat_name, start, _end in narrative_beats:
                 if "meeting" in beat_name:
                     human_actions.append((start, ActionType.WAVE))
                     human_actions.append((start + 0.5, ActionType.TALK))
@@ -508,7 +517,7 @@ class StoryGenerator:
         for i in range(num_aliens):
             alien_actions = [(0.0, ActionType.IDLE), (2.5, ActionType.WALK)]
             if narrative_beats:
-                for beat_name, start, end in narrative_beats:
+                for beat_name, start, _end in narrative_beats:
                     if "meeting" in beat_name:
                         alien_actions.append((start + 0.3, ActionType.WAVE))
                         alien_actions.append((start + 0.8, ActionType.TALK))
@@ -565,7 +574,7 @@ class StoryGenerator:
             actions = [(0.0, ActionType.IDLE)]
 
             if narrative_beats:
-                for beat_name, start, end in narrative_beats:
+                for beat_name, start, _end in narrative_beats:
                     if "exploring" in beat_name:
                         actions.append((start, ActionType.WALK))
                         actions.append((start + 0.5, ActionType.LOOKING_AROUND))

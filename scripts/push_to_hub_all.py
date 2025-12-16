@@ -11,7 +11,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -54,7 +53,7 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
         return
 
     # 2. Upload Checkpoint (as pytorch_model.bin or similar)
-    print(f"   ⬆️  Uploading weights...")
+    print("   ⬆️  Uploading weights...")
     try:
         # In a real scenario, we might want to convert to safetensors first
         # For this script we assume the user has the file ready to go
@@ -64,14 +63,14 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
             repo_id=repo_id,
             repo_type="model",
         )
-        print(f"   ✓ Weights uploaded")
+        print("   ✓ Weights uploaded")
     except Exception as e:
         print(f"   ❌ Error uploading weights: {e}")
 
     # 3. Upload Model Card
     card_path = Path(f"model_cards/{variant}.md")
     if card_path.exists():
-        print(f"   ⬆️  Uploading model card...")
+        print("   ⬆️  Uploading model card...")
         try:
             api.upload_file(
                 path_or_fileobj=str(card_path),
@@ -79,7 +78,7 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
                 repo_id=repo_id,
                 repo_type="model",
             )
-            print(f"   ✓ Model card uploaded")
+            print("   ✓ Model card uploaded")
         except Exception as e:
             print(f"   ❌ Error uploading card: {e}")
     else:
@@ -96,7 +95,7 @@ def main():
     )
     args = parser.parse_args()
 
-    print(f"Gestura AI - Batch Model Uploader")
+    print("Gestura AI - Batch Model Uploader")
     print(f"Target Org: {args.org}")
     print("=" * 40)
 

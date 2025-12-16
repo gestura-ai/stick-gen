@@ -19,10 +19,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-import torch
 import numpy as np
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,8 @@ class SafetyIssue:
     issue_type: SafetyIssueType
     severity: float  # 0.0 = minor, 1.0 = critical
     description: str
-    frame_range: Optional[Tuple[int, int]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    frame_range: tuple[int, int] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -59,10 +59,10 @@ class SafetyCriticResult:
 
     is_safe: bool
     overall_score: float  # 0.0 = reject, 1.0 = perfect
-    issues: List[SafetyIssue] = field(default_factory=list)
-    check_results: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    issues: list[SafetyIssue] = field(default_factory=list)
+    check_results: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def get_rejection_reasons(self) -> List[str]:
+    def get_rejection_reasons(self) -> list[str]:
         """Get human-readable rejection reasons for critical issues."""
         return [issue.description for issue in self.issues if issue.severity >= 0.7]
 
@@ -116,15 +116,15 @@ class SafetyCritic:
             print("Rejected:", result.get_rejection_reasons())
     """
 
-    def __init__(self, config: Optional[SafetyCriticConfig] = None):
+    def __init__(self, config: SafetyCriticConfig | None = None):
         self.config = config or SafetyCriticConfig()
 
     def evaluate(
         self,
         motion: torch.Tensor,
-        physics: Optional[torch.Tensor] = None,
-        quality_score: Optional[float] = None,
-        expected_action: Optional[str] = None,
+        physics: torch.Tensor | None = None,
+        quality_score: float | None = None,
+        expected_action: str | None = None,
     ) -> SafetyCriticResult:
         """
         Evaluate a generated motion sequence for safety and quality.
@@ -138,8 +138,8 @@ class SafetyCritic:
         Returns:
             SafetyCriticResult with is_safe, overall_score, and detailed issues
         """
-        issues: List[SafetyIssue] = []
-        check_results: Dict[str, Dict[str, Any]] = {}
+        issues: list[SafetyIssue] = []
+        check_results: dict[str, dict[str, Any]] = {}
 
         # Normalize motion shape to [T, A, D]
         motion = self._normalize_motion_shape(motion)
@@ -258,7 +258,7 @@ class SafetyCritic:
             return physics.unsqueeze(1)  # [T, 6] -> [T, 1, 6]
         return physics
 
-    def _check_frozen_motion(self, motion: torch.Tensor) -> Dict[str, Any]:
+    def _check_frozen_motion(self, motion: torch.Tensor) -> dict[str, Any]:
         """Check if motion is frozen (no movement)."""
         T, A, D = motion.shape
         if T < 2:
@@ -280,7 +280,7 @@ class SafetyCritic:
             "mean_velocity": float(mean_velocity.mean().item()),
         }
 
-    def _check_repetitive_motion(self, motion: torch.Tensor) -> Dict[str, Any]:
+    def _check_repetitive_motion(self, motion: torch.Tensor) -> dict[str, Any]:
         """Check for repetitive/looping motion patterns."""
         T, A, D = motion.shape
         window = self.config.repetition_window
@@ -316,7 +316,7 @@ class SafetyCritic:
             "num_windows": num_windows,
         }
 
-    def _check_jittery_motion(self, motion: torch.Tensor) -> Dict[str, Any]:
+    def _check_jittery_motion(self, motion: torch.Tensor) -> dict[str, Any]:
         """Check for jittery/noisy motion (high acceleration)."""
         T, A, D = motion.shape
         if T < 3:
@@ -340,7 +340,7 @@ class SafetyCritic:
             "max_acceleration": float(mean_accel.max().item()),
         }
 
-    def _check_physics_violations(self, physics: torch.Tensor) -> Dict[str, Any]:
+    def _check_physics_violations(self, physics: torch.Tensor) -> dict[str, Any]:
         """Check physics tensor for velocity/acceleration violations."""
         # Physics format: [T, A, 6] = (vx, vy, ax, ay, mx, my)
         T, A, _ = physics.shape
@@ -360,7 +360,7 @@ class SafetyCritic:
             "mean_acceleration": float(acceleration.mean().item()),
         }
 
-    def _check_ground_penetration(self, motion: torch.Tensor) -> Dict[str, Any]:
+    def _check_ground_penetration(self, motion: torch.Tensor) -> dict[str, Any]:
         """Check if any body parts penetrate the ground plane (y < 0)."""
         # Motion format: [T, A, D] where D=20 (5 limbs * 4 coords: x1,y1,x2,y2)
         T, A, D = motion.shape
@@ -380,7 +380,7 @@ class SafetyCritic:
         }
 
     def _compute_overall_score(
-        self, issues: List[SafetyIssue], check_results: Dict[str, Dict[str, Any]]
+        self, issues: list[SafetyIssue], check_results: dict[str, dict[str, Any]]
     ) -> float:
         """Compute overall quality/safety score from issues and checks."""
         if not issues:
@@ -395,9 +395,9 @@ class SafetyCritic:
 
 def evaluate_motion_safety(
     motion: torch.Tensor,
-    physics: Optional[torch.Tensor] = None,
-    quality_score: Optional[float] = None,
-    config: Optional[SafetyCriticConfig] = None,
+    physics: torch.Tensor | None = None,
+    quality_score: float | None = None,
+    config: SafetyCriticConfig | None = None,
 ) -> SafetyCriticResult:
     """
     Convenience function to evaluate motion safety.
@@ -416,9 +416,9 @@ def evaluate_motion_safety(
 
 
 def batch_evaluate_safety(
-    samples: List[Dict[str, Any]],
-    config: Optional[SafetyCriticConfig] = None,
-) -> Dict[str, Any]:
+    samples: list[dict[str, Any]],
+    config: SafetyCriticConfig | None = None,
+) -> dict[str, Any]:
     """
     Evaluate safety for a batch of samples.
 
@@ -461,7 +461,7 @@ def batch_evaluate_safety(
     mean_score = np.mean([r["overall_score"] for r in results]) if results else 0.0
 
     # Issue type distribution
-    issue_counts: Dict[str, int] = {}
+    issue_counts: dict[str, int] = {}
     for r in results:
         for itype in r["issue_types"]:
             issue_counts[itype] = issue_counts.get(itype, 0) + 1

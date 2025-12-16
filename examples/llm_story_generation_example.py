@@ -6,10 +6,10 @@ Generate stick figure animation scripts using LLM backends (Grok, Ollama, Mock).
 Usage:
     # Using mock backend (default, no API key needed)
     python examples/llm_story_generation_example.py --prompt "A ninja heist"
-    
+
     # Using Grok backend (requires GROK_API_KEY in .env)
     python examples/llm_story_generation_example.py --provider grok --prompt "Dance battle"
-    
+
     # Using Ollama backend (requires Ollama server running)
     python examples/llm_story_generation_example.py --provider ollama --model llama3
 
@@ -26,12 +26,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_gen.llm_story_engine import (
+    LLM_AVAILABLE,
     LLMStoryGenerator,
     ScriptSchema,
-    MockBackend,
-    LLM_AVAILABLE,
 )
-from src.data_gen.schema import Scene
 
 
 def print_script(script: ScriptSchema):

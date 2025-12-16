@@ -1,16 +1,17 @@
-import os
 import glob
+import os
 import pickle
-from typing import List, Dict, Any
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ActionType, ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import AMASSConverter, compute_basic_physics
+from .schema import ACTION_TO_IDX, ActionType
+from .validator import DataValidator
 
-def _person_dict_to_motion(person: Dict[str, Any], converter: AMASSConverter) -> torch.Tensor:
+
+def _person_dict_to_motion(person: dict[str, Any], converter: AMASSConverter) -> torch.Tensor:
     """Convert a single person's SMPL-like parameters into [T, 20] stick motion.
 
     The InterHuman motions store SMPL-style parameters per person:
@@ -105,7 +106,7 @@ def _load_motion_pair_from_pkl(pkl_path: str, converter: AMASSConverter) -> torc
     return stacked
 
 
-def _load_texts(annots_dir: str, clip_id: str) -> List[str]:
+def _load_texts(annots_dir: str, clip_id: str) -> list[str]:
     """Load textual annotations for a given clip.
 
     The InterHuman dataset typically stores one text file per clip in
@@ -115,15 +116,15 @@ def _load_texts(annots_dir: str, clip_id: str) -> List[str]:
     path = os.path.join(annots_dir, f"{clip_id}.txt")
     if not os.path.exists(path):
         return []
-    with open(path, "r") as f:
+    with open(path) as f:
         lines = [ln.strip() for ln in f.readlines() if ln.strip()]
     return lines
 
 
 def _build_sample(motion: torch.Tensor,
-                  texts: List[str],
-                  meta: Dict[str, Any],
-                  fps: int = 30) -> Dict[str, Any]:
+                  texts: list[str],
+                  meta: dict[str, Any],
+                  fps: int = 30) -> dict[str, Any]:
     # motion: [T, 2, 20]
     physics = compute_basic_physics(motion, fps=fps)  # [T, 2, 6]
 
@@ -168,7 +169,7 @@ def convert_interhuman(data_root: str,
 
     validator = DataValidator(fps=fps)
     converter = AMASSConverter()  # Reuse SMPL-X + stick-figure utilities
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
 
     for motion_path in motion_files:
         clip_id = os.path.splitext(os.path.basename(motion_path))[0]

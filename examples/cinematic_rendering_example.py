@@ -14,14 +14,13 @@ Usage:
 
 import argparse
 import sys
-import math
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.data_gen.schema import Scene, Actor, ActorType, Position, ActionType
 from src.data_gen.renderer import Renderer
+from src.data_gen.schema import ActionType, Actor, ActorType, Position, Scene
 
 
 def demo_perspective_math():
@@ -34,7 +33,7 @@ def demo_perspective_math():
     focal_length = 10.0
     camera_z = -10.0
 
-    print(f"\nCamera setup:")
+    print("\nCamera setup:")
     print(f"  • Focal length: {focal_length}")
     print(f"  • Camera Z position: {camera_z}")
 

@@ -6,14 +6,13 @@ detection for data curation.
 """
 
 import math
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 
+from src.data_gen.auto_annotator import infer_camera_motion, infer_shot_type
 from src.data_gen.validator import DataValidator
-from src.data_gen.auto_annotator import infer_shot_type, infer_camera_motion
 
 
 def _as_float_tensor(x: torch.Tensor) -> torch.Tensor:
@@ -23,7 +22,7 @@ def _as_float_tensor(x: torch.Tensor) -> torch.Tensor:
     return t
 
 
-def compute_motion_temporal_metrics(motion: torch.Tensor) -> Dict[str, float]:
+def compute_motion_temporal_metrics(motion: torch.Tensor) -> dict[str, float]:
     """Temporal smoothness metrics on motion trajectories.
 
     Args:
@@ -58,8 +57,8 @@ def compute_motion_temporal_metrics(motion: torch.Tensor) -> Dict[str, float]:
 
 
 def compute_camera_metrics(
-    camera: torch.Tensor, motion: Optional[torch.Tensor] = None
-) -> Dict[str, Any]:
+    camera: torch.Tensor, motion: torch.Tensor | None = None
+) -> dict[str, Any]:
     """Camera stability and behavior metrics.
 
     Args:
@@ -81,7 +80,7 @@ def compute_camera_metrics(
     vel = torch.norm(diffs, dim=-1)
 
     acc = diffs[1:] - diffs[:-1]
-    acc_mag = torch.norm(acc, dim=-1) if acc.numel() else torch.zeros(0)
+    torch.norm(acc, dim=-1) if acc.numel() else torch.zeros(0)
 
     jerk = acc[1:] - acc[:-1]
     jerk_mag = torch.norm(jerk, dim=-1) if jerk.numel() else torch.zeros(0)
@@ -108,8 +107,8 @@ def compute_camera_metrics(
 
 def compute_physics_consistency_metrics(
     physics: torch.Tensor,
-    validator: Optional[DataValidator] = None,
-) -> Dict[str, Any]:
+    validator: DataValidator | None = None,
+) -> dict[str, Any]:
     """Summarise physics tensor and validator-based consistency.
 
     Args:
@@ -144,7 +143,7 @@ def compute_physics_consistency_metrics(
 def compute_text_alignment_from_embeddings(
     text_embeddings: torch.Tensor,
     reference_embeddings: torch.Tensor,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Cosine-similarity based alignment between two embedding sets.
 
     This is generic and can be used for text-text, text-motion, or
@@ -236,9 +235,9 @@ def compute_motion_features(motion: torch.Tensor) -> torch.Tensor:
 
 
 def compute_motion_diversity(
-    motions: List[torch.Tensor],
+    motions: list[torch.Tensor],
     num_pairs: int = 1000,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compute diversity metrics across a set of motion samples.
 
     Measures how varied the motion samples are, similar to diversity
@@ -293,7 +292,7 @@ def compute_motion_diversity(
     }
 
 
-def compute_synthetic_artifact_score(motion: torch.Tensor) -> Dict[str, float]:
+def compute_synthetic_artifact_score(motion: torch.Tensor) -> dict[str, float]:
     """Detect common artifacts in synthetic/generated motion.
 
     Checks for:
@@ -386,7 +385,7 @@ def compute_synthetic_artifact_score(motion: torch.Tensor) -> Dict[str, float]:
     }
 
 
-def compute_motion_realism_score(motion: torch.Tensor) -> Dict[str, float]:
+def compute_motion_realism_score(motion: torch.Tensor) -> dict[str, float]:
     """Compute overall motion realism/quality score.
 
     Combines multiple quality signals into a single realism score
@@ -426,8 +425,8 @@ def compute_motion_realism_score(motion: torch.Tensor) -> Dict[str, float]:
 
 
 def compute_dataset_fid_statistics(
-    motions: List[torch.Tensor],
-) -> Dict[str, torch.Tensor]:
+    motions: list[torch.Tensor],
+) -> dict[str, torch.Tensor]:
     """Compute FID-ready statistics (mean/covariance) for a motion dataset.
 
     Can be used to compare two datasets using Fréchet distance.
@@ -452,8 +451,8 @@ def compute_dataset_fid_statistics(
 
 
 def compute_frechet_distance(
-    stats1: Dict[str, torch.Tensor],
-    stats2: Dict[str, torch.Tensor],
+    stats1: dict[str, torch.Tensor],
+    stats2: dict[str, torch.Tensor],
 ) -> float:
     """Compute Fréchet distance between two motion distributions.
 

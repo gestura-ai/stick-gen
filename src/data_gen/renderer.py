@@ -1,15 +1,22 @@
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import numpy as np
-from typing import List, Dict, Tuple
-import matplotlib.patches as patches
-from .schema import (
-    Scene, Actor, ActionType, SceneObject, ObjectType, ActorType,
-    ACTION_VELOCITIES, FacialExpression, MouthShape, FaceFeatures
-)
-from .camera import Camera, Pan, Zoom, CameraState
-import matplotlib.patheffects as path_effects
 
+import matplotlib.animation as animation
+import matplotlib.patches as patches
+import matplotlib.patheffects as path_effects
+import matplotlib.pyplot as plt
+import numpy as np
+
+from .camera import Camera
+from .schema import (
+    ACTION_VELOCITIES,
+    ActionType,
+    Actor,
+    ActorType,
+    FaceFeatures,
+    FacialExpression,
+    MouthShape,
+    ObjectType,
+    Scene,
+)
 
 
 class RenderStyle:
@@ -193,7 +200,6 @@ class StickFigure:
             t: Current time
             new_expression: Target expression to transition to
         """
-        from .story_engine import EXPRESSION_FEATURES
 
         if new_expression != self.facial_expression:
             # Start transition
@@ -260,7 +266,7 @@ class StickFigure:
             mouth_openness=mouth_openness
         )
 
-    def get_pose(self, t: float, dt: float = 0.04) -> Tuple[List, np.ndarray]:
+    def get_pose(self, t: float, dt: float = 0.04) -> tuple[list, np.ndarray]:
         """
         Get pose based on current action and time
 
@@ -1038,10 +1044,10 @@ class CinematicRenderer(StickFigure):
         # Avoid division by zero
         depth = max(focal_length + z, 0.1)
         scale = (focal_length / depth) * camera_zoom
-        
+
         x_proj = x * scale
         y_proj = y * scale
-        
+
         return x_proj, y_proj, scale
 
     def get_pose(self, t: float, dt: float = 0.04):
@@ -1051,53 +1057,53 @@ class CinematicRenderer(StickFigure):
         """
         # Get base 2D lines from parent
         base_lines, head_center = super().get_pose(t, dt)
-        
+
         # Define Z-depths for limbs (assuming standard order)
         # 0: Torso, 1: L-Leg, 2: R-Leg, 3: L-Arm, 4: R-Arm
         # Positive Z is closer to camera
         z_depths = [0.0, -0.2, 0.2, -0.3, 0.3]
-        
+
         # Extend z_depths if there are extra lines (e.g. props)
         if len(base_lines) > len(z_depths):
             z_depths.extend([0.1] * (len(base_lines) - len(z_depths)))
-            
+
         cinematic_lines = []
-        
+
         # Camera parameters (could be passed in or stored)
         # For now, assume static camera at Z=-10 looking at origin
         camera_z = -10.0
-        
+
         for i, (start, end) in enumerate(base_lines):
             z = z_depths[i]
-            
+
             # Project start point
             # Relative to camera: point_z - camera_z
             # If point is at z=0, dist=10. If z=2, dist=8 (closer)
-            
+
             # Simple projection: scale = focal / distance
             # distance = point.z - camera.z
             dist = z - camera_z
             scale = 10.0 / dist
-            
+
             # Apply projection (assuming camera centered at 0,0)
             start_proj = start * scale
             end_proj = end * scale
-            
+
             # Calculate line width based on depth
             # Base width is 2. Closer = thicker.
             width = 2.0 * scale
-            
+
             cinematic_lines.append((start_proj, end_proj, width, z))
-            
+
         # Project head
         head_dist = 0.0 - camera_z # Head at Z=0 roughly
         head_scale = 10.0 / head_dist
         head_proj = head_center * head_scale
-        
+
         # Sort lines by Z (painters algorithm)
         # Draw furthest first (lowest Z)
         cinematic_lines.sort(key=lambda x: x[3])
-        
+
         return cinematic_lines, head_proj
 
 class Renderer:
@@ -1106,15 +1112,15 @@ class Renderer:
         self.height = height
         self.style = style
         self.fig, self.ax = plt.subplots(figsize=(width/100, height/100), dpi=100)
-        
+
         # Initialize Camera
         self.camera = Camera(width=10.0, height=10.0)
-        
+
         self.ax.set_xlim(-5, 5)
         self.ax.set_ylim(-5, 5)
         self.ax.set_aspect('equal')
         self.ax.axis('off')
-        
+
         # Set background based on style
         if self.style == RenderStyle.NEON:
             self.fig.patch.set_facecolor('black')
@@ -1148,13 +1154,13 @@ class Renderer:
         else:
             actors = [StickFigure(a) for a in scene.actors]
         objects = scene.objects
-        
+
         # Setup Camera based on mode
         if camera_mode == "dynamic":
             # Example dynamic behavior: track the first actor
             if actors:
                 self.camera.track_actor(actors[0].id)
-            
+
             # Or add a slow zoom in
             # self.camera.add_movement(Zoom((0,0), 0.8, 1.2, 0, scene.duration))
 
@@ -1167,14 +1173,14 @@ class Renderer:
 
         def update(frame):
             self.ax.clear()
-            
+
             t = frame * 0.04  # 25 fps
-            
+
             # Update Camera
             actors_dict = {a.id: a for a in actors}
             self.camera.update(t, actors_dict)
             xmin, xmax, ymin, ymax = self.camera.get_view_limits()
-            
+
             self.ax.set_xlim(xmin, xmax)
             self.ax.set_ylim(ymin, ymax)
             self.ax.axis('off')
@@ -1187,12 +1193,12 @@ class Renderer:
             # Draw all actors
             for actor in actors:
                 self._draw_actor(actor, t)
-                
+
         ani = animation.FuncAnimation(self.fig, update, frames=int(scene.duration * 25), interval=40)
         ani.save(output_path, writer='ffmpeg', fps=25)
         plt.close()
 
-    def _draw_objects(self, objects: List, t: float):
+    def _draw_objects(self, objects: list, t: float):
         """Draw all scene objects"""
         for obj in objects:
             # Update position if object has velocity
@@ -1294,7 +1300,7 @@ class Renderer:
                 # Standard line: (start, end)
                 start, end = line_data
                 line, = self.ax.plot([start[0], end[0]], [start[1], end[1]], color=actor.color, lw=2)
-            
+
             self._apply_style(line)
 
         # Draw head - different shapes for different actor types
@@ -1313,7 +1319,7 @@ class Renderer:
             # Draw facial features (Phase 5)
             actor._draw_face(self.ax, head, t)
 
-    def render_raw_frames(self, frames_data: List[List[float]], output_path: str, scene_context: Scene = None):
+    def render_raw_frames(self, frames_data: list[list[float]], output_path: str, scene_context: Scene = None):
         # frames_data: List of [x1, y1, x2, y2, ...] (20 floats per frame)
 
         # Set background color based on theme

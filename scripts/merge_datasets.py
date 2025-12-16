@@ -34,34 +34,34 @@ Example with all sources:
 import argparse
 import json
 import logging
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 import random
+from pathlib import Path
+from typing import Any
 
 import torch
 
 from src.data_gen.curation import (
     CurationConfig,
-    filter_by_length,
-    filter_by_artifacts,
-    balance_by_source,
     _get_source,
+    balance_by_source,
+    filter_by_artifacts,
+    filter_by_length,
 )
 from src.eval.metrics import (
-    compute_motion_diversity,
     compute_dataset_fid_statistics,
+    compute_motion_diversity,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def load_dataset(path: str) -> List[Dict[str, Any]]:
+def load_dataset(path: str) -> list[dict[str, Any]]:
     """Load a .pt dataset file."""
     if not Path(path).exists():
         logger.warning(f"Dataset not found: {path}")
         return []
-    
+
     try:
         data = torch.load(path, weights_only=False)
         if isinstance(data, list):
@@ -77,7 +77,7 @@ def load_dataset(path: str) -> List[Dict[str, Any]]:
 
 
 def merge_datasets(
-    input_paths: List[str],
+    input_paths: list[str],
     output_path: str,
     balance_sources: bool = True,
     max_source_fraction: float = 0.3,
@@ -87,21 +87,21 @@ def merge_datasets(
     max_frames: int = 500,
     compute_stats: bool = False,
     seed: int = 42,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Merge multiple datasets with optional filtering and balancing.
-    
+
     Returns:
         Statistics dictionary
     """
     rng = random.Random(seed)
-    all_samples: List[Dict[str, Any]] = []
-    source_counts_input: Dict[str, int] = {}
-    
+    all_samples: list[dict[str, Any]] = []
+    source_counts_input: dict[str, int] = {}
+
     # Load all datasets
     for path in input_paths:
         logger.info(f"Loading {path}...")
         samples = load_dataset(path)
-        
+
         if samples:
             # Tag samples with their file source if not already tagged
             for s in samples:
@@ -109,17 +109,17 @@ def merge_datasets(
                     # Infer source from filename
                     fname = Path(path).stem.lower()
                     s["source"] = fname
-            
+
             all_samples.extend(samples)
-            
+
             # Count by source
             for s in samples:
                 src = _get_source(s)
                 source_counts_input[src] = source_counts_input.get(src, 0) + 1
-    
+
     logger.info(f"Loaded {len(all_samples)} total samples")
     logger.info(f"Input source distribution: {source_counts_input}")
-    
+
     # Create config for filtering
     cfg = CurationConfig(
         min_frames=min_frames,
@@ -128,46 +128,45 @@ def merge_datasets(
         balance_by_source=balance_sources,
         max_source_fraction=max_source_fraction,
     )
-    
+
     # Apply length filter
     filtered, dropped_length = filter_by_length(all_samples, cfg)
     logger.info(f"After length filter: {len(filtered)} samples ({dropped_length} dropped)")
-    
+
     # Apply artifact filter if enabled
     dropped_artifacts = 0
     if filter_artifacts_enabled:
         filtered, dropped_artifacts = filter_by_artifacts(filtered, cfg)
         logger.info(f"After artifact filter: {len(filtered)} samples ({dropped_artifacts} dropped)")
-    
+
     # Apply source balancing if enabled
     if balance_sources:
         filtered = balance_by_source(filtered, cfg, rng)
         logger.info(f"After source balancing: {len(filtered)} samples")
     else:
         rng.shuffle(filtered)
-    
+
     # Compute output statistics
-    source_counts_output: Dict[str, int] = {}
-    action_counts: Dict[str, int] = {}
+    source_counts_output: dict[str, int] = {}
+    action_counts: dict[str, int] = {}
     for s in filtered:
         src = _get_source(s)
         source_counts_output[src] = source_counts_output.get(src, 0) + 1
-        
+
         action = s.get("action_label", "unknown")
         action_counts[action] = action_counts.get(action, 0) + 1
-    
+
     logger.info(f"Output source distribution: {source_counts_output}")
     logger.info(f"Output action distribution: {action_counts}")
 
     # Compute optional quality statistics
-    fid_stats = None
     diversity_stats = None
     if compute_stats and len(filtered) > 10:
         logger.info("Computing quality statistics...")
         motions = [s["motion"] for s in filtered[:1000] if "motion" in s]
         if motions:
             diversity_stats = compute_motion_diversity(motions)
-            fid_stats = compute_dataset_fid_statistics(motions)
+            compute_dataset_fid_statistics(motions)
             logger.info(f"Diversity score: {diversity_stats.get('diversity_score', 0):.4f}")
 
     # Save merged dataset

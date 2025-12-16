@@ -15,12 +15,12 @@ Usage:
         --metrics evaluation_results.json --output reports/training_report.md
 """
 
-import os
-import sys
 import argparse
 import json
-from pathlib import Path
+import os
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -96,8 +96,8 @@ def generate_report(
 
     report = f"""# Stick-Gen Training Report
 
-**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  
-**Model Variant:** {variant}  
+**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+**Model Variant:** {variant}
 **by Gestura AI**
 
 ---
@@ -238,28 +238,28 @@ def main():
     # Load training history
     training_history = []
     if args.training_history and os.path.exists(args.training_history):
-        with open(args.training_history, "r") as f:
+        with open(args.training_history) as f:
             training_history = json.load(f)
         print(f"\nLoaded training history: {len(training_history)} epochs")
 
     # Load metrics
     metrics = {}
     if args.metrics and os.path.exists(args.metrics):
-        with open(args.metrics, "r") as f:
+        with open(args.metrics) as f:
             metrics = json.load(f)
-        print(f"Loaded evaluation metrics")
+        print("Loaded evaluation metrics")
 
     # Load config
     config = {}
     if args.config and os.path.exists(args.config):
         import yaml
 
-        with open(args.config, "r") as f:
+        with open(args.config) as f:
             config = yaml.safe_load(f)
         print(f"Loaded config: {args.config}")
 
     # Generate report
-    print(f"\nGenerating report...")
+    print("\nGenerating report...")
     report = generate_report(training_history, metrics, config, args.variant)
 
     # Save report
@@ -271,12 +271,12 @@ def main():
 
     # Print summary
     if training_history:
-        print(f"\nTraining Summary:")
+        print("\nTraining Summary:")
         print(f"  Epochs: {len(training_history)}")
         print(f"  Final Val Loss: {training_history[-1]['val_loss']:.4f}")
 
     if metrics and "mse" in metrics:
-        print(f"\nEvaluation Summary:")
+        print("\nEvaluation Summary:")
         print(f"  MSE: {metrics['mse']['mean']:.6f}")
 
 

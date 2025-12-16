@@ -13,10 +13,8 @@ import sys
 
 sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
-import pytest
-import numpy as np
 
-from src.data_gen.schema import CameraKeyframe, Scene, Actor, ActorType, Position
+from src.data_gen.schema import Actor, ActorType, CameraKeyframe, Position, Scene
 
 
 class TestCameraKeyframe:
@@ -88,7 +86,7 @@ class TestPerspectiveProjection:
     def test_projection_closer_is_larger(self):
         """Points closer to camera (positive z) should appear larger"""
         focal_length = 10.0
-        x, y = 1.0, 1.0
+        _x, _y = 1.0, 1.0
 
         # Point at z=0
         z_far = 0.0
@@ -124,7 +122,7 @@ class TestPerspectiveProjection:
     def test_projection_avoids_division_by_zero(self):
         """Projection should handle edge cases safely"""
         focal_length = 10.0
-        x, y, z = 1.0, 1.0, -15.0  # Would make f+z negative
+        _x, _y, z = 1.0, 1.0, -15.0  # Would make f+z negative
 
         # Implementation uses max(f + z, 0.1)
         depth = max(focal_length + z, 0.1)

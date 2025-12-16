@@ -1,13 +1,11 @@
-import math
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 
 from .schema import IDX_TO_ACTION, ActionType
 from .validator import DataValidator
 
-
-DEFAULT_ANNOTATION_CONFIG: Dict[str, Any] = {
+DEFAULT_ANNOTATION_CONFIG: dict[str, Any] = {
     "enabled": True,
     # Per-feature toggles
     "shot_type": True,
@@ -18,7 +16,7 @@ DEFAULT_ANNOTATION_CONFIG: Dict[str, Any] = {
 }
 
 
-def _normalize_config(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def _normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
     """Merge user config with defaults.
 
     Supports either:
@@ -44,7 +42,7 @@ def _normalize_config(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     merged = DEFAULT_ANNOTATION_CONFIG.copy()
 
     # Flatten any nested "annotators" section
-    flat: Dict[str, Any] = {}
+    flat: dict[str, Any] = {}
     for k, v in config.items():
         if k == "annotators" and isinstance(v, dict):
             flat.update(v)
@@ -80,7 +78,7 @@ def infer_shot_type(camera: torch.Tensor) -> str:
     return "close"
 
 
-def infer_camera_motion(camera: torch.Tensor, motion: Optional[torch.Tensor] = None) -> str:
+def infer_camera_motion(camera: torch.Tensor, motion: torch.Tensor | None = None) -> str:
     """Classify camera movement pattern.
 
     Returns one of: "static", "pan", "zoom", "tracking", "complex", "unknown".
@@ -154,7 +152,7 @@ def infer_camera_motion(camera: torch.Tensor, motion: Optional[torch.Tensor] = N
     return "complex"
 
 
-def summarize_actions(actions: torch.Tensor) -> Dict[str, Any]:
+def summarize_actions(actions: torch.Tensor) -> dict[str, Any]:
     """Summarize dominant actions over the sequence.
 
     Returns a dict with:
@@ -177,7 +175,7 @@ def summarize_actions(actions: torch.Tensor) -> Dict[str, Any]:
     unique, counts = torch.unique(flat, return_counts=True)
     total = float(flat.numel())
 
-    distribution: Dict[str, float] = {}
+    distribution: dict[str, float] = {}
     for idx, c in zip(unique.tolist(), counts.tolist()):
         action_enum = IDX_TO_ACTION.get(idx)
         if isinstance(action_enum, ActionType):
@@ -191,7 +189,7 @@ def summarize_actions(actions: torch.Tensor) -> Dict[str, Any]:
     return {"dominant": top, "distribution": distribution}
 
 
-def summarize_physics(physics: torch.Tensor, validator: Optional[DataValidator] = None) -> Dict[str, Any]:
+def summarize_physics(physics: torch.Tensor, validator: DataValidator | None = None) -> dict[str, Any]:
     """Compute basic physics statistics and violation ratios."""
 
     phys = torch.as_tensor(physics, dtype=torch.float32)
@@ -233,7 +231,7 @@ def summarize_physics(physics: torch.Tensor, validator: Optional[DataValidator] 
     }
 
 
-def compute_quality(annotations: Dict[str, Any]) -> Dict[str, Any]:
+def compute_quality(annotations: dict[str, Any]) -> dict[str, Any]:
     """Compute an overall quality score from available annotations.
 
     Combines physics safety, camera behavior, and action diversity into a
@@ -300,7 +298,7 @@ def compute_quality(annotations: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def annotate_sample(sample: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def annotate_sample(sample: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Annotate a motion sample with camera/motion/physics labels.
 
     The returned sample is a shallow copy with an ``"annotations"`` dict
@@ -317,7 +315,7 @@ def annotate_sample(sample: Dict[str, Any], config: Optional[Dict[str, Any]] = N
     physics = sample.get("physics")
     actions = sample.get("actions")
 
-    annotations: Dict[str, Any] = dict(sample.get("annotations", {}))
+    annotations: dict[str, Any] = dict(sample.get("annotations", {}))
 
     if cfg.get("shot_type", True) and camera is not None:
         annotations["shot_type"] = infer_shot_type(camera)

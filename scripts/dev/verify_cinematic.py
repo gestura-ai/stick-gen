@@ -1,7 +1,5 @@
-import sys
 import os
-import torch
-import numpy as np
+import sys
 
 # Add project root to path
 sys.path.append(
@@ -9,7 +7,7 @@ sys.path.append(
 )
 
 from src.data_gen.renderer import Renderer, RenderStyle
-from src.data_gen.schema import Scene, Actor, ActionType, Position
+from src.data_gen.schema import ActionType, Actor, Position, Scene
 
 
 def verify_cinematic():

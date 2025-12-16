@@ -9,18 +9,17 @@ Tests cover:
 """
 
 import os
-import tempfile
+
 import pytest
 import torch
-import torch.nn as nn
 import torch.optim as optim
 
-from src.model.transformer import StickFigureTransformer
 from src.model.lora import (
-    inject_lora_adapters,
-    freeze_base_model,
     count_lora_parameters,
+    freeze_base_model,
+    inject_lora_adapters,
 )
+from src.model.transformer import StickFigureTransformer
 
 
 class TestSFTInitFrom:

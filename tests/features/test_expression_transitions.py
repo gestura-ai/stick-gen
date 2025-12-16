@@ -11,8 +11,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.data_gen.schema import Scene, Position, ActionType, FacialExpression
 from src.data_gen.renderer import Renderer
+from src.data_gen.schema import ActionType, Position, Scene
 from src.data_gen.story_engine import create_actor_with_expression
 
 

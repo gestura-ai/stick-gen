@@ -20,8 +20,8 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.eval.metrics import (  # noqa: E402
-    compute_motion_temporal_metrics,
     compute_camera_metrics,
+    compute_motion_temporal_metrics,
     compute_physics_consistency_metrics,
 )
 

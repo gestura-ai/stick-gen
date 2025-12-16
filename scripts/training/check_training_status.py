@@ -5,9 +5,9 @@ and checking for new checkpoint files.
 """
 
 import os
-import time
-import psutil
 from datetime import datetime
+
+import psutil
 
 
 def check_training_status():

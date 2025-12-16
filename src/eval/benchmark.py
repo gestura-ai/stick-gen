@@ -12,27 +12,26 @@ Generates a "Scorecard" with:
 
 import argparse
 import json
-import os
 import sys
-import torch
-import numpy as np
-from tqdm import tqdm
 from pathlib import Path
+
+import numpy as np
+import torch
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 # Add project root to path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
-from src.model.transformer import StickFigureTransformer
+from src.data_gen.schema import NUM_ACTIONS
 from src.eval.metrics import (
-    compute_motion_temporal_metrics,
-    compute_physics_consistency_metrics,
-    compute_text_alignment_from_embeddings,
     compute_dataset_fid_statistics,
     compute_frechet_distance,
+    compute_motion_temporal_metrics,
+    compute_physics_consistency_metrics,
     compute_synthetic_artifact_score,
 )
-from src.data_gen.schema import NUM_ACTIONS
+from src.model.transformer import StickFigureTransformer
 
 
 class BenchmarkDataset(Dataset):
@@ -43,7 +42,7 @@ class BenchmarkDataset(Dataset):
         total = len(raw_data)
         train_size = int(0.8 * total)
         val_size = int(0.1 * total)
-        test_size = total - train_size - val_size
+        total - train_size - val_size
 
         if split == "test":
             self.data = raw_data[train_size + val_size :]

@@ -13,24 +13,23 @@ Usage:
         --variant base --version 1.0.0 --metrics evaluation_results.json
 """
 
-import os
-import sys
-import shutil
 import argparse
 import json
+import os
 import re
-from pathlib import Path
+import shutil
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.push_to_huggingface import (
-    validate_checkpoint,
-    validate_model_card,
+    VARIANT_CONFIG,
     prepare_model_files,
     upload_to_hub,
-    VARIANT_CONFIG,
+    validate_checkpoint,
 )
 
 
@@ -42,7 +41,7 @@ def update_model_card_with_metrics(
         print(f"Model card not found: {model_card_path}")
         return
 
-    with open(model_card_path, "r") as f:
+    with open(model_card_path) as f:
         content = f.read()
 
     # Update TBD values with actual metrics
@@ -111,7 +110,7 @@ def create_release_notes(
         notes += f"- **Physics Score:** {metrics['physics']['physics_score']:.4f}\n"
 
     if training_history:
-        notes += f"\n## Training Summary\n\n"
+        notes += "\n## Training Summary\n\n"
         notes += f"- **Total Epochs:** {len(training_history)}\n"
         notes += f"- **Final Train Loss:** {training_history[-1]['train_loss']:.4f}\n"
         notes += f"- **Final Val Loss:** {training_history[-1]['val_loss']:.4f}\n"
@@ -198,14 +197,14 @@ def main():
     # Load metrics if provided
     metrics = {}
     if args.metrics and os.path.exists(args.metrics):
-        with open(args.metrics, "r") as f:
+        with open(args.metrics) as f:
             metrics = json.load(f)
         print(f"\nLoaded metrics from: {args.metrics}")
 
     # Load training history if provided
     training_history = None
     if args.training_history and os.path.exists(args.training_history):
-        with open(args.training_history, "r") as f:
+        with open(args.training_history) as f:
             training_history = json.load(f)
         print(f"Loaded training history from: {args.training_history}")
 

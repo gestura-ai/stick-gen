@@ -1,9 +1,9 @@
-import gradio as gr
+import logging
 import os
 import sys
-import torch
-import logging
 from pathlib import Path
+
+import gradio as gr
 
 # Add project root to path
 sys.path.append(str(Path(__file__).resolve().parent.parent))

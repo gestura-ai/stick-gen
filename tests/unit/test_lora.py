@@ -9,19 +9,16 @@ Tests cover:
 - LoRA state dict extraction and loading
 """
 
-import pytest
 import torch
 import torch.nn as nn
 
 from src.model.lora import (
     LoRALinear,
-    inject_lora_adapters,
+    count_lora_parameters,
     freeze_base_model,
     get_lora_parameters,
-    count_lora_parameters,
-    merge_lora_weights,
     get_lora_state_dict,
-    load_lora_state_dict,
+    inject_lora_adapters,
 )
 
 
@@ -155,7 +152,7 @@ class TestLoRAParameterManagement:
         inject_lora_adapters(model, target_modules=["0", "2"], rank=4)
 
         # Freeze base model
-        frozen_count = freeze_base_model(model)
+        freeze_base_model(model)
 
         # Check that base parameters are frozen
         for name, param in model.named_parameters():

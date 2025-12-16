@@ -8,11 +8,11 @@ Tests tensor shapes, forward/backward passes, loss computation, and gradient flo
 Run this script to verify templates are ready for integration into the codebase.
 """
 
+import sys
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import sys
-from typing import Dict, Tuple
 
 # ============================================================================
 # Configuration
@@ -29,7 +29,7 @@ EMBEDDING_DIM = 1024  # Text embedding dimension
 print("=" * 70)
 print("Phase 1 Template Validation")
 print("=" * 70)
-print(f"Configuration:")
+print("Configuration:")
 print(f"  Batch size: {BATCH_SIZE}")
 print(f"  Sequence length: {SEQ_LEN}")
 print(f"  Model dimension: {D_MODEL}")
@@ -50,7 +50,7 @@ try:
         num_embeddings=NUM_ACTIONS,
         embedding_dim=64
     )
-    
+
     # Create action projection layer
     action_projection = nn.Sequential(
         nn.Linear(64, D_MODEL),
@@ -58,31 +58,31 @@ try:
         nn.ReLU(),
         nn.Dropout(0.1)
     )
-    
+
     # Test with random action indices
     action_indices = torch.randint(0, NUM_ACTIONS, (BATCH_SIZE, SEQ_LEN))
-    
+
     # Forward pass
     action_emb = action_embedding(action_indices)
     action_features = action_projection(action_emb)
-    
+
     # Verify shapes
     assert action_emb.shape == (BATCH_SIZE, SEQ_LEN, 64), \
         f"Expected {(BATCH_SIZE, SEQ_LEN, 64)}, got {action_emb.shape}"
     assert action_features.shape == (BATCH_SIZE, SEQ_LEN, D_MODEL), \
         f"Expected {(BATCH_SIZE, SEQ_LEN, D_MODEL)}, got {action_features.shape}"
-    
+
     # Count parameters
     embedding_params = sum(p.numel() for p in action_embedding.parameters())
     projection_params = sum(p.numel() for p in action_projection.parameters())
-    
+
     print(f"✓ Action embedding shape: {action_emb.shape}")
     print(f"✓ Action features shape: {action_features.shape}")
     print(f"✓ Embedding parameters: {embedding_params:,}")
     print(f"✓ Projection parameters: {projection_params:,}")
     print(f"✓ Total parameters: {embedding_params + projection_params:,}")
     print("✓ Test 1 PASSED")
-    
+
 except Exception as e:
     print(f"✗ Test 1 FAILED: {e}")
     sys.exit(1)
@@ -105,25 +105,25 @@ try:
         nn.Dropout(0.1),
         nn.Linear(D_MODEL // 2, NUM_ACTIONS)
     )
-    
+
     # Test with random features
     random_features = torch.randn(BATCH_SIZE, SEQ_LEN, D_MODEL)
-    
+
     # Forward pass
     action_logits = action_predictor(random_features)
-    
+
     # Verify shape
     assert action_logits.shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS), \
         f"Expected {(BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)}, got {action_logits.shape}"
-    
+
     # Count parameters
     predictor_params = sum(p.numel() for p in action_predictor.parameters())
-    
+
     print(f"✓ Action logits shape: {action_logits.shape}")
     print(f"✓ Predictor parameters: {predictor_params:,}")
     print(f"✓ Output range: [{action_logits.min():.2f}, {action_logits.max():.2f}]")
     print("✓ Test 2 PASSED")
-    
+
 except Exception as e:
     print(f"✗ Test 2 FAILED: {e}")
     sys.exit(1)
@@ -141,29 +141,29 @@ try:
     # Create mock outputs and targets
     mock_action_logits = torch.randn(BATCH_SIZE, SEQ_LEN, NUM_ACTIONS, requires_grad=True)
     target_actions = torch.randint(0, NUM_ACTIONS, (BATCH_SIZE, SEQ_LEN))
-    
+
     # Reshape for cross-entropy
     logits_flat = mock_action_logits.reshape(-1, NUM_ACTIONS)
     targets_flat = target_actions.reshape(-1)
-    
+
     # Compute action loss
     action_loss = F.cross_entropy(logits_flat, targets_flat)
-    
+
     # Compute accuracy
     action_preds = torch.argmax(logits_flat, dim=-1)
     action_accuracy = (action_preds == targets_flat).float().mean()
-    
+
     # Verify loss properties
     assert action_loss.dim() == 0, "Loss should be scalar"
     assert action_loss.requires_grad, "Loss should require gradients"
     assert 0.0 <= action_accuracy <= 1.0, f"Accuracy should be in [0, 1], got {action_accuracy}"
-    
+
     print(f"✓ Action loss: {action_loss.item():.4f}")
     print(f"✓ Action accuracy: {action_accuracy.item():.4f} ({action_accuracy.item()*100:.2f}%)")
     print(f"✓ Loss is scalar: {action_loss.dim() == 0}")
     print(f"✓ Loss requires grad: {action_loss.requires_grad}")
     print("✓ Test 3 PASSED")
-    
+
 except Exception as e:
     print(f"✗ Test 3 FAILED: {e}")
     sys.exit(1)
@@ -283,12 +283,12 @@ try:
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    print(f"✓ Forward pass with actions: All outputs present")
+    print("✓ Forward pass with actions: All outputs present")
     print(f"✓ Pose output shape: {outputs_with_actions['pose'].shape}")
     print(f"✓ Position output shape: {outputs_with_actions['position'].shape}")
     print(f"✓ Velocity output shape: {outputs_with_actions['velocity'].shape}")
     print(f"✓ Action logits shape: {outputs_with_actions['action_logits'].shape}")
-    print(f"✓ Forward pass without actions: Backward compatible")
+    print("✓ Forward pass without actions: Backward compatible")
     print(f"✓ Total parameters: {total_params:,}")
     print(f"✓ Trainable parameters: {trainable_params:,}")
     print("✓ Test 4 PASSED")
@@ -358,8 +358,8 @@ try:
     print(f"✓ Action loss: {action_loss.item():.4f}")
     print(f"✓ All parameters have gradients: {all_have_gradients}")
     print(f"✓ Average gradient magnitude: {avg_grad_magnitude:.6f}")
-    print(f"✓ No NaN gradients: True")
-    print(f"✓ No Inf gradients: True")
+    print("✓ No NaN gradients: True")
+    print("✓ No Inf gradients: True")
     print("✓ Test 5 PASSED")
 
 except Exception as e:

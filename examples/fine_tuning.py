@@ -16,9 +16,10 @@ Usage:
 import argparse
 import os
 import sys
+from pathlib import Path
+
 import torch
 import torch.nn as nn
-from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 

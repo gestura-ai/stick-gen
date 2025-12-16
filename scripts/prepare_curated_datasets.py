@@ -14,14 +14,13 @@ import argparse
 import json
 import os
 from pathlib import Path
-from typing import List
 
 import torch
 
-from src.data_gen.curation import CurationConfig, load_canonical_datasets, curate_samples
+from src.data_gen.curation import CurationConfig, curate_samples, load_canonical_datasets
 
 
-def run_curation(input_paths: List[str], output_dir: str, cfg: CurationConfig) -> None:
+def run_curation(input_paths: list[str], output_dir: str, cfg: CurationConfig) -> None:
     samples = load_canonical_datasets(input_paths)
     pretrain, sft, stats = curate_samples(samples, cfg)
 
@@ -92,7 +91,7 @@ def main() -> None:
     )
 
     # Expand any directories passed in as inputs to *.pt files
-    input_paths: List[str] = []
+    input_paths: list[str] = []
     for p in args.inputs:
         if os.path.isdir(p):
             for entry in sorted(Path(p).glob("*.pt")):

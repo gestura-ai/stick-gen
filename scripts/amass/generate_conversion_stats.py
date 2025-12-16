@@ -11,8 +11,9 @@ Usage:
 
 import json
 import subprocess
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 import torch
 
 
@@ -91,7 +92,7 @@ def main():
     total_frames = 0
 
     if descriptions_file.exists():
-        with open(descriptions_file, "r") as f:
+        with open(descriptions_file) as f:
             descriptions = json.load(f)
 
         for metadata in descriptions.values():
@@ -142,7 +143,7 @@ def main():
     print("CONVERSION STATISTICS SUMMARY")
     print("=" * 70)
 
-    print(f"\n📁 Overall Statistics:")
+    print("\n📁 Overall Statistics:")
     print(f"  Total Converted Files: {total_converted_files:,}")
     print(f"  Total Frames: {total_frames:,}")
     print(f"  Total Size: {total_size_gb:.2f} GB ({total_size_mb:.2f} MB)")
@@ -150,7 +151,7 @@ def main():
     print(f"  Datasets Converted: {len(dataset_stats)}")
     print(f"  Datasets Available: {len(available_datasets)}")
 
-    print(f"\n📊 Per-Dataset Statistics:")
+    print("\n📊 Per-Dataset Statistics:")
     for dataset, stats in sorted(
         dataset_stats.items(), key=lambda x: x[1]["files"], reverse=True
     ):
@@ -163,7 +164,7 @@ def main():
         print(f"    Avg File Size: {stats['avg_file_size_kb']:.2f} KB")
 
     if action_distribution:
-        print(f"\n🎬 Action Distribution (Top 10):")
+        print("\n🎬 Action Distribution (Top 10):")
         for action, count in sorted(
             action_distribution.items(), key=lambda x: x[1], reverse=True
         )[:10]:

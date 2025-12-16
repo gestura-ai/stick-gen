@@ -45,14 +45,10 @@ Usage:
 
 import argparse
 import getpass
-import hashlib
-import os
 import sys
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import List, Optional
-from urllib.parse import urljoin
 
 try:
     import requests
@@ -201,7 +197,7 @@ def verify_dataset(dataset_dir: Path, expected_sequences: int) -> bool:
 
     # Allow some variance (±20%)
     if len(npz_files) < expected_sequences * 0.8:
-        print(f"⚠️  Warning: Fewer sequences than expected")
+        print("⚠️  Warning: Fewer sequences than expected")
         return False
 
     return True
@@ -235,21 +231,21 @@ def download_dataset(
 
     # Note: Actual AMASS download requires authentication
     # This is a placeholder - users need to download manually from the website
-    print(f"\n⚠️  MANUAL DOWNLOAD REQUIRED")
+    print("\n⚠️  MANUAL DOWNLOAD REQUIRED")
     print(f"\nPlease download {dataset_name} manually:")
-    print(f"1. Go to https://amass.is.tue.mpg.de/download.php")
-    print(f"2. Log in with your credentials")
+    print("1. Go to https://amass.is.tue.mpg.de/download.php")
+    print("2. Log in with your credentials")
     print(f"3. Select dataset: {dataset_name}")
-    print(f"4. ✅ IMPORTANT: Choose 'SMPL+H' format (preferred)")
-    print(f"   If SMPL+H not available, choose 'SMPL-X' (also compatible)")
+    print("4. ✅ IMPORTANT: Choose 'SMPL+H' format (preferred)")
+    print("   If SMPL+H not available, choose 'SMPL-X' (also compatible)")
     print(f"5. Download: {archive_name}")
     print(f"6. Save to: {archive_path}")
-    print(f"\n📋 Format Selection:")
-    print(f"   ✅ SMPL+H - PREFERRED (156 params, most common)")
-    print(f"   ✅ SMPL-X - COMPATIBLE (162 params, auto-detected)")
-    print(f"   ⚠️  SMPL - Fallback only (72 params, requires adjustments)")
-    print(f"   ❌ DMPL - NOT compatible")
-    print(f"\nPress Enter when download is complete...")
+    print("\n📋 Format Selection:")
+    print("   ✅ SMPL+H - PREFERRED (156 params, most common)")
+    print("   ✅ SMPL-X - COMPATIBLE (162 params, auto-detected)")
+    print("   ⚠️  SMPL - Fallback only (72 params, requires adjustments)")
+    print("   ❌ DMPL - NOT compatible")
+    print("\nPress Enter when download is complete...")
     input()
 
     # Check if file exists
@@ -263,7 +259,7 @@ def download_dataset(
 
     # Verify
     if not verify_dataset(dataset_dir, dataset_info["sequences"]):
-        print(f"⚠️  Dataset verification failed")
+        print("⚠️  Dataset verification failed")
         return False
 
     print(f"✅ {dataset_name} downloaded and verified!")

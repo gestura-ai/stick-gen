@@ -1,26 +1,28 @@
 import json
 import os
 import random
-from typing import List, Dict, Optional, Protocol
-from .schema import Scene, Actor, ActionType, Position, ActorType, CameraKeyframe
+from typing import Protocol
 
 from pydantic import BaseModel
+
+from .schema import ActionType, Actor, ActorType, CameraKeyframe, Position, Scene
+
 
 class ScriptSchema(BaseModel):
     """Schema for LLM-generated scripts"""
     title: str
     description: str
     duration: float
-    characters: List[Dict]
-    scenes: List[Dict]
-    actions: List[Dict] = []
-    camera: List[Dict] = []
+    characters: list[dict]
+    scenes: list[dict]
+    actions: list[dict] = []
+    camera: list[dict] = []
 
 # Try importing LLM clients
 try:
-    from openai import OpenAI
-    from dotenv import load_dotenv
     import ollama
+    from dotenv import load_dotenv
+    from openai import OpenAI
     load_dotenv()
     LLM_AVAILABLE = True
 except ImportError as e:
@@ -164,22 +166,22 @@ class GrokBackend:
             if "404" in error_msg:
                 if "deprecated" in error_msg.lower():
                     print(f"[Grok] ❌ ERROR: Model '{self.model}' is deprecated")
-                    print(f"[Grok] Suggestion: Use 'grok-3' or 'grok-4-latest' instead")
+                    print("[Grok] Suggestion: Use 'grok-3' or 'grok-4-latest' instead")
                 elif "does not exist" in error_msg.lower():
                     print(f"[Grok] ❌ ERROR: Model '{self.model}' not found or no access")
-                    print(f"[Grok] Suggestion: Check your API key permissions")
+                    print("[Grok] Suggestion: Check your API key permissions")
                 else:
                     print(f"[Grok] ❌ ERROR 404: {error_msg}")
             elif "401" in error_msg or "unauthorized" in error_msg.lower():
-                print(f"[Grok] ❌ ERROR: Invalid or expired API key")
-                print(f"[Grok] Get a new key from: https://console.x.ai/")
+                print("[Grok] ❌ ERROR: Invalid or expired API key")
+                print("[Grok] Get a new key from: https://console.x.ai/")
             elif "429" in error_msg or "rate limit" in error_msg.lower():
-                print(f"[Grok] ❌ ERROR: Rate limit exceeded")
+                print("[Grok] ❌ ERROR: Rate limit exceeded")
             else:
                 print(f"[Grok] ❌ ERROR: {error_msg}")
 
             if self.fallback_to_mock:
-                print(f"[Grok] ⚠️  Falling back to MockBackend")
+                print("[Grok] ⚠️  Falling back to MockBackend")
                 return MockBackend().generate_story(prompt)
             else:
                 raise
@@ -202,7 +204,7 @@ class OllamaBackend:
         }
         Do not include markdown formatting or code blocks. Just raw JSON.
         """
-        
+
         try:
             response = ollama.chat(model=self.model, messages=[
                 {'role': 'system', 'content': system_prompt},
@@ -236,7 +238,7 @@ class LLMStoryGenerator:
 
         if provider == "grok" and LLM_AVAILABLE:
             if verbose:
-                print(f"[LLMStoryGenerator] Using Grok backend")
+                print("[LLMStoryGenerator] Using Grok backend")
             self.backend = GrokBackend(
                 model=model or "grok-4-latest",
                 fallback_to_mock=fallback_to_mock,
@@ -244,7 +246,7 @@ class LLMStoryGenerator:
             )
         elif provider == "ollama" and LLM_AVAILABLE:
             if verbose:
-                print(f"[LLMStoryGenerator] Using Ollama backend")
+                print("[LLMStoryGenerator] Using Ollama backend")
             self.backend = OllamaBackend(model or "llama3")
         else:
             if provider != "mock" and verbose:
@@ -255,10 +257,10 @@ class LLMStoryGenerator:
         """Generate a script from a text prompt."""
         return self.backend.generate_story(prompt)
 
-    def script_to_scenes(self, script: ScriptSchema) -> List[Scene]:
+    def script_to_scenes(self, script: ScriptSchema) -> list[Scene]:
         """Convert a script into a list of Scene objects."""
         scenes = []
-        
+
         # Create actors based on characters
         actors_map = {}
         for i, char in enumerate(script.characters):
@@ -278,7 +280,7 @@ class LLMStoryGenerator:
         current_time = 0.0
         for scene_data in script.scenes:
             actions = [a.strip() for a in scene_data['action_sequence'].split(",")]
-            
+
             # Assign actions to actors (simplified: all actors do the sequence for now)
             # In a real engine, we'd parse who does what
             for actor in actors_map.values():
@@ -287,7 +289,7 @@ class LLMStoryGenerator:
                     if action_type:
                         actor.actions.append((current_time, action_type))
                         current_time += 2.0 # Assume 2 seconds per action
-            
+
             # Add camera keyframes (cinematic touch)
             camera_keyframes = [
                 # Start of scene
@@ -295,7 +297,7 @@ class LLMStoryGenerator:
                 # End of scene
                 CameraKeyframe(frame=int(current_time*10), x=0, y=0, zoom=1.2)
             ]
-            
+
             scene = Scene(
                 description=scene_data['description'],
                 actors=list(actors_map.values()),
@@ -304,10 +306,10 @@ class LLMStoryGenerator:
                 camera_keyframes=camera_keyframes
             )
             scenes.append(scene)
-            
+
         return scenes
 
-    def _map_action(self, action_name: str) -> Optional[ActionType]:
+    def _map_action(self, action_name: str) -> ActionType | None:
         """Map string action name to ActionType enum."""
         mapping = {
             "walk": ActionType.WALK,

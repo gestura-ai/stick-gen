@@ -1,12 +1,12 @@
 import torch
 
 from src.data_gen.auto_annotator import (
-    infer_shot_type,
+    annotate_sample,
+    compute_quality,
     infer_camera_motion,
+    infer_shot_type,
     summarize_actions,
     summarize_physics,
-    compute_quality,
-    annotate_sample,
 )
 
 

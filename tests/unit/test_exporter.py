@@ -1,9 +1,10 @@
-import sys
-import unittest
-import torch
 import json
 import os
+import sys
+import unittest
 from pathlib import Path
+
+import torch
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -64,7 +65,7 @@ class TestMotionExporter(unittest.TestCase):
         try:
             exporter.save(json_str, test_path)
             self.assertTrue(os.path.exists(test_path))
-            with open(test_path, "r") as f:
+            with open(test_path) as f:
                 content = f.read()
             self.assertEqual(content, json_str)
         finally:

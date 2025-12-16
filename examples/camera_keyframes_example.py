@@ -21,21 +21,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_gen.camera import (
     Camera,
-    CameraState,
-    StaticCamera,
     Pan,
+    StaticCamera,
     Zoom,
-    TrackingCamera,
-)
-from src.data_gen.schema import (
-    Scene,
-    Actor,
-    ActorType,
-    Position,
-    ActionType,
-    CameraKeyframe,
 )
 from src.data_gen.renderer import Renderer
+from src.data_gen.schema import (
+    ActionType,
+    Actor,
+    ActorType,
+    CameraKeyframe,
+    Position,
+    Scene,
+)
 
 
 def create_demo_scene() -> Scene:

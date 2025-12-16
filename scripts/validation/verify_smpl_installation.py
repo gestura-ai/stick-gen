@@ -60,9 +60,9 @@ def test_smplx_basic():
             body_pose = torch.zeros(batch_size, 63)  # 21 joints × 3
 
             output = model(body_pose=body_pose)
-            print(f"✓ Forward pass successful!")
+            print("✓ Forward pass successful!")
             print(f"  Output joints shape: {output.joints.shape}")
-            print(f"  Expected: [1, 22, 3] (batch_size, num_joints, xyz)")
+            print("  Expected: [1, 22, 3] (batch_size, num_joints, xyz)")
 
             return True
 
@@ -146,7 +146,7 @@ def main():
     print("=" * 70)
     print(f"Library imports: {'✓ PASS' if imports_ok else '✗ FAIL'}")
     print(f"SMPL-X API:      {'✓ PASS' if smplx_ok else '✗ FAIL'}")
-    print(f"SMPL models:     ⚠ NOT DOWNLOADED (see instructions above)")
+    print("SMPL models:     ⚠ NOT DOWNLOADED (see instructions above)")
     print("=" * 70)
 
     if imports_ok and smplx_ok:

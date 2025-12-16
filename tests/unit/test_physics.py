@@ -14,11 +14,9 @@ import sys
 sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
 import torch
-import pytest
-import numpy as np
-from src.model.transformer import StickFigureTransformer
+
 from src.data_gen.renderer import Renderer
-from src.inference.generator import InferenceGenerator
+from src.model.transformer import StickFigureTransformer
 
 
 def test_physics_decoder_heads():

@@ -13,18 +13,13 @@ import sys
 
 sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
-import pytest
-import numpy as np
-from dataclasses import dataclass
 
 from src.data_gen.camera import (
-    CameraState,
-    CameraMovement,
-    StaticCamera,
-    Pan,
-    Zoom,
-    TrackingCamera,
     Camera,
+    CameraState,
+    Pan,
+    StaticCamera,
+    Zoom,
 )
 
 

@@ -1,5 +1,5 @@
-from src.data_gen.story_engine import StoryGenerator
 from src.data_gen.renderer import Renderer
+from src.data_gen.story_engine import StoryGenerator
 
 
 def main():

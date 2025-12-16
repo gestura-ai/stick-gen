@@ -7,21 +7,21 @@ Verifies that downloaded AMASS datasets are in the correct format (SMPL+H).
 Usage:
     # Check single file
     python verify_amass_format.py path/to/sequence.npz
-    
+
     # Check entire dataset directory
     python verify_amass_format.py data/amass/CMU
-    
+
     # Check all datasets
     python verify_amass_format.py data/amass
 """
 
 import sys
-import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple
+
+import numpy as np
 
 
-def check_npz_format(npz_path: Path) -> Tuple[str, Dict]:
+def check_npz_format(npz_path: Path) -> tuple[str, dict]:
     """
     Check format of a single .npz file
 
@@ -72,7 +72,7 @@ def check_npz_format(npz_path: Path) -> Tuple[str, Dict]:
         return "ERROR", {"error": str(e)}
 
 
-def verify_directory(directory: Path) -> Dict[str, List[Path]]:
+def verify_directory(directory: Path) -> dict[str, list[Path]]:
     """
     Verify all .npz files in a directory
 
@@ -116,7 +116,7 @@ def verify_directory(directory: Path) -> Dict[str, List[Path]]:
     return results
 
 
-def print_summary(results: Dict[str, List[Path]], directory: Path):
+def print_summary(results: dict[str, list[Path]], directory: Path):
     """Print verification summary"""
     total = sum(len(files) for files in results.values())
 
@@ -136,21 +136,21 @@ def print_summary(results: Dict[str, List[Path]], directory: Path):
         print(
             f"✅ SMPL-X (COMPATIBLE): {len(results['SMPL-X']):5d} files ({len(results['SMPL-X'])/total*100:.1f}%)"
         )
-        print(f"   → Automatically handled by converter")
+        print("   → Automatically handled by converter")
 
     # SMPL (fallback)
     if results["SMPL"]:
         print(
             f"⚠️  SMPL (FALLBACK):  {len(results['SMPL']):5d} files ({len(results['SMPL'])/total*100:.1f}%)"
         )
-        print(f"   → Consider re-downloading in SMPL+H or SMPL-X format")
+        print("   → Consider re-downloading in SMPL+H or SMPL-X format")
 
     # DMPL (incompatible)
     if results["DMPL"]:
         print(
             f"❌ DMPL (INCOMPATIBLE): {len(results['DMPL']):5d} files ({len(results['DMPL'])/total*100:.1f}%)"
         )
-        print(f"   → MUST re-download in SMPL+H or SMPL-X format")
+        print("   → MUST re-download in SMPL+H or SMPL-X format")
 
     # Unknown/Error
     if results["UNKNOWN"]:

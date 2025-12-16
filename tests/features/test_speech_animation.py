@@ -5,9 +5,9 @@ Test script for Phase 7: Speech Animation
 Tests cyclic mouth movements for TALK, SHOUT, WHISPER, and SING actions.
 """
 
+from src.data_gen.renderer import Renderer
 from src.data_gen.schema import ActionType, Position, Scene
 from src.data_gen.story_engine import create_actor_with_expression
-from src.data_gen.renderer import Renderer
 
 
 def test_talk_animation():

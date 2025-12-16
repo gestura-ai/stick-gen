@@ -19,7 +19,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 import yaml
@@ -27,15 +27,13 @@ import yaml
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from transformers import AutoModel, AutoTokenizer
+
+from src.data_gen.schema import NUM_ACTIONS
 from src.eval.safety_critic import (
     SafetyCritic,
-    SafetyCriticConfig,
-    SafetyCriticResult,
-    batch_evaluate_safety,
 )
 from src.model.transformer import StickFigureTransformer
-from src.data_gen.schema import ActionType, ACTION_TO_IDX, NUM_ACTIONS
-from transformers import AutoTokenizer, AutoModel
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -45,13 +43,13 @@ logger = logging.getLogger(__name__)
 
 def load_prompt_suites(
     config_path: str = "configs/eval/prompt_suites.yaml",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Load prompt suites from YAML configuration."""
-    with open(config_path, "r") as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 
-def get_adversarial_suites(suites: Dict[str, Any]) -> List[str]:
+def get_adversarial_suites(suites: dict[str, Any]) -> list[str]:
     """Get list of adversarial suite names (those starting with 'adversarial_')."""
     return [
         name
@@ -144,13 +142,13 @@ def generate_motion_for_prompt(
 
 def evaluate_suite(
     suite_name: str,
-    suite_config: Dict[str, Any],
+    suite_config: dict[str, Any],
     model: StickFigureTransformer,
     tokenizer,
     embed_model,
     safety_critic: SafetyCritic,
     device: str = "cpu",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Evaluate a single prompt suite."""
     prompts = suite_config.get("prompts", [])
     expect_degradation = suite_config.get("expect_degradation", False)
@@ -221,7 +219,7 @@ def evaluate_suite(
     )
 
     # Issue distribution
-    issue_counts: Dict[str, int] = {}
+    issue_counts: dict[str, int] = {}
     for r in results:
         for itype in r.get("issue_types", []):
             issue_counts[itype] = issue_counts.get(itype, 0) + 1

@@ -1,6 +1,7 @@
-import numpy as np
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+
+import numpy as np
+
 
 @dataclass
 class CameraState:
@@ -11,18 +12,18 @@ class CameraState:
 
 class CameraMovement:
     """Base class for camera movements"""
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         raise NotImplementedError
 
 class StaticCamera(CameraMovement):
     def __init__(self, x: float, y: float, zoom: float = 1.0):
         self.state = CameraState(x, y, zoom)
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         return self.state
 
 class Pan(CameraMovement):
-    def __init__(self, start_pos: Tuple[float, float], end_pos: Tuple[float, float], 
+    def __init__(self, start_pos: tuple[float, float], end_pos: tuple[float, float],
                  start_time: float, duration: float, zoom: float = 1.0):
         self.start_pos = np.array(start_pos)
         self.end_pos = np.array(end_pos)
@@ -30,22 +31,22 @@ class Pan(CameraMovement):
         self.duration = duration
         self.zoom = zoom
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         if t < self.start_time:
             return None
-        
+
         progress = (t - self.start_time) / self.duration
         if progress > 1.0:
             progress = 1.0
-        
+
         # Smooth step interpolation
         progress = progress * progress * (3 - 2 * progress)
-        
+
         current_pos = self.start_pos + (self.end_pos - self.start_pos) * progress
         return CameraState(current_pos[0], current_pos[1], self.zoom)
 
 class Zoom(CameraMovement):
-    def __init__(self, center: Tuple[float, float], start_zoom: float, end_zoom: float,
+    def __init__(self, center: tuple[float, float], start_zoom: float, end_zoom: float,
                  start_time: float, duration: float):
         self.center = center
         self.start_zoom = start_zoom
@@ -53,29 +54,29 @@ class Zoom(CameraMovement):
         self.start_time = start_time
         self.duration = duration
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         if t < self.start_time:
             return None
-            
+
         progress = (t - self.start_time) / self.duration
         if progress > 1.0:
             progress = 1.0
-            
+
         # Smooth step
         progress = progress * progress * (3 - 2 * progress)
-        
+
         current_zoom = self.start_zoom + (self.end_zoom - self.start_zoom) * progress
         return CameraState(self.center[0], self.center[1], current_zoom)
 
 class TrackingCamera(CameraMovement):
-    def __init__(self, actor_id: str, scene_actors: List, zoom: float = 1.5, smooth_factor: float = 0.1):
+    def __init__(self, actor_id: str, scene_actors: list, zoom: float = 1.5, smooth_factor: float = 0.1):
         self.actor_id = actor_id
         self.actors = {a.id: a for a in scene_actors}
         self.zoom = zoom
         self.smooth_factor = smooth_factor
         self.last_pos = None
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         actor = self.actors.get(self.actor_id)
         if not actor:
             return None
@@ -99,7 +100,7 @@ class Dolly(CameraMovement):
 
     In 2.5D, we simulate this by combining position change with zoom.
     """
-    def __init__(self, center: Tuple[float, float], start_distance: float, end_distance: float,
+    def __init__(self, center: tuple[float, float], start_distance: float, end_distance: float,
                  start_time: float, duration: float, base_zoom: float = 1.0):
         self.center = np.array(center)
         self.start_distance = start_distance
@@ -108,7 +109,7 @@ class Dolly(CameraMovement):
         self.duration = duration
         self.base_zoom = base_zoom
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         if t < self.start_time:
             return None
 
@@ -140,7 +141,7 @@ class Crane(CameraMovement):
         self.duration = duration
         self.zoom = zoom
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         if t < self.start_time:
             return None
 
@@ -160,7 +161,7 @@ class Orbit(CameraMovement):
 
     In 2D, this translates to circular motion of the camera position.
     """
-    def __init__(self, center: Tuple[float, float], radius: float,
+    def __init__(self, center: tuple[float, float], radius: float,
                  start_angle: float, end_angle: float,
                  start_time: float, duration: float, zoom: float = 1.0):
         """
@@ -181,7 +182,7 @@ class Orbit(CameraMovement):
         self.duration = duration
         self.zoom = zoom
 
-    def get_state(self, t: float) -> Optional[CameraState]:
+    def get_state(self, t: float) -> CameraState | None:
         if t < self.start_time:
             return None
 
@@ -206,51 +207,49 @@ class Camera:
         self.base_width = width
         self.base_height = height
         self.state = CameraState(0, 0, 1.0)
-        self.movements: List[CameraMovement] = []
-        self.target_actor_id: Optional[str] = None
-        
+        self.movements: list[CameraMovement] = []
+        self.target_actor_id: str | None = None
+
     def add_movement(self, movement: CameraMovement):
         self.movements.append(movement)
-        
+
     def track_actor(self, actor_id: str):
         self.target_actor_id = actor_id
-        
+
     def update(self, t: float, actors_dict: dict = None):
         # 1. Check for active movements
-        active_movement = None
         for move in self.movements:
             state = move.get_state(t)
             if state:
                 self.state = state
-                active_movement = move
-                # We keep going to find the latest applicable one or blend them? 
+                # We keep going to find the latest applicable one or blend them?
                 # For simplicity, later movements override earlier ones if they overlap
-        
+
         # 2. If tracking an actor and no override movement
         if self.target_actor_id and actors_dict and self.target_actor_id in actors_dict:
             actor = actors_dict[self.target_actor_id]
             # Smooth follow
             target_x, target_y = actor.pos
-            
+
             # Simple lerp for smoothness
             smooth = 0.1
             self.state.x += (target_x - self.state.x) * smooth
             self.state.y += (target_y - self.state.y) * smooth
-            
+
             # Ensure zoom is set for tracking if not already
             if self.state.zoom == 1.0:
                 self.state.zoom = 1.5
 
-    def get_view_limits(self) -> Tuple[float, float, float, float]:
+    def get_view_limits(self) -> tuple[float, float, float, float]:
         """Return (xmin, xmax, ymin, ymax)"""
         # Calculate visible width/height based on zoom
         # Zoom 2.0 means we see half the area (magnified)
         visible_w = self.base_width / self.state.zoom
         visible_h = self.base_height / self.state.zoom
-        
+
         xmin = self.state.x - visible_w / 2
         xmax = self.state.x + visible_w / 2
         ymin = self.state.y - visible_h / 2
         ymax = self.state.y + visible_h / 2
-        
+
         return (xmin, xmax, ymin, ymax)

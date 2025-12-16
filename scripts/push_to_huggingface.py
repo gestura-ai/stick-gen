@@ -25,10 +25,8 @@ import argparse
 import os
 import shutil
 import time
+
 import torch
-import yaml
-from pathlib import Path
-from typing import Dict, Optional
 from huggingface_hub import HfApi, create_repo, upload_folder
 
 # Variant configuration mapping
@@ -107,7 +105,7 @@ def validate_checkpoint(checkpoint_path: str, variant: str) -> bool:
         print(f"  ✅ Parameter count matches variant '{variant}'")
         return True
     else:
-        print(f"  ❌ Parameter count mismatch!")
+        print("  ❌ Parameter count mismatch!")
         print(f"     Expected: {expected_params:,} (±{tolerance*100:.0f}%)")
         print(f"     Got: {actual_params:,}")
         print(f"     Difference: {abs(actual_params - expected_params):,}")
@@ -130,7 +128,7 @@ def validate_model_card(model_card_path: str) -> bool:
         print(f"  ❌ Model card not found: {model_card_path}")
         return False
 
-    with open(model_card_path, "r") as f:
+    with open(model_card_path) as f:
         content = f.read()
 
     # Check for TBD values
@@ -164,7 +162,7 @@ def prepare_model_files(
     checkpoint_path: str,
     variant: str,
     output_dir: str = "hf_upload",
-    version: Optional[str] = None,
+    version: str | None = None,
 ):
     """
     Prepare model files for Hugging Face upload.
@@ -254,9 +252,9 @@ def prepare_model_files(
 def upload_to_hub_with_retry(
     repo_name: str,
     output_dir: str = "hf_upload",
-    token: Optional[str] = None,
+    token: str | None = None,
     private: bool = False,
-    version: Optional[str] = None,
+    version: str | None = None,
     max_retries: int = 3,
     initial_delay: float = 5.0,
 ):
@@ -280,12 +278,10 @@ def upload_to_hub_with_retry(
 
     # Create repository (with retry)
     print(f"  Creating repository: {repo_name} (private={private})")
-    repo_created = False
     for attempt in range(1, max_retries + 1):
         try:
             create_repo(repo_id=repo_name, token=token, private=private, exist_ok=True)
             print("  ✅ Repository created/verified")
-            repo_created = True
             break
         except Exception as e:
             if attempt < max_retries:
@@ -320,7 +316,7 @@ def upload_to_hub_with_retry(
                 commit_message=commit_message,
             )
             print("  ✅ Files uploaded successfully!")
-            print(f"\n🎉 Model uploaded successfully!")
+            print("\n🎉 Model uploaded successfully!")
             print(f"   View at: https://huggingface.co/{repo_name}")
             if version:
                 print(f"   Version: {version}")
@@ -343,9 +339,9 @@ def upload_to_hub_with_retry(
 def upload_to_hub(
     repo_name: str,
     output_dir: str = "hf_upload",
-    token: Optional[str] = None,
+    token: str | None = None,
     private: bool = False,
-    version: Optional[str] = None,
+    version: str | None = None,
 ):
     """
     Upload model to Hugging Face Hub (legacy function, calls upload_to_hub_with_retry).
@@ -372,7 +368,7 @@ def upload_to_hub(
 def upload_dataset(
     dataset_path: str,
     repo_name: str,
-    token: Optional[str] = None,
+    token: str | None = None,
     private: bool = False,
 ):
     """

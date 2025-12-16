@@ -15,15 +15,17 @@ import argparse
 import json
 import os
 import sys
-import torch
 from pathlib import Path
+
+import torch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from sentence_transformers import SentenceTransformer
+
 from src.model.transformer import StickFigureTransformer
 from src.train.config import TrainingConfig
-from sentence_transformers import SentenceTransformer
 
 
 def load_model(checkpoint_path: str, config_path: str, device: str = "cpu"):

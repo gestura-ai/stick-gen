@@ -6,13 +6,12 @@ This script converts all SMPL+H compatible datasets to stick figure format
 and saves the output to data/amass_converted/
 """
 
-import os
-import sys
 import time
 from pathlib import Path
-from src.data_gen.convert_amass import AMASSConverter
+
 import torch
-import numpy as np
+
+from src.data_gen.convert_amass import AMASSConverter
 
 # Datasets that are SMPL+H compatible (from verification)
 COMPATIBLE_DATASETS = [

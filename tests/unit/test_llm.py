@@ -13,16 +13,12 @@ import sys
 
 sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.data_gen.llm_story_engine import (
-    ScriptSchema,
-    MockBackend,
-    GrokBackend,
-    OllamaBackend,
     LLMStoryGenerator,
-    LLM_AVAILABLE,
+    MockBackend,
+    ScriptSchema,
 )
 from src.data_gen.schema import ActionType
 

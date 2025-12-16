@@ -1,16 +1,22 @@
-import torch
-import os
-import numpy as np
-import yaml
 import argparse
+import os
+import random
+
+import numpy as np
+import torch
+import yaml
 from tqdm import tqdm
-from .story_engine import StoryGenerator, EXPRESSION_FEATURES
+
+from .auto_annotator import annotate_sample
 from .llm_story_engine import LLMStoryGenerator
 from .renderer import StickFigure
-from .schema import ACTION_TO_IDX, ActionType, generate_per_frame_actions, CameraKeyframe, FacialExpression, MouthShape
+from .schema import (
+    ACTION_TO_IDX,
+    FacialExpression,
+    MouthShape,
+)
+from .story_engine import StoryGenerator
 from .validator import DataValidator
-from .auto_annotator import annotate_sample
-import random
 
 
 def load_config(config_path: str = "configs/base.yaml") -> dict:
@@ -19,7 +25,7 @@ def load_config(config_path: str = "configs/base.yaml") -> dict:
         print(f"Warning: Config file {config_path} not found, using defaults")
         return {}
 
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         return yaml.safe_load(f)
 
 # Mapping for Face Features
@@ -30,7 +36,7 @@ EYE_TYPE_TO_IDX = {"dots": 0, "curves": 1, "wide": 2, "closed": 3}
 def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
     """
     Apply data augmentation to motion sequence
-    
+
     Args:
         motion_tensor: [frames, num_actors, 20] tensor
         augmentation_type: Type of augmentation
@@ -43,7 +49,7 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
             num_frames = motion_tensor.shape[0]
             new_num_frames = int(num_frames / speed_factor)
             indices = torch.linspace(0, num_frames - 1, new_num_frames)
-            
+
             augmented = []
             for idx in indices:
                 idx_floor = int(idx.floor())
@@ -68,12 +74,12 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
         # [frames, actors, 20] -> [frames, actors, 5 lines, 4 coords]
         frames, actors, _ = augmented.shape
         reshaped = augmented.view(frames, actors, 5, 4)
-        
+
         reshaped[:, :, :, 0] += jitter_x # x1
         reshaped[:, :, :, 1] += jitter_y # y1
         reshaped[:, :, :, 2] += jitter_x # x2
         reshaped[:, :, :, 3] += jitter_y # y2
-        
+
         return augmented
 
     elif augmentation_type == "scale":
@@ -86,10 +92,10 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
         augmented = motion_tensor.clone()
         frames, actors, _ = augmented.shape
         reshaped = augmented.view(frames, actors, 5, 4)
-        
+
         reshaped[:, :, :, 0] *= -1 # x1
         reshaped[:, :, :, 2] *= -1 # x2
-        
+
         return augmented
 
     else:
@@ -157,7 +163,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
     # Print LLM configuration
     if llm_ratio > 0:
         print(f"\n{'='*60}")
-        print(f"LLM Configuration:")
+        print("LLM Configuration:")
         print(f"  Provider: {llm_provider}")
         print(f"  LLM Ratio: {llm_ratio*100:.0f}% of samples")
         print(f"  Use Mock: {use_mock_llm}")
@@ -167,7 +173,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             if api_key:
                 print(f"  GROK_API_KEY: {api_key[:10]}...{api_key[-4:]}")
             else:
-                print(f"  ⚠️  WARNING: GROK_API_KEY not set! Will use mock data.")
+                print("  ⚠️  WARNING: GROK_API_KEY not set! Will use mock data.")
         print(f"{'='*60}\n")
 
     data = []
@@ -188,10 +194,10 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
         valid_sample = False
         attempts = 0
         max_attempts = 10
-        
+
         while not valid_sample and attempts < max_attempts:
             attempts += 1
-            
+
             # Mix procedural and LLM based on config ratio
             use_llm = random.random() < llm_ratio
             if use_llm:
@@ -216,20 +222,20 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             action_tensor = torch.zeros((target_frames, max_actors), dtype=torch.long)
             # Face: [frames, actors, 7] -> [exp_idx, eye_idx, eyebrow, mouth_idx, openness, speak, speed]
             face_tensor = torch.zeros((target_frames, max_actors, 7), dtype=torch.float32)
-            
+
             actors = [StickFigure(a) for a in scene.actors]
             num_generated_frames = int(scene.duration * 25)
-            
+
             # Limit processed actors to max_actors
             active_actors = actors[:max_actors]
 
             for f in range(min(num_generated_frames, target_frames)):
                 t = f * 0.04
-                
+
                 for actor_idx, actor in enumerate(active_actors):
                     # 1. Update Motion
-                    lines, _ = actor.get_pose(t) 
-                    
+                    lines, _ = actor.get_pose(t)
+
                     # Flatten lines (5 lines * 4 coords)
                     actor_flat = []
                     for li, (start, end) in enumerate(lines):
@@ -237,13 +243,13 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                         actor_flat.extend([start[0], start[1], end[0], end[1]])
                     while len(actor_flat) < 20:
                         actor_flat.extend([0.0, 0.0, 0.0, 0.0])
-                    
+
                     motion_tensor[f, actor_idx] = torch.tensor(actor_flat)
-                    
+
                     # 2. Update Action
                     current_action = actor.get_current_action(t)
                     action_tensor[f, actor_idx] = ACTION_TO_IDX.get(current_action, 0)
-                    
+
                     # 3. Update Face
                     face_feats = actor.get_interpolated_features(t)
                     if face_feats:
@@ -271,31 +277,31 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             # [frames, actors, 6] -> [vx, vy, ax, ay, px, py]
             # Use head position (lines 0, 0-1 indices) as proxy for actor position
             head_pos = motion_tensor[:, :, 0:2] # [frames, actors, 2]
-            
+
             dt = 0.04
             velocity = torch.zeros_like(head_pos)
             velocity[:-1] = (head_pos[1:] - head_pos[:-1]) / dt
             velocity[-1] = velocity[-2]
-            
+
             acceleration = torch.zeros_like(velocity)
             acceleration[:-1] = (velocity[1:] - velocity[:-1]) / dt
             acceleration[-1] = acceleration[-2]
-            
+
             momentum = velocity.clone() # Unit mass
-            
+
             physics_tensor = torch.cat([velocity, acceleration, momentum], dim=2) # [frames, actors, 6]
 
             # 5. Camera (Interpolation)
             camera_tensor = torch.zeros((target_frames, 3)) # [x, y, zoom]
             camera_tensor[:, 2] = 1.0 # default zoom
-            
+
             if scene.camera_keyframes:
                 keyframes = sorted(scene.camera_keyframes, key=lambda k: k.frame)
                 k_times = np.array([min(k.frame, target_frames-1) for k in keyframes])
                 k_x = np.array([k.x for k in keyframes])
                 k_y = np.array([k.y for k in keyframes])
                 k_zoom = np.array([k.zoom for k in keyframes])
-                
+
                 if len(keyframes) == 1:
                     camera_tensor[:] = torch.tensor([k_x[0], k_y[0], k_zoom[0]], dtype=torch.float32)
                 else:
@@ -304,7 +310,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                     x_interp = np.interp(t_np, k_times, k_x)
                     y_interp = np.interp(t_np, k_times, k_y)
                     z_interp = np.interp(t_np, k_times, k_zoom)
-                    
+
                     camera_tensor[:, 0] = torch.from_numpy(x_interp)
                     camera_tensor[:, 1] = torch.from_numpy(y_interp)
                     camera_tensor[:, 2] = torch.from_numpy(z_interp)
@@ -323,19 +329,19 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             # Automated annotations (shot type, camera motion, physics, etc.)
             if annotation_enabled:
                 candidate_sample = annotate_sample(candidate_sample, annotation_config)
-            
+
             # --- VALIDATION STEP ---
             is_valid, score, reason = validator.validate(candidate_sample)
             if is_valid:
                 valid_sample = True
                 data.append(candidate_sample)
-                
+
                 # Augmentation (only for valid samples)
                 if augment:
                     aug_types = ["speed", "position", "scale", "mirror"]
                     for aug in aug_types:
                         aug_motion = augment_motion_sequence(motion_tensor.clone(), aug)
-                        
+
                         # Fix length if speed changed
                         curr_len = aug_motion.shape[0]
                         if curr_len > target_frames:
@@ -343,7 +349,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                         elif curr_len < target_frames:
                             padding = aug_motion[-1:].repeat(target_frames - curr_len, 1, 1)
                             aug_motion = torch.cat([aug_motion, padding], dim=0)
-                        
+
                         # Recompute physics for augmented motion
                         aug_head = aug_motion[:, :, 0:2]
                         aug_vel = torch.zeros_like(aug_head)
@@ -352,20 +358,20 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                         aug_acc = torch.zeros_like(aug_vel)
                         aug_acc[:-1] = (aug_vel[1:] - aug_vel[:-1]) / dt
                         aug_acc[-1] = aug_acc[-2]
-                        
+
                         aug_physics = torch.cat([aug_vel, aug_acc, aug_vel], dim=2)
-                        
+
                         # Clone other tensors
                         aug_action = action_tensor.clone()
                         aug_face = face_tensor.clone()
-                        
+
                         aug_sample = {
                             "description": scene.description,
                             "motion": aug_motion,
                             "actions": aug_action,
                             "physics": aug_physics,
                             "face": aug_face,
-                            "camera": camera_tensor, 
+                            "camera": camera_tensor,
                             "augmented": True,
                             "aug_type": aug,
                         }
@@ -376,21 +382,21 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                         data.append(aug_sample)
             else:
                 rejections += 1
-        
+
         if valid_sample:
             generated_count += 1
             pbar.update(1)
 
     pbar.close()
 
-    print(f"\nFinal Dataset Stats:")
+    print("\nFinal Dataset Stats:")
     print(f"  Samples Generated: {len(data)}")
     print(f"  Rejections: {rejections}")
     if len(data) > 0:
         print(f"  Motion Shape: {data[0]['motion'].shape}")
         print(f"  Face Shape: {data[0]['face'].shape}")
         print(f"  Physics Shape: {data[0]['physics'].shape}")
-    
+
     print(f"Saving to {output_path}...")
     torch.save(data, output_path)
     print("Done.")

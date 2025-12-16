@@ -4,12 +4,12 @@ Convert CNRS dataset to stick figure format
 Auto-generated conversion script
 """
 
-import os
-import sys
 import time
 from pathlib import Path
-from src.data_gen.convert_amass import AMASSConverter
+
 import torch
+
+from src.data_gen.convert_amass import AMASSConverter
 
 
 def find_npz_files(dataset_path):

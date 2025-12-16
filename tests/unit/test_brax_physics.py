@@ -1,11 +1,12 @@
+import logging
 import sys
 import unittest
-import torch
-import logging
-from unittest.mock import MagicMock, patch
 
 # Add src to path
 from pathlib import Path
+from unittest.mock import patch
+
+import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 

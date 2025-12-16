@@ -4,14 +4,14 @@ import torch
 
 from src.data_gen.curation import (
     CurationConfig,
-    curate_samples,
-    filter_by_length,
-    filter_by_artifacts,
-    balance_by_source,
-    _get_source,
-    _get_sequence_length,
-    _compute_motion_quality,
     _compute_combined_quality,
+    _compute_motion_quality,
+    _get_sequence_length,
+    _get_source,
+    balance_by_source,
+    curate_samples,
+    filter_by_artifacts,
+    filter_by_length,
 )
 
 

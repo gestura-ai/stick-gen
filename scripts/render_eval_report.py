@@ -10,10 +10,10 @@ Typical usage:
 """
 
 import argparse
-from pathlib import Path
 
 # Ensure project root is importable
 import sys
+from pathlib import Path
 from pathlib import Path as _Path
 
 sys.path.insert(0, str(_Path(__file__).parent.parent))

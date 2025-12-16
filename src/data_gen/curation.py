@@ -13,19 +13,21 @@ Enhanced curation features:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Sequence, Tuple, Optional
-
 import random
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Any
+
 import torch
 
-from .validator import DataValidator
-from .schema import ActionType
 from src.eval.metrics import (
     compute_camera_metrics,
-    compute_synthetic_artifact_score,
     compute_motion_realism_score,
+    compute_synthetic_artifact_score,
 )
+
+from .schema import ActionType
+from .validator import DataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +60,7 @@ class CurationConfig:
     max_frames: int = 500  # Maximum sequence length (20 seconds)
 
     # Source weights for quality combination
-    source_weights: Dict[str, float] = field(default_factory=lambda: {
+    source_weights: dict[str, float] = field(default_factory=lambda: {
         "humanml3d": 1.0,
         "kit_ml": 1.0,
         "amass": 0.95,
@@ -72,7 +74,7 @@ class CurationConfig:
     })
 
 
-def load_canonical_datasets(paths: Sequence[str]) -> List[Dict[str, Any]]:
+def load_canonical_datasets(paths: Sequence[str]) -> list[dict[str, Any]]:
     """Load and concatenate canonical samples from one or more .pt files.
 
     Each path should contain either:
@@ -80,7 +82,7 @@ def load_canonical_datasets(paths: Sequence[str]) -> List[Dict[str, Any]]:
       - a dict with a "sequences" key pointing to that list.
     """
 
-    all_samples: List[Dict[str, Any]] = []
+    all_samples: list[dict[str, Any]] = []
     for p in paths:
         data = torch.load(p)
         if isinstance(data, dict) and "sequences" in data:
@@ -93,7 +95,7 @@ def load_canonical_datasets(paths: Sequence[str]) -> List[Dict[str, Any]]:
     return all_samples
 
 
-def _get_quality(sample: Dict[str, Any]) -> Optional[float]:
+def _get_quality(sample: dict[str, Any]) -> float | None:
     if "quality_score" in sample:
         try:
             return float(sample["quality_score"])
@@ -105,7 +107,7 @@ def _get_quality(sample: Dict[str, Any]) -> Optional[float]:
     return float(score) if score is not None else None
 
 
-def _camera_stability(sample: Dict[str, Any]) -> Optional[float]:
+def _camera_stability(sample: dict[str, Any]) -> float | None:
     cam = sample.get("camera")
     if cam is None:
         return None
@@ -116,7 +118,7 @@ def _camera_stability(sample: Dict[str, Any]) -> Optional[float]:
         return None
 
 
-def _dominant_action(sample: Dict[str, Any]) -> str:
+def _dominant_action(sample: dict[str, Any]) -> str:
     ann = sample.get("annotations") or {}
     acts = ann.get("actions") or {}
     dom = acts.get("dominant") or []
@@ -141,7 +143,7 @@ def _dominant_action(sample: Dict[str, Any]) -> str:
         return "unknown"
 
 
-def _get_source(sample: Dict[str, Any]) -> str:
+def _get_source(sample: dict[str, Any]) -> str:
     """Extract data source from sample."""
     source = sample.get("source", "unknown")
     if source in ["dataset_generator", "programmatic"]:
@@ -149,7 +151,7 @@ def _get_source(sample: Dict[str, Any]) -> str:
     return str(source).lower()
 
 
-def _get_sequence_length(sample: Dict[str, Any]) -> int:
+def _get_sequence_length(sample: dict[str, Any]) -> int:
     """Get number of frames in sample."""
     motion = sample.get("motion")
     if motion is None:
@@ -162,7 +164,7 @@ def _get_sequence_length(sample: Dict[str, Any]) -> int:
         return 0
 
 
-def _compute_motion_quality(sample: Dict[str, Any]) -> Tuple[float, float]:
+def _compute_motion_quality(sample: dict[str, Any]) -> tuple[float, float]:
     """Compute realism score and artifact score for motion.
 
     Returns (realism_score, artifact_score).
@@ -183,9 +185,9 @@ def _compute_motion_quality(sample: Dict[str, Any]) -> Tuple[float, float]:
 
 
 def _compute_combined_quality(
-    sample: Dict[str, Any],
+    sample: dict[str, Any],
     cfg: CurationConfig,
-) -> Optional[float]:
+) -> float | None:
     """Compute combined quality score using multiple signals.
 
     Combines:
@@ -224,9 +226,9 @@ def _compute_combined_quality(
 
 
 def filter_by_length(
-    samples: Sequence[Dict[str, Any]],
+    samples: Sequence[dict[str, Any]],
     cfg: CurationConfig,
-) -> Tuple[List[Dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int]:
     """Filter samples by sequence length.
 
     Returns (filtered_samples, num_dropped).
@@ -245,9 +247,9 @@ def filter_by_length(
 
 
 def filter_by_artifacts(
-    samples: Sequence[Dict[str, Any]],
+    samples: Sequence[dict[str, Any]],
     cfg: CurationConfig,
-) -> Tuple[List[Dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int]:
     """Filter samples with too many motion artifacts.
 
     Returns (filtered_samples, num_dropped).
@@ -266,10 +268,10 @@ def filter_by_artifacts(
 
 
 def balance_by_source(
-    samples: List[Dict[str, Any]],
+    samples: list[dict[str, Any]],
     cfg: CurationConfig,
     rng: random.Random,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Balance samples across data sources.
 
     Ensures no single source dominates the dataset.
@@ -278,7 +280,7 @@ def balance_by_source(
         return samples
 
     # Group by source
-    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    buckets: dict[str, list[dict[str, Any]]] = {}
     for s in samples:
         source = _get_source(s)
         buckets.setdefault(source, []).append(s)
@@ -297,11 +299,11 @@ def balance_by_source(
 
 
 def curate_samples(
-    samples: Sequence[Dict[str, Any]],
+    samples: Sequence[dict[str, Any]],
     cfg: CurationConfig,
     seed: int = 42,
     use_enhanced_filtering: bool = True,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Curate samples into pretraining and SFT splits.
 
     Enhanced version with:
@@ -345,8 +347,8 @@ def curate_samples(
             working_samples, dropped_artifacts = filter_by_artifacts(working_samples, cfg)
             logger.info(f"Artifact filter: kept {len(working_samples)}, dropped {dropped_artifacts}")
 
-    pretrain: List[Dict[str, Any]] = []
-    sft_candidates: List[Tuple[Dict[str, Any], str, float]] = []
+    pretrain: list[dict[str, Any]] = []
+    sft_candidates: list[tuple[dict[str, Any], str, float]] = []
 
     for s in working_samples:
         # Compute combined quality if enhanced filtering enabled
@@ -397,11 +399,11 @@ def curate_samples(
             sft_candidates.append((s, dom_act, priority))
 
     # Balance SFT by dominant action label
-    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    buckets: dict[str, list[dict[str, Any]]] = {}
     for s, label, _ in sft_candidates:
         buckets.setdefault(label, []).append(s)
 
-    sft: List[Dict[str, Any]] = []
+    sft: list[dict[str, Any]] = []
     total_sft_candidates = len(sft_candidates)
     if total_sft_candidates:
         max_per_action = max(1, int(cfg.balance_max_fraction * total_sft_candidates))
@@ -418,15 +420,15 @@ def curate_samples(
         rng.shuffle(pretrain)
         rng.shuffle(sft)
 
-    def _split_stats(split: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _split_stats(split: list[dict[str, Any]]) -> dict[str, Any]:
         if not split:
             return {"num_samples": 0}
         qualities = [float(_get_quality(s) or 0.0) for s in split]
         mean_q = float(sum(qualities) / len(qualities)) if qualities else 0.0
 
         # Action distribution by dominant label
-        action_counts: Dict[str, int] = {}
-        source_counts: Dict[str, int] = {}
+        action_counts: dict[str, int] = {}
+        source_counts: dict[str, int] = {}
         for s in split:
             lab = _dominant_action(s)
             action_counts[lab] = action_counts.get(lab, 0) + 1

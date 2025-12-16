@@ -1,6 +1,7 @@
 from enum import Enum
-from typing import List, Optional, Tuple
+
 from pydantic import BaseModel
+
 
 class FacialExpression(str, Enum):
     """Facial expression types for stick figures"""
@@ -79,7 +80,7 @@ class ActionType(str, Enum):
     DANCE = "dance"
     CRY = "cry"
     LAUGH = "laugh"
-    
+
     # Interactive Actions (Multi-Actor)
     HANDSHAKE = "handshake"
     HUG = "hug"
@@ -92,10 +93,10 @@ IDX_TO_ACTION = {idx: action for action, idx in ACTION_TO_IDX.items()}
 NUM_ACTIONS = len(ActionType)
 
 def generate_per_frame_actions(
-    actions: List[Tuple[float, ActionType]],
+    actions: list[tuple[float, ActionType]],
     fps: int = 25,
     total_duration: float = 10.0
-) -> List[ActionType]:
+) -> list[ActionType]:
     """
     Convert time-based action sequence to per-frame action sequence.
 
@@ -230,24 +231,24 @@ class SceneObject(BaseModel):
     position: Position
     color: str = "gray"
     scale: float = 1.0
-    velocity: Optional[Tuple[float, float]] = None  # For dynamic objects (vx, vy)
+    velocity: tuple[float, float] | None = None  # For dynamic objects (vx, vy)
 
 class Actor(BaseModel):
     id: str
     actor_type: ActorType = ActorType.HUMAN
     color: str = "black"
     initial_position: Position
-    actions: List[Tuple[float, ActionType]] = []  # (start_time, action)
-    team: Optional[str] = None  # For team-based scenarios
+    actions: list[tuple[float, ActionType]] = []  # (start_time, action)
+    team: str | None = None  # For team-based scenarios
     scale: float = 1.0
-    velocity: Optional[Tuple[float, float]] = None  # (vx, vy) in units/second
-    movement_path: Optional[List[Tuple[float, Position]]] = None  # (time, position) waypoints
-    per_frame_actions: Optional[List[ActionType]] = None  # Per-frame action sequence (Phase 1)
+    velocity: tuple[float, float] | None = None  # (vx, vy) in units/second
+    movement_path: list[tuple[float, Position]] | None = None  # (time, position) waypoints
+    per_frame_actions: list[ActionType] | None = None  # Per-frame action sequence (Phase 1)
 
     # Facial expression fields (Phase 5)
     facial_expression: FacialExpression = FacialExpression.NEUTRAL
-    face_features: Optional[FaceFeatures] = None
-    
+    face_features: FaceFeatures | None = None
+
 class CameraKeyframe(BaseModel):
     frame: int
     x: float
@@ -257,12 +258,12 @@ class CameraKeyframe(BaseModel):
 
 class Scene(BaseModel):
     duration: float
-    actors: List[Actor]
-    objects: List[SceneObject] = []
+    actors: list[Actor]
+    objects: list[SceneObject] = []
     background_color: str = "white"
     description: str
-    theme: Optional[str] = None
-    camera_keyframes: List[CameraKeyframe] = []
+    theme: str | None = None
+    camera_keyframes: list[CameraKeyframe] = []
 
 # Action-to-velocity mapping (in units/second, where 1 unit ≈ 0.68m)
 # Human scale: stick figure is ~2.5 units tall = 1.7m, so 1 unit = 0.68m

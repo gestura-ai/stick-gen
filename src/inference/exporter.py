@@ -1,8 +1,8 @@
-import json
-import torch
-import numpy as np
 import datetime
-from typing import Dict, Any, Optional
+import json
+
+import numpy as np
+import torch
 
 
 class MotionExporter:
@@ -25,10 +25,10 @@ class MotionExporter:
     def export_to_json(
         self,
         motion_tensor: torch.Tensor,
-        action_names: Optional[list] = None,
+        action_names: list | None = None,
         description: str = "",
-        physics_data: Optional[torch.Tensor] = None,
-        camera_data: Optional[torch.Tensor] = None,
+        physics_data: torch.Tensor | None = None,
+        camera_data: torch.Tensor | None = None,
     ) -> str:
         """
         Convert motion tensor to JSON string.

@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
+
 from scripts.evaluate import evaluate_model
-from scripts.eval_dataset_quality import evaluate_dataset
 
 
 def test_evaluate_model_uses_eval_metrics():

@@ -1,9 +1,9 @@
-import gradio as gr
-import torch
-import tempfile
 import os
-from pathlib import Path
 import sys
+import tempfile
+from pathlib import Path
+
+import gradio as gr
 
 # Add project root to path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -34,7 +34,7 @@ class DemoApp:
             checkpoint_path = f"checkpoints/stick-gen-{model_size}.pth"
             if not os.path.exists(checkpoint_path):
                 # Try alternative path
-                checkpoint_path = f"model_checkpoint.pth"
+                checkpoint_path = "model_checkpoint.pth"
                 if not os.path.exists(checkpoint_path):
                     return f"⚠️ Model checkpoint not found. Using demo mode.\nExpected: checkpoints/stick-gen-{model_size}.pth"
 

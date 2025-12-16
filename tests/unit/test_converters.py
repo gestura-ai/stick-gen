@@ -3,27 +3,25 @@
 Tests the converter modules for HumanML3D, KIT-ML, BABEL, and BEAT datasets.
 """
 
-import torch
 import numpy as np
 
-from src.data_gen.schema import ActionType
+from src.data_gen.convert_babel import (
+    _get_segment_actions,
+    _map_babel_action,
+)
+from src.data_gen.convert_beat import (
+    BEAT_EMOTION_TO_ACTION,
+)
+from src.data_gen.convert_humanml3d import (
+    _features_to_stick as humanml3d_features_to_stick,
+)
 from src.data_gen.convert_humanml3d import (
     _infer_action_from_text,
-    _features_to_stick as humanml3d_features_to_stick,
 )
 from src.data_gen.convert_kit_ml import (
     _features_to_stick as kit_features_to_stick,
 )
-from src.data_gen.convert_babel import (
-    _map_babel_action,
-    _get_segment_actions,
-)
-from src.data_gen.convert_beat import (
-    BEAT_EMOTION_TO_ACTION,
-    _parse_bvh_to_stick,
-    _load_text_annotation,
-)
-
+from src.data_gen.schema import ActionType
 
 # --- HumanML3D Action Inference Tests ---
 

@@ -9,26 +9,28 @@ KIT-ML uses a similar feature layout to HumanML3D with 251 dimensions:
 We reuse the action inference from HumanML3D since both have text annotations.
 """
 
-import os
 import glob
 import logging
-from typing import List, Dict, Any, Optional
+import os
+from typing import Any
 
 import numpy as np
 import torch
 
-from .schema import ACTION_TO_IDX
-from .validator import DataValidator
 from .convert_amass import compute_basic_physics
 from .convert_humanml3d import (
-    _infer_action_from_text,
     _features_to_stick as humanml3d_features_to_stick,
 )
+from .convert_humanml3d import (
+    _infer_action_from_text,
+)
+from .schema import ACTION_TO_IDX
+from .validator import DataValidator
 
 logger = logging.getLogger(__name__)
 
 
-def _load_normalization(stats_dir: str) -> Optional[Dict[str, np.ndarray]]:
+def _load_normalization(stats_dir: str) -> dict[str, np.ndarray] | None:
     """Load normalization statistics with error handling."""
     mean_path = os.path.join(stats_dir, "Mean.npy")
     std_path = os.path.join(stats_dir, "Std.npy")
@@ -47,7 +49,7 @@ def _load_normalization(stats_dir: str) -> Optional[Dict[str, np.ndarray]]:
         return None
 
 
-def _denorm(arr: np.ndarray, stats: Dict[str, np.ndarray]) -> np.ndarray:
+def _denorm(arr: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
     return arr * stats["std"] + stats["mean"]
 
 
@@ -74,10 +76,10 @@ def _features_to_stick(feats: np.ndarray) -> np.ndarray:
 
 def _build_sample(
     feats: np.ndarray,
-    texts: List[str],
+    texts: list[str],
     clip_id: str,
     fps: int = 30,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build canonical sample from KIT-ML features."""
     motion_np = _features_to_stick(feats)
     motion = torch.from_numpy(motion_np)
@@ -109,12 +111,12 @@ def _build_sample(
     }
 
 
-def _load_texts(texts_dir: str) -> Dict[str, List[str]]:
+def _load_texts(texts_dir: str) -> dict[str, list[str]]:
     """Load KIT-ML text annotations.
 
     Returns dict mapping clip_id to list of text descriptions.
     """
-    mapping: Dict[str, List[str]] = {}
+    mapping: dict[str, list[str]] = {}
     if not os.path.isdir(texts_dir):
         logger.warning(f"Texts directory not found: {texts_dir}")
         return mapping
@@ -122,7 +124,7 @@ def _load_texts(texts_dir: str) -> Dict[str, List[str]]:
     for path in glob.glob(os.path.join(texts_dir, "*.txt")):
         clip_id = os.path.splitext(os.path.basename(path))[0]
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 content = f.read()
             # Parse multiple annotations (one per line or # separated)
             lines = []
@@ -146,7 +148,7 @@ def convert_kit_ml(
     fps: int = 30,
     max_clips: int = -1,
     physics_threshold: float = 2.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Convert KIT-ML preprocessed features into canonical schema.
 
     Assumes a layout similar to HumanML3D: `new_joint_vecs/` feature vectors,
@@ -186,7 +188,7 @@ def convert_kit_ml(
     validator.max_velocity *= physics_threshold
     validator.max_acceleration *= physics_threshold
 
-    samples: List[Dict[str, Any]] = []
+    samples: list[dict[str, Any]] = []
     skipped = 0
 
     for i, path in enumerate(paths):
@@ -221,7 +223,7 @@ def convert_kit_ml(
     logger.info(f"Converted {len(samples)}/{len(paths)} clips ({skipped} skipped)")
 
     # Report action distribution
-    action_counts: Dict[str, int] = {}
+    action_counts: dict[str, int] = {}
     for s in samples:
         label = s.get("action_label", "idle")
         action_counts[label] = action_counts.get(label, 0) + 1
