@@ -49,6 +49,8 @@ jobs:
         black . --check --exclude="(templates|data|.*\.md)"
         
     - name: Test with pytest
+      env:
+        PYTHONPATH: ${{ github.workspace }}
       run: |
         # Skip integration tests that might require large datasets or GPUs
         pytest tests/unit tests/features
