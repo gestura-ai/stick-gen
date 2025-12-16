@@ -132,7 +132,9 @@ def test_speech_transitions():
 
     renderer = Renderer(width=640, height=480)
     renderer.render_scene(scene, "tests/outputs/test_speech_transitions.mp4")
-    print("✓ Speech transitions test complete: tests/outputs/test_speech_transitions.mp4")
+    print(
+        "✓ Speech transitions test complete: tests/outputs/test_speech_transitions.mp4"
+    )
 
 
 if __name__ == "__main__":
