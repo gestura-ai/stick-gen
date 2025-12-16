@@ -15,6 +15,14 @@ from src.model.physics_layer import DifferentiablePhysicsLoss
 from src.model.transformer import StickFigureTransformer
 from src.train.config import TrainingConfig
 
+# Optional multimodal dataset support
+try:
+    from src.train.parallax_dataset import MultimodalParallaxDataset
+
+    MULTIMODAL_AVAILABLE = True
+except ImportError:
+    MULTIMODAL_AVAILABLE = False
+
 # Configure logging
 # Set to DEBUG for verbose output, INFO for normal output
 LOG_LEVEL = logging.INFO  # Change to logging.DEBUG for verbose debugging
@@ -297,6 +305,28 @@ def train(
         )
         USE_LORA = False
 
+    # Multimodal (2.5D parallax) settings
+    USE_PARALLAX = config.get("data.use_parallax_augmentation", False)
+    PARALLAX_ROOT = config.get("data.parallax_root", "data/2.5d_parallax")
+    PARALLAX_IMAGE_SIZE = tuple(config.get("data.parallax_image_size", [256, 256]))
+    IMAGE_ENCODER_ARCH = config.get("model.image_encoder_arch", "lightweight_cnn")
+    FUSION_STRATEGY = config.get("model.fusion_strategy", "gated")
+    IMAGE_BACKEND = config.get("data.image_backend", "pil")
+
+    if USE_PARALLAX and not MULTIMODAL_AVAILABLE:
+        print(
+            "⚠️  Parallax augmentation enabled but MultimodalParallaxDataset not available; "
+            "continuing with motion-only training."
+        )
+        USE_PARALLAX = False
+
+    if USE_PARALLAX and not os.path.isdir(PARALLAX_ROOT):
+        print(
+            f"⚠️  Parallax root directory not found: {PARALLAX_ROOT}; "
+            "continuing with motion-only training."
+        )
+        USE_PARALLAX = False
+
     # Training stage (pretraining vs sft)
     TRAINING_STAGE = config.get("training.stage", "pretraining")
 
@@ -348,8 +378,14 @@ def train(
     print(
         f"  - gradient_accumulation: {GRAD_ACCUM_STEPS} (effective batch: {BATCH_SIZE * GRAD_ACCUM_STEPS})"
     )
+    if USE_PARALLAX:
+        print(f"  - multimodal: ENABLED (image encoder: {IMAGE_ENCODER_ARCH})")
+        print(f"  - fusion_strategy: {FUSION_STRATEGY}")
+        print(f"  - parallax_image_size: {PARALLAX_IMAGE_SIZE}")
+    else:
+        print("  - multimodal: DISABLED (motion-only training)")
 
-    # Qwen3-Embedding-8B (GTE-Qwen2-7B) embedding dim is 4096
+    # Initialize model with optional multimodal support
     model = StickFigureTransformer(
         input_dim=INPUT_DIM,
         d_model=D_MODEL,
@@ -359,6 +395,11 @@ def train(
         embedding_dim=1024,  # Updated for BAAI/bge-large-en-v1.5
         dropout=DROPOUT,
         num_actions=NUM_ACTIONS,  # Phase 1: Action conditioning
+        # Multimodal image conditioning
+        enable_image_conditioning=USE_PARALLAX,
+        image_encoder_arch=IMAGE_ENCODER_ARCH,
+        image_size=PARALLAX_IMAGE_SIZE,
+        fusion_strategy=FUSION_STRATEGY,
     ).to(device)
 
     # Initialize Physics Loss Layer
@@ -643,7 +684,26 @@ def train(
     print("LOADING DATASET")
     print("=" * 60)
     print(f"  - Data path: {data_path}")
-    dataset = StickFigureDataset(data_path=data_path)
+
+    # Choose dataset type based on multimodal configuration
+    multimodal_dataset: MultimodalParallaxDataset | None = None
+    if USE_PARALLAX:
+        print("  - Mode: MULTIMODAL (2.5D parallax augmentation)")
+        print(f"  - Parallax root: {PARALLAX_ROOT}")
+        print(f"  - Image backend: {IMAGE_BACKEND}")
+        multimodal_dataset = MultimodalParallaxDataset(
+            parallax_root=PARALLAX_ROOT,
+            motion_data_path=data_path,
+            image_size=PARALLAX_IMAGE_SIZE,
+            image_backend=IMAGE_BACKEND,
+        )
+        print(f"  - Multimodal samples (PNG frames): {len(multimodal_dataset)}")
+        # For multimodal, we use the parallax dataset directly
+        # (each item = one PNG frame with associated motion/camera/text)
+        dataset = multimodal_dataset
+    else:
+        print("  - Mode: MOTION-ONLY")
+        dataset = StickFigureDataset(data_path=data_path)
     print(f"  - Total samples loaded: {len(dataset)}")
 
     # Split into train/val/test (80/10/10) - improved from 90/10
@@ -714,9 +774,62 @@ def train(
         for batch_idx, batch_data in enumerate(train_loader):
             logger.debug(f"BATCH {batch_idx+1}/{len(train_loader)}")
 
-            # Unpack batch (Phase 2: now includes physics)
+            # Unpack batch based on dataset type
+            # Multimodal: (image, motion_frame, camera_pose, text_prompt, action_label)
+            # Motion-only: (data, embedding, target, [actions], [physics])
             logger.debug(f"  Unpacking batch_data (len={len(batch_data)})")
-            if len(batch_data) == 5:
+
+            image_tensor = None
+            image_camera_pose = None
+
+            if USE_PARALLAX and multimodal_dataset is not None:
+                # Multimodal batch: (image, motion_frame, camera_pose, text_prompt, action)
+                # Note: text_prompt is a string, we need to embed it or use cached embeddings
+                image_tensor, motion_frame, camera_pose, text_prompts, actions = (
+                    batch_data
+                )
+
+                # For multimodal training with parallax frames:
+                # - motion_frame is [batch, 20] single frame
+                # - We create a pseudo-sequence by repeating the frame
+                # - Target is the same as input (reconstruction objective)
+                batch_size_curr = motion_frame.shape[0]
+
+                # Create single-frame sequences: [batch, 1, 20]
+                data = motion_frame.unsqueeze(1)  # [batch, 1, dim]
+                target = data.clone()  # Reconstruction target
+
+                # Get embeddings from the motion data (pre-computed in the .pt file)
+                # For multimodal, we retrieve embeddings via sample index
+                embeddings_list = []
+                for i in range(batch_size_curr):
+                    # Get sample index from dataset
+                    sample_idx = multimodal_dataset.index[
+                        (
+                            train_dataset.indices[batch_idx * BATCH_SIZE + i]
+                            if hasattr(train_dataset, "indices")
+                            else i
+                        )
+                    ]["sample_idx"]
+                    sample = multimodal_dataset.samples.get(sample_idx, {})
+                    emb = sample.get("embedding")
+                    if emb is None:
+                        # Fallback: zero embedding (should not happen with proper data)
+                        emb = torch.zeros(1024)
+                    embeddings_list.append(emb)
+                embedding = torch.stack(embeddings_list)
+
+                image_camera_pose = camera_pose
+                physics = None
+
+                # Reshape actions for single-frame
+                if actions is not None and not isinstance(actions, type(None)):
+                    # actions is per-frame action label [batch]
+                    actions = actions.unsqueeze(1) if actions.dim() == 1 else actions
+                else:
+                    actions = None
+
+            elif len(batch_data) == 5:
                 data, embedding, target, actions, physics = batch_data
             elif len(batch_data) == 4:
                 data, embedding, target, actions = batch_data
@@ -735,6 +848,10 @@ def train(
                 actions = actions.to(device)
             if physics is not None:
                 physics = physics.to(device)
+            if image_tensor is not None:
+                image_tensor = image_tensor.to(device)
+            if image_camera_pose is not None:
+                image_camera_pose = image_camera_pose.to(device)
 
             # data: [batch, seq, dim] -> [seq, batch, dim] for transformer
             logger.debug(f"  Permuting data: {data.shape} -> ", end="")
@@ -744,16 +861,24 @@ def train(
 
             # actions: [batch, seq] -> [seq, batch] for transformer
             if actions is not None:
-                actions_seq = actions.permute(1, 0)
+                if actions.dim() == 2:
+                    actions_seq = actions.permute(1, 0)
+                else:
+                    actions_seq = actions.unsqueeze(0)  # [1, batch] for single frame
                 logger.debug(f"  actions_seq shape: {actions_seq.shape}")
             else:
                 actions_seq = None
                 logger.debug("  actions_seq: None")
 
-            # Forward pass with multi-task outputs and action conditioning
+            # Forward pass with multi-task outputs, action conditioning, and optional image
             logger.debug("  Running forward pass...")
             outputs = model(
-                data, embedding, return_all_outputs=True, action_sequence=actions_seq
+                data,
+                embedding,
+                return_all_outputs=True,
+                action_sequence=actions_seq,
+                image_tensor=image_tensor,
+                image_camera_pose=image_camera_pose,
             )
             logger.debug(f"  Forward pass complete. Output keys: {outputs.keys()}")
 

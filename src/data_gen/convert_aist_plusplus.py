@@ -18,12 +18,12 @@ from .validator import DataValidator
 # Mapping indices from AIST++ keypoints (COCO-ish 3D, 17 joints) to endpoints.
 # This mapping is approximate and follows the AIST++ documentation.
 AIST_TO_STICK = {
-    "head": 0,          # Nose / head
-    "torso": 8,         # Mid-hip / pelvis
-    "left_hand": 9,     # Left wrist
-    "right_hand": 10,   # Right wrist
-    "left_foot": 15,    # Left ankle
-    "right_foot": 16,   # Right ankle
+    "head": 0,  # Nose / head
+    "torso": 8,  # Mid-hip / pelvis
+    "left_hand": 9,  # Left wrist
+    "right_hand": 10,  # Right wrist
+    "left_foot": 15,  # Left ankle
+    "right_foot": 16,  # Right ankle
 }
 
 
@@ -76,10 +76,9 @@ def _infer_camera_feature(seq_name: str) -> torch.Tensor:
     return torch.tensor([cam_scalar, 0.0, 0.0], dtype=torch.float32)
 
 
-def _build_sample(keypoints: np.ndarray,
-                  seq_name: str,
-                  meta: dict[str, Any],
-                  fps: int = 60) -> dict[str, Any]:
+def _build_sample(
+    keypoints: np.ndarray, seq_name: str, meta: dict[str, Any], fps: int = 60
+) -> dict[str, Any]:
     motion_np = keypoints3d_to_stick(keypoints)
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
@@ -106,10 +105,9 @@ def _build_sample(keypoints: np.ndarray,
     }
 
 
-def convert_aist_plusplus(root_dir: str,
-                          output_path: str,
-                          fps: int = 60,
-                          max_files: int = -1) -> None:
+def convert_aist_plusplus(
+    root_dir: str, output_path: str, fps: int = 60, max_files: int = -1
+) -> None:
     """Convert AIST++ keypoints3d to canonical schema.
 
     Expects `keypoints3d/` (or `keypoints3d_optim/`) under `root_dir`.
@@ -155,17 +153,20 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Convert AIST++ to canonical schema")
-    parser.add_argument("--aist-root", type=str, required=True,
-                        help="Root directory of aist_plusplus")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
+    parser.add_argument(
+        "--aist-root", type=str, required=True, help="Root directory of aist_plusplus"
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
     parser.add_argument("--fps", type=int, default=60)
     parser.add_argument("--max-files", type=int, default=-1)
     args = parser.parse_args()
 
-    convert_aist_plusplus(args.aist_root, args.output, fps=args.fps, max_files=args.max_files)
+    convert_aist_plusplus(
+        args.aist_root, args.output, fps=args.fps, max_files=args.max_files
+    )
 
 
 if __name__ == "__main__":
     main()
-

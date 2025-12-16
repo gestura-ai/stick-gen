@@ -1,10 +1,14 @@
 # Core ML/AI
 torch>=2.0.0
+torchvision>=0.15.0  # For image loading backend in MultimodalParallaxDataset
 transformers>=4.30.0
 numpy<2  # Pin to 1.x for compatibility with scipy, scikit-learn, matplotlib, sentence-transformers
 
 # Text embeddings
 sentence-transformers>=2.2.0
+
+# Image Processing (for 2.5D parallax augmentation pipeline)
+Pillow>=9.0.0  # PIL image loading backend in MultimodalParallaxDataset
 
 # Visualization
 matplotlib>=3.5.0

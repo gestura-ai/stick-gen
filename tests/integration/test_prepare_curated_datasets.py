@@ -22,9 +22,7 @@ def make_canonical_sample(quality: float):
 
 
 def test_run_curation_creates_outputs(tmp_path: Path):
-    data = [make_canonical_sample(0.9) for _ in range(3)] + [
-        make_canonical_sample(0.4)
-    ]
+    data = [make_canonical_sample(0.9) for _ in range(3)] + [make_canonical_sample(0.4)]
     input_path = tmp_path / "canonical.pt"
     torch.save(data, input_path)
 
@@ -52,4 +50,3 @@ def test_run_curation_creates_outputs(tmp_path: Path):
     # Check that samples keep canonical fields
     sample = pretrain[0]
     assert "motion" in sample and "physics" in sample and "camera" in sample
-

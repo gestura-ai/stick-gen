@@ -28,29 +28,47 @@ from tqdm import tqdm
 try:
     from bvh import Bvh
     from scipy.spatial.transform import Rotation as R
+
     BVH_AVAILABLE = True
 except ImportError:
     BVH_AVAILABLE = False
     print("Warning: BVH packages not available. Install with: pip install bvh scipy")
+
     # Define placeholder for type hints when scipy is not available
     class R:
         """Placeholder for scipy.spatial.transform.Rotation when not installed."""
+
         @staticmethod
         def identity():
             return None
+
         @staticmethod
         def from_euler(*args, **kwargs):
             return None
 
 
-
 # 100STYLE BVH joint names (standard CMU/Mixamo skeleton)
 BVH_JOINT_NAMES = [
-    "Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",
-    "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand",
-    "RightShoulder", "RightArm", "RightForeArm", "RightHand",
-    "LeftUpLeg", "LeftLeg", "LeftFoot",
-    "RightUpLeg", "RightLeg", "RightFoot"
+    "Hips",
+    "Spine",
+    "Spine1",
+    "Spine2",
+    "Neck",
+    "Head",
+    "LeftShoulder",
+    "LeftArm",
+    "LeftForeArm",
+    "LeftHand",
+    "RightShoulder",
+    "RightArm",
+    "RightForeArm",
+    "RightHand",
+    "LeftUpLeg",
+    "LeftLeg",
+    "LeftFoot",
+    "RightUpLeg",
+    "RightLeg",
+    "RightFoot",
 ]
 
 # Mapping from BVH joints to Stick Figure joints (indices)
@@ -67,14 +85,14 @@ JOINT_MAPPING = {
     "LeftUpLeg": 7,  # Hip joint
     "RightUpLeg": 8,
     "LeftFoot": 9,
-    "RightFoot": 10  # We'll use 10 joints for full body, flatten to 20 coords
+    "RightFoot": 10,  # We'll use 10 joints for full body, flatten to 20 coords
 }
 
 
 class BVHForwardKinematics:
     """Compute forward kinematics from BVH rotations to world positions."""
 
-    def __init__(self, bvh: 'Bvh'):
+    def __init__(self, bvh: "Bvh"):
         self.bvh = bvh
         self.joint_tree = self._build_joint_tree()
 
@@ -88,7 +106,7 @@ class BVHForwardKinematics:
             tree[name] = {
                 "parent": parent.name if parent else None,
                 "offset": offset,
-                "children": []
+                "children": [],
             }
 
         # Build children lists
@@ -103,7 +121,9 @@ class BVHForwardKinematics:
         """Compute world positions for all joints at a given frame."""
         positions = {}
 
-        def compute_recursive(joint_name: str, parent_pos: np.ndarray, parent_rot: np.ndarray):
+        def compute_recursive(
+            joint_name: str, parent_pos: np.ndarray, parent_rot: np.ndarray
+        ):
             joint = self.joint_tree[joint_name]
 
             # Get local offset
@@ -158,12 +178,14 @@ class BVHForwardKinematics:
             rz = self.bvh.frame_joint_channel(frame_idx, joint_name, "Zrotation", 0)
 
             # BVH typically uses ZXY order
-            return R.from_euler('ZXY', [rz, rx, ry], degrees=True)
+            return R.from_euler("ZXY", [rz, rx, ry], degrees=True)
         except Exception:
             return R.identity()
 
 
-def extract_stick_figure_pose(positions: dict[str, np.ndarray], scale: float = 0.01) -> np.ndarray:
+def extract_stick_figure_pose(
+    positions: dict[str, np.ndarray], scale: float = 0.01
+) -> np.ndarray:
     """
     Extract stick figure joint positions from full skeleton.
 
@@ -173,8 +195,18 @@ def extract_stick_figure_pose(positions: dict[str, np.ndarray], scale: float = 0
     pose = np.zeros((10, 2))
 
     # Map joints (use first 10 that are available)
-    joint_order = ["Head", "Neck", "Hips", "LeftShoulder", "RightShoulder",
-                   "LeftHand", "RightHand", "LeftFoot", "RightFoot", "Spine"]
+    joint_order = [
+        "Head",
+        "Neck",
+        "Hips",
+        "LeftShoulder",
+        "RightShoulder",
+        "LeftHand",
+        "RightHand",
+        "LeftFoot",
+        "RightFoot",
+        "Spine",
+    ]
 
     for i, joint_name in enumerate(joint_order[:10]):
         if joint_name in positions:
@@ -233,7 +265,7 @@ def convert_bvh_file(bvh_path: str, target_fps: int = 25) -> dict | None:
             "style": style,
             "filename": filename,
             "n_frames": motion.shape[0],
-            "fps": target_fps
+            "fps": target_fps,
         }
 
     except Exception as e:
@@ -241,8 +273,9 @@ def convert_bvh_file(bvh_path: str, target_fps: int = 25) -> dict | None:
         return None
 
 
-
-def resample_motion(motion: np.ndarray, source_fps: float, target_fps: float) -> np.ndarray:
+def resample_motion(
+    motion: np.ndarray, source_fps: float, target_fps: float
+) -> np.ndarray:
     """
     Resample motion data to target FPS using linear interpolation.
 
@@ -271,10 +304,12 @@ def resample_motion(motion: np.ndarray, source_fps: float, target_fps: float) ->
     return resampled
 
 
-def convert_100style(input_dir: str = "data/100STYLE",
-                     output_path: str = "data/100style_processed.pt",
-                     target_fps: int = 25,
-                     max_files: int | None = None) -> None:
+def convert_100style(
+    input_dir: str = "data/100STYLE",
+    output_path: str = "data/100style_processed.pt",
+    target_fps: int = 25,
+    max_files: int | None = None,
+) -> None:
     """
     Convert 100STYLE dataset to Stick-Gen format.
 
@@ -314,12 +349,15 @@ def convert_100style(input_dir: str = "data/100STYLE",
     # Save processed data
     if processed_data:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        torch.save({
-            "sequences": processed_data,
-            "styles": list(styles_found),
-            "fps": target_fps,
-            "n_sequences": len(processed_data)
-        }, output_path)
+        torch.save(
+            {
+                "sequences": processed_data,
+                "styles": list(styles_found),
+                "fps": target_fps,
+                "n_sequences": len(processed_data),
+            },
+            output_path,
+        )
         print(f"Saved to {output_path}")
     else:
         print("No data processed. Check BVH files and dependencies.")
@@ -328,15 +366,28 @@ def convert_100style(input_dir: str = "data/100STYLE",
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Convert 100STYLE BVH to Stick-Gen format")
-    parser.add_argument("--input", type=str, default="data/100STYLE",
-                       help="Input directory with BVH files")
-    parser.add_argument("--output", type=str, default="data/100style_processed.pt",
-                       help="Output file path")
-    parser.add_argument("--fps", type=int, default=25,
-                       help="Target frame rate")
-    parser.add_argument("--max-files", type=int, default=None,
-                       help="Maximum files to process (for testing)")
+    parser = argparse.ArgumentParser(
+        description="Convert 100STYLE BVH to Stick-Gen format"
+    )
+    parser.add_argument(
+        "--input",
+        type=str,
+        default="data/100STYLE",
+        help="Input directory with BVH files",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="data/100style_processed.pt",
+        help="Output file path",
+    )
+    parser.add_argument("--fps", type=int, default=25, help="Target frame rate")
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        default=None,
+        help="Maximum files to process (for testing)",
+    )
 
     args = parser.parse_args()
 
@@ -344,5 +395,5 @@ if __name__ == "__main__":
         input_dir=args.input,
         output_path=args.output,
         target_fps=args.fps,
-        max_files=args.max_files
+        max_files=args.max_files,
     )

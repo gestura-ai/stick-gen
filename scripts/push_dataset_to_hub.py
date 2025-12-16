@@ -21,8 +21,14 @@ except ImportError:
 
 def main():
     parser = argparse.ArgumentParser(description="Upload dataset to Hugging Face Hub")
-    parser.add_argument("--dataset-path", required=True, help="Path to the dataset file (or directory)")
-    parser.add_argument("--repo-id", required=True, help="HF Repo ID (e.g., GesturaAI/stick-gen-dataset)")
+    parser.add_argument(
+        "--dataset-path", required=True, help="Path to the dataset file (or directory)"
+    )
+    parser.add_argument(
+        "--repo-id",
+        required=True,
+        help="HF Repo ID (e.g., GesturaAI/stick-gen-dataset)",
+    )
     parser.add_argument("--token", help="HF Token (optional if env var set)")
     parser.add_argument("--private", action="store_true", help="Make repo private")
     args = parser.parse_args()
@@ -33,7 +39,13 @@ def main():
 
     # Create repo
     try:
-        url = create_repo(args.repo_id, repo_type="dataset", private=args.private, exist_ok=True, token=args.token)
+        url = create_repo(
+            args.repo_id,
+            repo_type="dataset",
+            private=args.private,
+            exist_ok=True,
+            token=args.token,
+        )
         print(f"   ✓ Repo exists at {url}")
     except Exception as e:
         print(f"   ❌ Error creating repo: {e}")
@@ -51,7 +63,7 @@ def main():
             path_in_repo=path.name,
             repo_id=args.repo_id,
             repo_type="dataset",
-            token=args.token
+            token=args.token,
         )
     elif path.is_dir():
         print(f"   ⬆️  Uploading folder {path.name}...")
@@ -59,10 +71,11 @@ def main():
             folder_path=str(path),
             repo_id=args.repo_id,
             repo_type="dataset",
-            token=args.token
+            token=args.token,
         )
 
     print("✅ Dataset upload complete!")
+
 
 if __name__ == "__main__":
     main()

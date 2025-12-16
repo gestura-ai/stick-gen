@@ -10,10 +10,13 @@ class CameraState:
     zoom: float
     rotation: float = 0.0
 
+
 class CameraMovement:
     """Base class for camera movements"""
+
     def get_state(self, t: float) -> CameraState | None:
         raise NotImplementedError
+
 
 class StaticCamera(CameraMovement):
     def __init__(self, x: float, y: float, zoom: float = 1.0):
@@ -22,9 +25,16 @@ class StaticCamera(CameraMovement):
     def get_state(self, t: float) -> CameraState | None:
         return self.state
 
+
 class Pan(CameraMovement):
-    def __init__(self, start_pos: tuple[float, float], end_pos: tuple[float, float],
-                 start_time: float, duration: float, zoom: float = 1.0):
+    def __init__(
+        self,
+        start_pos: tuple[float, float],
+        end_pos: tuple[float, float],
+        start_time: float,
+        duration: float,
+        zoom: float = 1.0,
+    ):
         self.start_pos = np.array(start_pos)
         self.end_pos = np.array(end_pos)
         self.start_time = start_time
@@ -45,9 +55,16 @@ class Pan(CameraMovement):
         current_pos = self.start_pos + (self.end_pos - self.start_pos) * progress
         return CameraState(current_pos[0], current_pos[1], self.zoom)
 
+
 class Zoom(CameraMovement):
-    def __init__(self, center: tuple[float, float], start_zoom: float, end_zoom: float,
-                 start_time: float, duration: float):
+    def __init__(
+        self,
+        center: tuple[float, float],
+        start_zoom: float,
+        end_zoom: float,
+        start_time: float,
+        duration: float,
+    ):
         self.center = center
         self.start_zoom = start_zoom
         self.end_zoom = end_zoom
@@ -68,8 +85,15 @@ class Zoom(CameraMovement):
         current_zoom = self.start_zoom + (self.end_zoom - self.start_zoom) * progress
         return CameraState(self.center[0], self.center[1], current_zoom)
 
+
 class TrackingCamera(CameraMovement):
-    def __init__(self, actor_id: str, scene_actors: list, zoom: float = 1.5, smooth_factor: float = 0.1):
+    def __init__(
+        self,
+        actor_id: str,
+        scene_actors: list,
+        zoom: float = 1.5,
+        smooth_factor: float = 0.1,
+    ):
         self.actor_id = actor_id
         self.actors = {a.id: a for a in scene_actors}
         self.zoom = zoom
@@ -89,7 +113,7 @@ class TrackingCamera(CameraMovement):
         # So this class might be a configuration that the renderer uses logic to apply.
 
         # Actually, let's make the Camera class manage the state and the Renderer update it.
-        return None # Logic handled in Camera controller
+        return None  # Logic handled in Camera controller
 
 
 class Dolly(CameraMovement):
@@ -100,8 +124,16 @@ class Dolly(CameraMovement):
 
     In 2.5D, we simulate this by combining position change with zoom.
     """
-    def __init__(self, center: tuple[float, float], start_distance: float, end_distance: float,
-                 start_time: float, duration: float, base_zoom: float = 1.0):
+
+    def __init__(
+        self,
+        center: tuple[float, float],
+        start_distance: float,
+        end_distance: float,
+        start_time: float,
+        duration: float,
+        base_zoom: float = 1.0,
+    ):
         self.center = np.array(center)
         self.start_distance = start_distance
         self.end_distance = end_distance
@@ -118,7 +150,9 @@ class Dolly(CameraMovement):
         progress = progress * progress * (3 - 2 * progress)
 
         # Interpolate distance
-        current_distance = self.start_distance + (self.end_distance - self.start_distance) * progress
+        current_distance = (
+            self.start_distance + (self.end_distance - self.start_distance) * progress
+        )
 
         # Zoom is inversely proportional to distance (closer = more zoom)
         # Normalize so start_distance gives base_zoom
@@ -132,8 +166,16 @@ class Crane(CameraMovement):
     Crane movement: Camera moves vertically (up/down) while maintaining horizontal position.
     Often used for dramatic reveals or establishing shots.
     """
-    def __init__(self, x: float, start_y: float, end_y: float,
-                 start_time: float, duration: float, zoom: float = 1.0):
+
+    def __init__(
+        self,
+        x: float,
+        start_y: float,
+        end_y: float,
+        start_time: float,
+        duration: float,
+        zoom: float = 1.0,
+    ):
         self.x = x
         self.start_y = start_y
         self.end_y = end_y
@@ -161,9 +203,17 @@ class Orbit(CameraMovement):
 
     In 2D, this translates to circular motion of the camera position.
     """
-    def __init__(self, center: tuple[float, float], radius: float,
-                 start_angle: float, end_angle: float,
-                 start_time: float, duration: float, zoom: float = 1.0):
+
+    def __init__(
+        self,
+        center: tuple[float, float],
+        radius: float,
+        start_angle: float,
+        end_angle: float,
+        start_time: float,
+        duration: float,
+        zoom: float = 1.0,
+    ):
         """
         Args:
             center: Point to orbit around (x, y)
@@ -191,7 +241,9 @@ class Orbit(CameraMovement):
         progress = progress * progress * (3 - 2 * progress)
 
         # Interpolate angle
-        current_angle = self.start_angle + (self.end_angle - self.start_angle) * progress
+        current_angle = (
+            self.start_angle + (self.end_angle - self.start_angle) * progress
+        )
 
         # Calculate position on circle
         x = self.center[0] + self.radius * np.cos(current_angle)
@@ -201,6 +253,7 @@ class Orbit(CameraMovement):
         rotation = np.degrees(current_angle) + 180  # Face toward center
 
         return CameraState(x, y, self.zoom, rotation)
+
 
 class Camera:
     def __init__(self, width: float = 10.0, height: float = 10.0):

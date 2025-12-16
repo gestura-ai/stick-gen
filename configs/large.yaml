@@ -5,7 +5,9 @@
 metadata:
   variant: "large"
   display_name: "Stick-Gen Large"
-  expected_params: 44_500_000  # 44.5M parameters (SwiGLU + RMSNorm architecture)
+  # See docs/MODEL_SIZES.md for detailed breakdown
+  expected_params_motion_only: 44_618_362   # 44.6M (motion-only)
+  expected_params_multimodal: 71_282_874    # 71.3M (with ResNet encoder + cross-attention)
   recommended_hardware:
     cpu: "Not recommended"
     ram: "32GB+"
@@ -24,13 +26,16 @@ metadata:
 # Uses modern LLM architecture: RMSNorm + SwiGLU + Pre-Norm
 model:
   input_dim: 20
-  d_model: 512            # Larger model for GPU (44.5M params)
+  d_model: 512            # Larger model for GPU (44.6M motion-only, 71.3M multimodal)
   nhead: 16               # More attention heads
   num_layers: 10          # Deeper network
   output_dim: 20
   embedding_dim: 1024
   dropout: 0.1
   num_actions: 64
+  # Multimodal image conditioning (when data.use_parallax_augmentation: true)
+  image_encoder_arch: "resnet"            # Use deeper encoder for large model
+  fusion_strategy: "cross_attention"      # More expressive fusion for large model
 
 # Training Settings (GPU-optimized)
 training:
@@ -79,6 +84,10 @@ data:
   curated_sft_data: "data/curated/sft_data_embedded.pt"            # Curated SFT dataset (with embeddings)
   checkpoint_dir: "checkpoints"
   log_dir: "logs"
+  use_parallax_augmentation: true            # Master switch for 2.5D parallax training
+  parallax_root: "data/2.5d_parallax"       # Root directory for parallax PNGs + metadata
+  parallax_image_size: [256, 256]            # [H, W] resize for parallax images
+  image_backend: "torchvision"               # Use faster torchvision backend for GPU
 
 # Data Generation Settings
 data_generation:

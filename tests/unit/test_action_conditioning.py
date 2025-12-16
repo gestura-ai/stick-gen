@@ -9,7 +9,7 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.data_gen.schema import (
     ACTION_TO_IDX,

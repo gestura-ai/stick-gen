@@ -34,7 +34,8 @@ ENV PYTHONUNBUFFERED=1 \
     TRAIN_ALL=false \
     VERSION=1.0.0
 
-# Install system dependencies (including build tools for pycairo and manimpango)
+# Install system dependencies (including build tools for pycairo, manimpango, and headless-gl)
+# headless-gl (gl npm package) requires: libxi-dev, libgl1-mesa-dev, libglew-dev, xvfb
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
@@ -49,8 +50,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango1.0-dev \
     libglib2.0-dev \
     ffmpeg \
+    # Node.js and headless-gl dependencies for 2.5D parallax augmentation
+    libxi-dev \
+    libgl1-mesa-dev \
+    libglew-dev \
+    xvfb \
+    python3 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# Install Node.js 20.x LTS (required for threejs_parallax_renderer.js)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create workspace directories
 RUN mkdir -p ${WORKSPACE_DIR} ${MODEL_DIR} ${DATA_DIR} ${HF_HOME}
@@ -59,6 +71,7 @@ WORKDIR ${WORKSPACE_DIR}
 
 # Copy requirements first for layer caching
 COPY requirements.txt .
+COPY package.json package-lock.json* ./
 
 # Install Python dependencies
 # Note: chumpy has a broken setup.py that imports pip directly, so we install it with --no-build-isolation
@@ -66,6 +79,10 @@ RUN pip install --upgrade pip setuptools wheel && \
     pip install chumpy --no-build-isolation && \
     pip install -r requirements.txt && \
     pip install runpod>=1.6.0 huggingface_hub>=0.20.0
+
+# Install Node.js dependencies for 2.5D parallax augmentation (Three.js headless renderer)
+# gl (headless-gl) requires native compilation; xvfb is used at runtime for virtual framebuffer
+RUN npm install --production && npm cache clean --force
 
 # Pre-download the text embedding model for faster startup
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-large-en-v1.5')"

@@ -27,16 +27,17 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-
 def load_config(config_path: str = "configs/base.yaml") -> dict:
     """Load configuration from YAML file."""
     import os
+
     if not os.path.exists(config_path):
         print(f"Warning: Config file {config_path} not found, using defaults")
         return {}
 
     with open(config_path) as f:
         return yaml.safe_load(f)
+
 
 def compute_physics_ground_truth(motion_tensor):
     """
@@ -66,13 +67,12 @@ def compute_physics_ground_truth(motion_tensor):
     momentum = velocities.clone()
 
     # Combine into physics tensor: [250, 6]
-    physics_tensor = torch.cat([
-        velocities,      # [250, 2]
-        accelerations,   # [250, 2]
-        momentum         # [250, 2]
-    ], dim=1)
+    physics_tensor = torch.cat(
+        [velocities, accelerations, momentum], dim=1  # [250, 2]  # [250, 2]  # [250, 2]
+    )
 
     return physics_tensor
+
 
 def generate_text_embedding(description, model_name="BAAI/bge-large-en-v1.5"):
     """
@@ -89,12 +89,14 @@ def generate_text_embedding(description, model_name="BAAI/bge-large-en-v1.5"):
         from sentence_transformers import SentenceTransformer
 
         # Load model (cached after first load)
-        if not hasattr(generate_text_embedding, 'model'):
+        if not hasattr(generate_text_embedding, "model"):
             print(f"Loading embedding model: {model_name}...")
             generate_text_embedding.model = SentenceTransformer(model_name)
 
         # Generate embedding
-        embedding = generate_text_embedding.model.encode(description, convert_to_tensor=True)
+        embedding = generate_text_embedding.model.encode(
+            description, convert_to_tensor=True
+        )
         return embedding
 
     except ImportError:
@@ -103,14 +105,42 @@ def generate_text_embedding(description, model_name="BAAI/bge-large-en-v1.5"):
         # Return random embedding as fallback
         return torch.randn(1024)
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Merge AMASS with synthetic dataset')
-    parser.add_argument('--config', type=str, default='configs/base.yaml', help='Path to YAML configuration file')
-    parser.add_argument('--synthetic', type=str, default=None, help='Path to synthetic dataset (overrides config)')
-    parser.add_argument('--amass_dir', type=str, default='data/amass_converted', help='Path to converted AMASS data')
-    parser.add_argument('--descriptions', type=str, default='data/amass_descriptions.json', help='Path to AMASS descriptions')
-    parser.add_argument('--output', type=str, default=None, help='Output path for merged dataset (overrides config)')
-    parser.add_argument('--max_amass', type=int, default=None, help='Maximum AMASS samples to include')
+    parser = argparse.ArgumentParser(description="Merge AMASS with synthetic dataset")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/base.yaml",
+        help="Path to YAML configuration file",
+    )
+    parser.add_argument(
+        "--synthetic",
+        type=str,
+        default=None,
+        help="Path to synthetic dataset (overrides config)",
+    )
+    parser.add_argument(
+        "--amass_dir",
+        type=str,
+        default="data/amass_converted",
+        help="Path to converted AMASS data",
+    )
+    parser.add_argument(
+        "--descriptions",
+        type=str,
+        default="data/amass_descriptions.json",
+        help="Path to AMASS descriptions",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output path for merged dataset (overrides config)",
+    )
+    parser.add_argument(
+        "--max_amass", type=int, default=None, help="Maximum AMASS samples to include"
+    )
     args = parser.parse_args()
 
     # Load configuration
@@ -118,12 +148,16 @@ def main():
     gen_config = config.get("data_generation", {})
 
     # Get paths from config with fallbacks
-    synthetic_input = args.synthetic or gen_config.get("embedded_path", "data/train_data_embedded.pt")
-    output_path_str = args.output or gen_config.get("merged_path", "data/train_data_merged.pt")
+    synthetic_input = args.synthetic or gen_config.get(
+        "embedded_path", "data/train_data_embedded.pt"
+    )
+    output_path_str = args.output or gen_config.get(
+        "merged_path", "data/train_data_merged.pt"
+    )
 
-    print("="*70)
+    print("=" * 70)
     print("AMASS DATASET MERGER")
-    print("="*70)
+    print("=" * 70)
     print(f"Config: {args.config}")
 
     # Load synthetic dataset
@@ -152,7 +186,7 @@ def main():
     # Limit AMASS samples if requested
     amass_sequences = list(descriptions.items())
     if args.max_amass is not None:
-        amass_sequences = amass_sequences[:args.max_amass]
+        amass_sequences = amass_sequences[: args.max_amass]
         print(f"   Limiting to {len(amass_sequences)} AMASS samples")
 
     # Process AMASS sequences
@@ -166,8 +200,8 @@ def main():
             motion = torch.load(full_path)
 
             # Get description and action
-            description = metadata['description']
-            action_idx = metadata['action_idx']
+            description = metadata["description"]
+            action_idx = metadata["action_idx"]
 
             # Generate per-frame actions (all same action for AMASS)
             actions = torch.full((250,), action_idx, dtype=torch.long)
@@ -186,8 +220,8 @@ def main():
                 "physics": physics,
                 "embedding": embedding,
                 "source": "amass",
-                "dataset": metadata['dataset'],
-                "augmented": False
+                "dataset": metadata["dataset"],
+                "augmented": False,
             }
 
             amass_data.append(amass_sample)
@@ -210,7 +244,7 @@ def main():
     # Count sources
     source_counts = {}
     for sample in merged_data:
-        source = sample.get('source', 'synthetic')
+        source = sample.get("source", "synthetic")
         source_counts[source] = source_counts.get(source, 0) + 1
 
     print("\n📁 Source Distribution:")
@@ -232,6 +266,6 @@ def main():
     file_size_mb = output_path.stat().st_size / (1024 * 1024)
     print(f"✅ File size: {file_size_mb:.2f} MB")
 
-if __name__ == '__main__':
-    main()
 
+if __name__ == "__main__":
+    main()

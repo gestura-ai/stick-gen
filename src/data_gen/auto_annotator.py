@@ -51,7 +51,9 @@ def _normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
 
     for key in merged.keys():
         if key in flat:
-            merged[key] = bool(flat[key]) if isinstance(merged[key], bool) else flat[key]
+            merged[key] = (
+                bool(flat[key]) if isinstance(merged[key], bool) else flat[key]
+            )
 
     return merged
 
@@ -78,7 +80,9 @@ def infer_shot_type(camera: torch.Tensor) -> str:
     return "close"
 
 
-def infer_camera_motion(camera: torch.Tensor, motion: torch.Tensor | None = None) -> str:
+def infer_camera_motion(
+    camera: torch.Tensor, motion: torch.Tensor | None = None
+) -> str:
     """Classify camera movement pattern.
 
     Returns one of: "static", "pan", "zoom", "tracking", "complex", "unknown".
@@ -131,11 +135,11 @@ def infer_camera_motion(camera: torch.Tensor, motion: torch.Tensor | None = None
             starts = segments[..., 0:2]
             ends = segments[..., 2:4]
             points = torch.cat([starts, ends], dim=2)  # [F, A, 10, 2]
-            centers = points.mean(dim=2)               # [F, A, 2]
+            centers = points.mean(dim=2)  # [F, A, 2]
 
             # Average actor center across actors
-            actor_centers = centers.mean(dim=1)        # [F, 2]
-            cam_pos = torch.stack([x, y], dim=1)       # [F, 2]
+            actor_centers = centers.mean(dim=1)  # [F, 2]
+            cam_pos = torch.stack([x, y], dim=1)  # [F, 2]
 
             # Correlation along x between actor path and camera path
             vx = actor_centers[:, 0] - actor_centers[:, 0].mean()
@@ -189,7 +193,9 @@ def summarize_actions(actions: torch.Tensor) -> dict[str, Any]:
     return {"dominant": top, "distribution": distribution}
 
 
-def summarize_physics(physics: torch.Tensor, validator: DataValidator | None = None) -> dict[str, Any]:
+def summarize_physics(
+    physics: torch.Tensor, validator: DataValidator | None = None
+) -> dict[str, Any]:
     """Compute basic physics statistics and violation ratios."""
 
     phys = torch.as_tensor(physics, dtype=torch.float32)
@@ -214,8 +220,14 @@ def summarize_physics(physics: torch.Tensor, validator: DataValidator | None = N
     max_a = float(acceleration.max().item())
     mean_a = float(acceleration.mean().item())
 
-    v_ratio = max_v / float(validator.max_velocity) if validator.max_velocity > 0 else 0.0
-    a_ratio = max_a / float(validator.max_acceleration) if validator.max_acceleration > 0 else 0.0
+    v_ratio = (
+        max_v / float(validator.max_velocity) if validator.max_velocity > 0 else 0.0
+    )
+    a_ratio = (
+        max_a / float(validator.max_acceleration)
+        if validator.max_acceleration > 0
+        else 0.0
+    )
     overall_ratio = max(v_ratio, a_ratio)
 
     return {
@@ -298,7 +310,9 @@ def compute_quality(annotations: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def annotate_sample(sample: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
+def annotate_sample(
+    sample: dict[str, Any], config: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Annotate a motion sample with camera/motion/physics labels.
 
     The returned sample is a shallow copy with an ``"annotations"`` dict

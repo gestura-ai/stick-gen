@@ -128,11 +128,11 @@ def _load_texts(texts_dir: str) -> dict[str, list[str]]:
                 content = f.read()
             # Parse multiple annotations (one per line or # separated)
             lines = []
-            for line in content.strip().split('\n'):
+            for line in content.strip().split("\n"):
                 line = line.strip()
                 if line:
                     # Handle # delimited format
-                    parts = line.split('#')
+                    parts = line.split("#")
                     if parts[0].strip():
                         lines.append(parts[0].strip())
             mapping[clip_id] = lines
@@ -243,16 +243,25 @@ def main() -> None:
         description="Convert KIT-ML to Stick-Gen canonical schema",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--root", type=str, required=True,
-                        help="Root directory of KIT-ML")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
-    parser.add_argument("--fps", type=int, default=30,
-                        help="Frame rate (default: 30)")
-    parser.add_argument("--max-clips", type=int, default=-1,
-                        help="Maximum clips to process (-1 for all)")
-    parser.add_argument("--physics-threshold", type=float, default=2.0,
-                        help="Physics validation threshold multiplier")
+    parser.add_argument(
+        "--root", type=str, required=True, help="Root directory of KIT-ML"
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
+    parser.add_argument("--fps", type=int, default=30, help="Frame rate (default: 30)")
+    parser.add_argument(
+        "--max-clips",
+        type=int,
+        default=-1,
+        help="Maximum clips to process (-1 for all)",
+    )
+    parser.add_argument(
+        "--physics-threshold",
+        type=float,
+        default=2.0,
+        help="Physics validation threshold multiplier",
+    )
     args = parser.parse_args()
 
     convert_kit_ml(
@@ -266,4 +275,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

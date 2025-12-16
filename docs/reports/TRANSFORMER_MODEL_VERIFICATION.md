@@ -162,14 +162,17 @@ All output shapes match expected dimensions.
 ## Performance Characteristics
 
 **Model Size (Medium Variant):**
-- Transformer: ~20.5M parameters (with SwiGLU + RMSNorm)
-- Diffusion UNet: ~3-4M parameters
-- Total: ~24-25M parameters
+- Transformer (motion-only): ~20.6M parameters (with SwiGLU + RMSNorm)
+- Transformer (multimodal): ~25.1M parameters (+image encoder +fusion)
+- Diffusion UNet: ~3-4M parameters (optional refinement)
 
-**Model Variants:**
-- Small: ~7.2M parameters (d_model=256, 6 layers, 8 heads)
-- Medium: ~20.5M parameters (d_model=384, 8 layers, 12 heads)
-- Large: ~44.5M parameters (d_model=512, 10 layers, 16 heads)
+**Model Variants (motion-only / multimodal):**
+
+> See [../MODEL_SIZES.md](../MODEL_SIZES.md) for detailed breakdowns.
+
+- Small: 7.2M / 11.7M parameters (d_model=256, 6 layers, 8 heads)
+- Medium: 20.6M / 25.1M parameters (d_model=384, 8 layers, 12 heads)
+- Large: 44.6M / 71.3M parameters (d_model=512, 10 layers, 16 heads)
 
 **Memory Requirements:**
 - Training: ~8-12GB GPU memory (batch_size=4)

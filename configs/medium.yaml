@@ -5,7 +5,9 @@
 metadata:
   variant: "medium"
   display_name: "Stick-Gen Medium"
-  expected_params: 20_500_000  # 20.5M parameters (SwiGLU + RMSNorm architecture)
+  # See docs/MODEL_SIZES.md for detailed breakdown
+  expected_params_motion_only: 20_594_618   # 20.6M (motion-only)
+  expected_params_multimodal: 25_063_908    # 25.1M (with image encoder + fusion)
   recommended_hardware:
     cpu: "8+ cores"
     ram: "16-32GB"
@@ -24,13 +26,16 @@ metadata:
 # Uses modern LLM architecture: RMSNorm + SwiGLU + Pre-Norm
 model:
   input_dim: 20           # 10 joints × 2 coords
-  d_model: 384            # Transformer hidden dimension (384 = 20.5M params)
+  d_model: 384            # Transformer hidden dimension (20.6M motion-only, 25.1M multimodal)
   nhead: 12               # Number of attention heads
   num_layers: 8           # Number of transformer layers
   output_dim: 20          # Same as input_dim
   embedding_dim: 1024     # Text embedding dimension (BAAI/bge-large-en-v1.5)
   dropout: 0.1            # Dropout rate
   num_actions: 64         # Number of action classes
+  # Multimodal image conditioning (when data.use_parallax_augmentation: true)
+  image_encoder_arch: "lightweight_cnn"  # Options: "lightweight_cnn", "resnet", "mini_vit"
+  fusion_strategy: "gated"               # Options: "concat", "gated", "film", "cross_attention"
 
 # Training Settings
 training:
@@ -79,6 +84,10 @@ data:
   curated_sft_data: "data/curated/sft_data_embedded.pt"            # Curated SFT dataset (with embeddings)
   checkpoint_dir: "checkpoints"                                # Directory for saving checkpoints
   log_dir: "logs"                                              # Directory for training logs
+  use_parallax_augmentation: true                               # Master switch for 2.5D parallax training
+  parallax_root: "data/2.5d_parallax"                          # Root directory for parallax PNGs + metadata
+  parallax_image_size: [256, 256]                               # [H, W] resize for parallax images
+  image_backend: "pil"                                          # Image loading backend: "pil" or "torchvision"
 
 # Data Generation Settings
 data_generation:

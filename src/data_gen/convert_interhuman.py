@@ -11,7 +11,9 @@ from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
 
-def _person_dict_to_motion(person: dict[str, Any], converter: AMASSConverter) -> torch.Tensor:
+def _person_dict_to_motion(
+    person: dict[str, Any], converter: AMASSConverter
+) -> torch.Tensor:
     """Convert a single person's SMPL-like parameters into [T, 20] stick motion.
 
     The InterHuman motions store SMPL-style parameters per person:
@@ -45,7 +47,9 @@ def _person_dict_to_motion(person: dict[str, Any], converter: AMASSConverter) ->
     betas = person.get("betas")
     if betas is None:
         betas = np.zeros(10, dtype=np.float32)
-    betas_tensor_1 = torch.tensor(betas[:10], dtype=torch.float32).unsqueeze(0)  # [1, 10]
+    betas_tensor_1 = torch.tensor(betas[:10], dtype=torch.float32).unsqueeze(
+        0
+    )  # [1, 10]
 
     # Single-frame hand poses from the model's default parameters. The current
     # smplx version in this environment does not reliably handle batched
@@ -85,7 +89,9 @@ def _person_dict_to_motion(person: dict[str, Any], converter: AMASSConverter) ->
     return motion
 
 
-def _load_motion_pair_from_pkl(pkl_path: str, converter: AMASSConverter) -> torch.Tensor:
+def _load_motion_pair_from_pkl(
+    pkl_path: str, converter: AMASSConverter
+) -> torch.Tensor:
     """Load an InterHuman motion .pkl and pack two actors into [T, 2, 20]."""
     with open(pkl_path, "rb") as f:
         obj = pickle.load(f)
@@ -121,10 +127,9 @@ def _load_texts(annots_dir: str, clip_id: str) -> list[str]:
     return lines
 
 
-def _build_sample(motion: torch.Tensor,
-                  texts: list[str],
-                  meta: dict[str, Any],
-                  fps: int = 30) -> dict[str, Any]:
+def _build_sample(
+    motion: torch.Tensor, texts: list[str], meta: dict[str, Any], fps: int = 30
+) -> dict[str, Any]:
     # motion: [T, 2, 20]
     physics = compute_basic_physics(motion, fps=fps)  # [T, 2, 6]
 
@@ -134,7 +139,9 @@ def _build_sample(motion: torch.Tensor,
     T = motion.shape[0]
     actions = torch.full((T, 2), action_idx, dtype=torch.long)
 
-    description = texts[0] if texts else "Two people interacting in the InterHuman dataset."
+    description = (
+        texts[0] if texts else "Two people interacting in the InterHuman dataset."
+    )
 
     return {
         "description": description,
@@ -147,10 +154,9 @@ def _build_sample(motion: torch.Tensor,
     }
 
 
-def convert_interhuman(data_root: str,
-                       output_path: str,
-                       fps: int = 30,
-                       max_clips: int = -1) -> None:
+def convert_interhuman(
+    data_root: str, output_path: str, fps: int = 30, max_clips: int = -1
+) -> None:
     """Convert InterHuman motions into canonical schema.
 
     Supports the official InterHuman release layout under ``data_root``:
@@ -206,18 +212,26 @@ def convert_interhuman(data_root: str,
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Convert InterHuman to canonical schema")
-    parser.add_argument("--data-root", type=str, required=True,
-                        help="Root directory of InterHuman Dataset")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
+    parser = argparse.ArgumentParser(
+        description="Convert InterHuman to canonical schema"
+    )
+    parser.add_argument(
+        "--data-root",
+        type=str,
+        required=True,
+        help="Root directory of InterHuman Dataset",
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--max-clips", type=int, default=-1)
     args = parser.parse_args()
 
-    convert_interhuman(args.data_root, args.output, fps=args.fps, max_clips=args.max_clips)
+    convert_interhuman(
+        args.data_root, args.output, fps=args.fps, max_clips=args.max_clips
+    )
 
 
 if __name__ == "__main__":
     main()
-

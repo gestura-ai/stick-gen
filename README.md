@@ -113,6 +113,79 @@ graph LR
 - **Soccer**: Players kick ball and run across field
 - **Narrative**: Characters interact with realistic spatial positioning
 
+### 2.5D Parallax Augmentation (Offline Training Data)
+
+You can turn canonical `.pt` motion datasets into multi-view 2.5D PNGs plus metadata with:
+
+```bash
+stick-gen generate-data \
+  --config configs/medium.yaml \
+  --augment-parallax \
+  --views-per-motion 250 \
+  --frames-per-view 4 \
+  --output data/2.5d_parallax
+```
+
+This writes, for each `(sample, actor)` pair:
+
+- `data/2.5d_parallax/sample_XXXXXX/actor_Y/*.png`
+- `data/2.5d_parallax/sample_XXXXXX/actor_Y/metadata.json` describing:
+  - `sample_id`, `actor_id`
+  - `view_id` and per-frame `motion_frame_index`
+  - camera pose (`position`, `target`, `fov`)
+
+For multimodal training, use `src/train/parallax_dataset.py::MultimodalParallaxDataset`
+with your training `.pt` file (see `data.*` paths in the configs).
+
+#### Parallax Pipeline Architecture
+
+```mermaid
+flowchart TB
+    subgraph INPUT["📁 INPUT"]
+        PT["train_data.pt<br/>(canonical motion)"]
+    end
+
+    subgraph EXPORT["📤 MOTION EXPORT"]
+        ACTOR["Per-Actor Extraction"]
+        MOTION[".motion JSON files"]
+    end
+
+    subgraph RENDER["🎬 THREE.JS RENDERER"]
+        NODE["Node.js Runtime"]
+        THREE["three.js + headless-gl"]
+        CAMERA["Camera Trajectories<br/>(250 views × 4 frames)"]
+    end
+
+    subgraph OUTPUT["📦 OUTPUT"]
+        PNG["PNG Frames<br/>(per sample/actor)"]
+        META["metadata.json<br/>(view_id, camera pose)"]
+    end
+
+    subgraph TRAINING["🧠 TRAINING"]
+        DATASET["MultimodalParallaxDataset"]
+        LOADER["DataLoader"]
+        MODEL["Transformer + Image Encoder"]
+    end
+
+    PT --> ACTOR
+    ACTOR --> MOTION
+    MOTION --> NODE
+    NODE --> THREE
+    THREE --> CAMERA
+    CAMERA --> PNG
+    CAMERA --> META
+    PNG --> DATASET
+    META --> DATASET
+    PT --> DATASET
+    DATASET --> LOADER
+    LOADER --> MODEL
+```
+
+**Requirements:**
+- Node.js 18+ with npm packages: `three`, `pngjs`, `gl` (headless-gl)
+- System packages: `libxi-dev`, `libgl1-mesa-dev`, `libglew-dev`, `xvfb`
+- See `docker/Dockerfile` for complete setup
+
 ## Architecture
 
 ### System Overview
@@ -175,9 +248,9 @@ flowchart TB
         direction TB
         
         subgraph VARIANTS["Model Variants"]
-            SMALL["🔹 Small<br/>7.2M params<br/>d=256, L=6, H=8<br/><i>CPU-friendly</i>"]
-            MEDIUM["🔸 Medium<br/>20.5M params<br/>d=384, L=8, H=12<br/><i>Recommended</i>"]
-            LARGE["🔺 Large<br/>44.5M params<br/>d=512, L=10, H=16<br/><i>Max quality</i>"]
+            SMALL["🔹 Small<br/>7.2M / 11.7M params<br/>d=256, L=6, H=8<br/><i>CPU-friendly</i>"]
+            MEDIUM["🔸 Medium<br/>20.6M / 25.1M params<br/>d=384, L=8, H=12<br/><i>Recommended</i>"]
+            LARGE["🔺 Large<br/>44.6M / 71.3M params<br/>d=512, L=10, H=16<br/><i>Max quality</i>"]
         end
         
         subgraph CONDITIONING["Conditioning"]
@@ -402,11 +475,13 @@ flowchart TB
 
 ### Model Variants
 
-| Variant | Parameters | d_model | Layers | Heads | Hardware | Use Case |
-|---------|------------|---------|--------|-------|----------|----------|
-| **Small** | 7.2M | 256 | 6 | 8 | CPU (4+ cores) | Budget deployment, edge devices, testing |
-| **Medium** | 20.5M | 384 | 8 | 12 | CPU/GPU (8GB+) | Recommended default, balanced quality |
-| **Large** | 44.5M | 512 | 10 | 16 | GPU (8GB+ VRAM) | Maximum quality, production |
+> See [docs/MODEL_SIZES.md](docs/MODEL_SIZES.md) for detailed parameter breakdowns.
+
+| Variant | Motion-Only | Multimodal | d_model | Layers | Heads | Hardware | Use Case |
+|---------|-------------|------------|---------|--------|-------|----------|----------|
+| **Small** | 7.2M | 11.7M | 256 | 6 | 8 | CPU (4+ cores) | Budget deployment, edge devices, testing |
+| **Medium** | 20.6M | 25.1M | 384 | 8 | 12 | CPU/GPU (8GB+) | Recommended default, balanced quality |
+| **Large** | 44.6M | 71.3M | 512 | 10 | 16 | GPU (8GB+ VRAM) | Maximum quality, production |
 
 ### Model Architecture
 
@@ -477,7 +552,9 @@ graph TD
     C --> D[Phase 3: Dataset Merge<br/>Source Balancing + Artifact Filtering]
     D --> E[Phase 4: Curation<br/>Quality Filtering]
     E --> G[Phase 5: Embedding Generation<br/>BAAI/bge-large-en-v1.5]
-    G --> H[Phase 6: Pretraining]
+    G --> P5a[Phase 5a: 2.5D Parallax<br/>Image Augmentation]
+    P5a --> H[Phase 6: Pretraining]
+    G --> H
     H --> I[Phase 7: SFT Fine-tuning]
     I --> J[Phase 8: LoRA Adapters]
     J --> K[Push to HuggingFace]
@@ -493,11 +570,42 @@ graph TD
         F8[100STYLE] --> F
     end
 
-    subgraph "Model Variants"
-        K --> L[Small 7.2M]
-        K --> M[Medium 20.5M]
-        K --> N[Large 44.5M]
+    subgraph "Multimodal (Optional)"
+        P5a --> RENDER[Node.js Renderer<br/>Three.js + gl]
+        RENDER --> PNG[PNG Frames<br/>+ metadata.json]
+        PNG --> DATASET[MultimodalParallaxDataset]
+        DATASET --> ENCODER[Image Encoder<br/>CNN/ResNet/ViT]
+        ENCODER --> FUSION[Feature Fusion<br/>text + image + camera]
     end
+
+    subgraph "Model Variants"
+        K --> L[Small 7.2M/11.7M]
+        K --> M[Medium 20.6M/25.1M]
+        K --> N[Large 44.6M/71.3M]
+    end
+```
+
+### Multimodal Training (2.5D Parallax)
+
+When `data.use_parallax_augmentation: true` in the config, training uses **multimodal conditioning**:
+
+| Component | Description | Config Key |
+|-----------|-------------|------------|
+| **Image Encoder** | CNN/ResNet/ViT for PNG frames | `model.image_encoder_arch` |
+| **Feature Fusion** | Combines text + image + camera | `model.fusion_strategy` |
+| **Parallax Data** | 2.5D rendered stick figures | `data.parallax_root` |
+
+```bash
+# Enable multimodal training (default in configs/*.yaml)
+python -m src.train.train --config configs/medium.yaml
+# uses data.use_parallax_augmentation: true
+
+# Generate parallax data first
+python -m src.data_gen.parallax_augmentation \
+    --input data/curated/pretrain_data.pt \
+    --output data/2.5d_parallax \
+    --views-per-sample 250 \
+    --frames-per-view 4
 ```
 
 ### Training vs Inference & Fine-Tuning Workflow
@@ -679,16 +787,19 @@ stick-gen/
 │   │   ├── convert_ntu_rgbd.py        # NTU RGB+D skeleton conversion
 │   │   └── convert_100style.py        # 100STYLE BVH conversion
 │   ├── model/                         # Model architecture
-│   │   ├── transformer.py             # Transformer + camera conditioning
+│   │   ├── transformer.py             # Transformer + multimodal conditioning
+│   │   ├── image_encoder.py           # CNN/ResNet/ViT image encoders
+│   │   ├── fusion.py                  # Feature fusion (text + image + camera)
 │   │   └── diffusion.py               # Diffusion refinement
 │   ├── train/                         # Training
-│   │   └── train.py                   # Multi-task training loop
+│   │   ├── train.py                   # Multi-task training loop
+│   │   └── parallax_dataset.py        # Multimodal parallax dataset
 │   └── inference/                     # Inference
 │       └── generator.py               # Text-to-animation generation
 ├── configs/                           # Model configurations
-│   ├── small.yaml                     # Small model (7.2M params)
-│   ├── medium.yaml                    # Medium model (20.5M params)
-│   └── large.yaml                     # Large model (44.5M params)
+│   ├── small.yaml                     # Small model (7.2M/11.7M params)
+│   ├── medium.yaml                    # Medium model (20.6M/25.1M params)
+│   └── large.yaml                     # Large model (44.6M/71.3M params)
 ├── runpod/                            # RunPod cloud deployment
 │   ├── deploy.sh                      # Deployment script
 │   ├── handler.py                     # Serverless handler
@@ -722,9 +833,9 @@ stick-gen/
 │   ├── reports/                       # Completion reports
 │   └── export/                        # Export guides
 ├── model_cards/                       # Hugging Face model cards
-│   ├── small.md                       # Small model (5.6M params)
-│   ├── medium.md                      # Medium model (15.8M params)
-│   └── large.md                       # Large model (28M params)
+│   ├── small.md                       # Small model (7.2M/11.7M params)
+│   ├── medium.md                      # Medium model (20.6M/25.1M params)
+│   └── large.md                       # Large model (44.6M/71.3M params)
 ├── data/                              # Data directory (gitignored)
 │   ├── canonical/                     # Canonical .pt files (per source)
 │   ├── curated/                       # Curated datasets
@@ -758,11 +869,13 @@ See [docs/setup/INSTALLATION.md](docs/setup/INSTALLATION.md) for complete instal
 
 ## Performance
 
-| Variant | Parameters | Model Size | Inference (CPU) | Inference (GPU) |
-|---------|------------|------------|-----------------|-----------------|
-| Small | 5.6M | ~21 MB | ~2.0s | ~0.5s |
-| Medium | 15.8M | ~60 MB | ~1.5s | ~0.3s |
-| Large | 28M | ~107 MB | N/A | ~0.2s |
+> See [docs/MODEL_SIZES.md](docs/MODEL_SIZES.md) for detailed parameter breakdowns.
+
+| Variant | Motion-Only | Multimodal | Model Size (FP16) | Inference (CPU) | Inference (GPU) |
+|---------|-------------|------------|-------------------|-----------------|-----------------|
+| Small | 7.2M | 11.7M | ~15-24 MB | ~2.0s | ~0.5s |
+| Medium | 20.6M | 25.1M | ~41-50 MB | ~1.5s | ~0.3s |
+| Large | 44.6M | 71.3M | ~89-143 MB | N/A | ~0.2s |
 
 - **Synthetic Samples**: 10k (small), 50k (medium), 100k (large) with 4x augmentation
 - **Motion Capture**: AMASS (~17k), InterHuman (~6k), NTU-RGB+D (~56k), 100STYLE (~4k)

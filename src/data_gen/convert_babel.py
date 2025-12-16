@@ -40,7 +40,6 @@ BABEL_TO_STICKGEN = {
     "jumping": ActionType.JUMP,
     "hop": ActionType.JUMP,
     "skip": ActionType.JUMP,
-
     # Sitting/Standing
     "sit": ActionType.SIT,
     "sit down": ActionType.SIT,
@@ -53,13 +52,11 @@ BABEL_TO_STICKGEN = {
     "lie": ActionType.LIE_DOWN,
     "lie down": ActionType.LIE_DOWN,
     "lying": ActionType.LIE_DOWN,
-
     # Dancing
     "dance": ActionType.DANCE,
     "dancing": ActionType.DANCE,
     "spin": ActionType.DANCE,
     "twirl": ActionType.DANCE,
-
     # Gestures
     "wave": ActionType.WAVE,
     "waving": ActionType.WAVE,
@@ -67,7 +64,6 @@ BABEL_TO_STICKGEN = {
     "pointing": ActionType.POINT,
     "clap": ActionType.CLAP,
     "clapping": ActionType.CLAP,
-
     # Fighting
     "punch": ActionType.PUNCH,
     "punching": ActionType.PUNCH,
@@ -76,14 +72,12 @@ BABEL_TO_STICKGEN = {
     "fight": ActionType.FIGHT,
     "fighting": ActionType.FIGHT,
     "dodge": ActionType.DODGE,
-
     # Sports
     "throw": ActionType.THROWING,
     "throwing": ActionType.THROWING,
     "catch": ActionType.CATCHING,
     "catching": ActionType.CATCHING,
     "kick ball": ActionType.KICKING,
-
     # Movement
     "climb": ActionType.CLIMBING,
     "climbing": ActionType.CLIMBING,
@@ -91,20 +85,17 @@ BABEL_TO_STICKGEN = {
     "crawling": ActionType.CRAWLING,
     "swim": ActionType.SWIMMING,
     "swimming": ActionType.SWIMMING,
-
     # Emotions
     "celebrate": ActionType.CELEBRATE,
     "celebrating": ActionType.CELEBRATE,
     "laugh": ActionType.LAUGH,
     "cry": ActionType.CRY,
     "crying": ActionType.CRY,
-
     # Daily activities
     "eat": ActionType.EATING,
     "eating": ActionType.EATING,
     "drink": ActionType.DRINKING,
     "drinking": ActionType.DRINKING,
-
     # Communication
     "talk": ActionType.TALK,
     "talking": ActionType.TALK,
@@ -147,7 +138,9 @@ def _get_segment_actions(
         - primary description
     """
     # Initialize all frames as IDLE
-    actions = torch.full((num_frames,), ACTION_TO_IDX[ActionType.IDLE], dtype=torch.long)
+    actions = torch.full(
+        (num_frames,), ACTION_TO_IDX[ActionType.IDLE], dtype=torch.long
+    )
     action_labels = []
     descriptions = []
 
@@ -326,7 +319,9 @@ def convert_babel(
             logger.warning(f"Error processing {seq_name}: {e}")
             skipped += 1
 
-    logger.info(f"Converted {len(samples)}/{len(seq_names)} sequences ({skipped} skipped)")
+    logger.info(
+        f"Converted {len(samples)}/{len(seq_names)} sequences ({skipped} skipped)"
+    )
 
     # Report action distribution
     action_counts: dict[str, int] = {}
@@ -359,16 +354,26 @@ Prerequisites:
     1. Download AMASS: https://amass.is.tue.mpg.de/
     2. Download BABEL: https://babel.is.tue.mpg.de/
     3. Ensure SMPL models are in data/smpl_models/
-        """
+        """,
     )
-    parser.add_argument("--amass-root", type=str, required=True,
-                        help="Root directory of AMASS dataset")
-    parser.add_argument("--babel-path", type=str, required=True,
-                        help="Path to BABEL annotations (train.json or val.json)")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
-    parser.add_argument("--smpl-model-path", type=str, default="data/smpl_models",
-                        help="Path to SMPL models")
+    parser.add_argument(
+        "--amass-root", type=str, required=True, help="Root directory of AMASS dataset"
+    )
+    parser.add_argument(
+        "--babel-path",
+        type=str,
+        required=True,
+        help="Path to BABEL annotations (train.json or val.json)",
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
+    parser.add_argument(
+        "--smpl-model-path",
+        type=str,
+        default="data/smpl_models",
+        help="Path to SMPL models",
+    )
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--max-sequences", type=int, default=-1)
     parser.add_argument("--physics-threshold", type=float, default=2.0)
@@ -387,4 +392,3 @@ Prerequisites:
 
 if __name__ == "__main__":
     main()
-

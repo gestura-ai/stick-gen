@@ -52,23 +52,23 @@ model-index:
 
 # Stick-Gen Large: High-Quality Text-to-Animation Model
 
-**Variant**: Large (44.5M parameters)
+**Variant**: Large (44.6M motion-only / 71.3M multimodal)
 **Optimized for**: GPU deployment, maximum animation quality, production use
 
 This is the **Large variant** of Stick-Gen, optimized for maximum quality with GPU acceleration. For other variants, see:
-- [Stick-Gen Small](https://huggingface.co/GesturaAI/stick-gen-small) (7.2M params) - Budget CPU deployment
-- [Stick-Gen Medium](https://huggingface.co/GesturaAI/stick-gen-medium) (20.5M params) - Recommended for most use cases
+- [Stick-Gen Small](https://huggingface.co/GesturaAI/stick-gen-small) (7.2M/11.7M params) - Budget CPU deployment
+- [Stick-Gen Medium](https://huggingface.co/GesturaAI/stick-gen-medium) (20.6M/25.1M params) - Recommended for most use cases
 
 ## Quick Facts
 
-| Specification | Value |
-|---------------|-------|
-| **Parameters** | 44,500,000 (44.5M) |
-| **Model Size** | 170 MB (FP32) |
-| **Hardware** | GPU (8GB+ VRAM recommended) |
-| **Inference Speed** | ~0.2s per animation (GPU) |
-| **Training Time** | ~400 hours (100 epochs on GPU) |
-| **Use Cases** | High-quality production, research, GPU workflows |
+| Specification | Motion-Only | Multimodal |
+|---------------|-------------|------------|
+| **Parameters** | 44,619,646 (44.6M) | 71,284,158 (71.3M) |
+| **Model Size** | ~178 MB (FP32) / ~89 MB (FP16) | ~285 MB (FP32) / ~143 MB (FP16) |
+| **Hardware** | GPU (8GB+ VRAM) | GPU (16GB+ VRAM) |
+| **Inference Speed** | ~0.2s per animation (GPU) | ~0.3s per animation (GPU) |
+| **Training Time** | ~400 hours (100 epochs) | ~600 hours (100 epochs) |
+| **Use Cases** | High-quality production | Maximum quality multimodal |
 
 ## Model Architecture
 
@@ -87,7 +87,7 @@ This model uses a **transformer encoder architecture** with multi-head self-atte
 | **Normalization** | RMSNorm | Root Mean Square normalization (Pre-Norm) |
 | **Activation** | SwiGLU | Gated Linear Unit with Swish (SiLU) |
 | **Dropout** | 0.1 | Applied to attention and FFN |
-| **Total Parameters** | 44,500,000 | 44.5M parameters |
+| **Total Parameters** | 44,619,646 / 71,284,158 | 44.6M (motion-only) / 71.3M (multimodal) |
 
 ### Input/Output Specifications
 
@@ -116,7 +116,7 @@ The model uses 6 specialized decoder heads for comprehensive motion generation:
 
 This model is designed as a **high-quality base model for fine-tuning**:
 
-- ✅ **Maximum capacity** (44.5M params) for highest quality fine-tuned results
+- ✅ **Maximum capacity** (44.6M/71.3M params) for highest quality fine-tuned results
 - ✅ **Deeper transformer** (10 layers) captures more complex motion patterns
 - ✅ **More attention heads** (16) enables finer-grained attention patterns
 - ✅ **Multi-task heads** can be frozen or fine-tuned independently

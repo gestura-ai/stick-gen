@@ -15,7 +15,9 @@ def load_canonical(path: str) -> list[dict[str, Any]]:
     return data
 
 
-def add_embeddings(samples: list[dict[str, Any]], model_name: str, batch_size: int = 64) -> None:
+def add_embeddings(
+    samples: list[dict[str, Any]], model_name: str, batch_size: int = 64
+) -> None:
     """In-place addition of a 1024-d text embedding to each sample.
 
     This mirrors the behavior in scripts/prepare_data.py, but is generic over
@@ -30,22 +32,32 @@ def add_embeddings(samples: list[dict[str, Any]], model_name: str, batch_size: i
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         with torch.no_grad():
-            emb = model.encode(batch, convert_to_tensor=True, device=device, show_progress_bar=False)
+            emb = model.encode(
+                batch, convert_to_tensor=True, device=device, show_progress_bar=False
+            )
         all_embeddings.append(emb.cpu())
 
     embeddings_tensor = torch.cat(all_embeddings, dim=0)
 
     if embeddings_tensor.ndim != 2:
-        raise ValueError(f"Expected embeddings shape [N, D], got {embeddings_tensor.shape}")
+        raise ValueError(
+            f"Expected embeddings shape [N, D], got {embeddings_tensor.shape}"
+        )
 
     for idx, sample in enumerate(samples):
         sample["embedding"] = embeddings_tensor[idx]
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build training dataset from canonical motion data.")
-    parser.add_argument("--canonical", type=str, required=True, help="Path to canonical.pt file")
-    parser.add_argument("--output", type=str, required=True, help="Path to output train_data.pt")
+    parser = argparse.ArgumentParser(
+        description="Build training dataset from canonical motion data."
+    )
+    parser.add_argument(
+        "--canonical", type=str, required=True, help="Path to canonical.pt file"
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Path to output train_data.pt"
+    )
     parser.add_argument(
         "--model-name",
         type=str,
@@ -54,7 +66,9 @@ def main() -> None:
         default="BAAI/bge-large-en-v1.5",
         help="SentenceTransformer model name (must match training config)",
     )
-    parser.add_argument("--batch-size", type=int, default=64, help="Embedding batch size")
+    parser.add_argument(
+        "--batch-size", type=int, default=64, help="Embedding batch size"
+    )
 
     args = parser.parse_args()
 
@@ -71,4 +85,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

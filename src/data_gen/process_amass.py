@@ -21,10 +21,10 @@ from tqdm import tqdm
 
 
 def process_amass_dataset(
-    amass_root: str = 'data/amass',
-    output_path: str = 'data/amass_stick_data.pt',
+    amass_root: str = "data/amass",
+    output_path: str = "data/amass_stick_data.pt",
     max_samples: int = 400000,
-    batch_size: int = 100
+    batch_size: int = 100,
 ):
     """
     Process AMASS dataset to stick figure format
@@ -42,7 +42,7 @@ def process_amass_dataset(
     converter = AMASSConverter()
 
     # Find all .npz files
-    npz_files = list(Path(amass_root).rglob('*.npz'))
+    npz_files = list(Path(amass_root).rglob("*.npz"))
     print(f"Found {len(npz_files)} AMASS sequences")
 
     # Limit to max_samples
@@ -70,20 +70,24 @@ def process_amass_dataset(
             description = generate_description_from_action(action)
 
             # Store data
-            amass_data.append({
-                'motion': motion_tensor,
-                'action': action,
-                'actions': torch.tensor(action_indices, dtype=torch.long),
-                'description': description,
-                'source': 'amass',
-                'original_file': str(npz_path)
-            })
+            amass_data.append(
+                {
+                    "motion": motion_tensor,
+                    "action": action,
+                    "actions": torch.tensor(action_indices, dtype=torch.long),
+                    "description": description,
+                    "source": "amass",
+                    "original_file": str(npz_path),
+                }
+            )
 
             # Save checkpoint every batch_size samples
             if (i + 1) % batch_size == 0:
-                checkpoint_path = output_path.replace('.pt', f'_checkpoint_{i+1}.pt')
+                checkpoint_path = output_path.replace(".pt", f"_checkpoint_{i+1}.pt")
                 torch.save(amass_data, checkpoint_path)
-                print(f"\n✓ Checkpoint saved: {checkpoint_path} ({len(amass_data)} samples)")
+                print(
+                    f"\n✓ Checkpoint saved: {checkpoint_path} ({len(amass_data)} samples)"
+                )
 
         except Exception as e:
             failed_files.append((str(npz_path), str(e)))
@@ -100,8 +104,8 @@ def process_amass_dataset(
 
     # Save error log
     if failed_files:
-        error_log_path = output_path.replace('.pt', '_errors.txt')
-        with open(error_log_path, 'w') as f:
+        error_log_path = output_path.replace(".pt", "_errors.txt")
+        with open(error_log_path, "w") as f:
             for file_path, error in failed_files:
                 f.write(f"{file_path}: {error}\n")
         print(f"✓ Error log saved to: {error_log_path}")
@@ -110,9 +114,9 @@ def process_amass_dataset(
 
 
 def merge_with_synthetic_dataset(
-    amass_data_path: str = 'data/amass_stick_data.pt',
-    synthetic_data_path: str = 'data/train_data_embedded.pt',
-    output_path: str = 'data/train_data_merged.pt'
+    amass_data_path: str = "data/amass_stick_data.pt",
+    synthetic_data_path: str = "data/train_data_embedded.pt",
+    output_path: str = "data/train_data_merged.pt",
 ):
     """
     Merge AMASS data with synthetic data
@@ -143,17 +147,33 @@ def merge_with_synthetic_dataset(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process AMASS dataset')
-    parser.add_argument('--amass_root', type=str, default='data/amass',
-                        help='Root directory of AMASS dataset')
-    parser.add_argument('--output', type=str, default='data/amass_stick_data.pt',
-                        help='Output path for processed data')
-    parser.add_argument('--max_samples', type=int, default=400000,
-                        help='Maximum number of samples to process')
-    parser.add_argument('--batch_size', type=int, default=100,
-                        help='Checkpoint save frequency')
-    parser.add_argument('--merge', action='store_true',
-                        help='Merge with synthetic dataset after processing')
+    parser = argparse.ArgumentParser(description="Process AMASS dataset")
+    parser.add_argument(
+        "--amass_root",
+        type=str,
+        default="data/amass",
+        help="Root directory of AMASS dataset",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="data/amass_stick_data.pt",
+        help="Output path for processed data",
+    )
+    parser.add_argument(
+        "--max_samples",
+        type=int,
+        default=400000,
+        help="Maximum number of samples to process",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=100, help="Checkpoint save frequency"
+    )
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Merge with synthetic dataset after processing",
+    )
 
     args = parser.parse_args()
 
@@ -162,14 +182,13 @@ if __name__ == "__main__":
         amass_root=args.amass_root,
         output_path=args.output,
         max_samples=args.max_samples,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
     )
 
     # Optionally merge with synthetic data
     if args.merge:
         merge_with_synthetic_dataset(
             amass_data_path=args.output,
-            synthetic_data_path='data/train_data_embedded.pt',
-            output_path='data/train_data_merged.pt'
+            synthetic_data_path="data/train_data_embedded.pt",
+            output_path="data/train_data_merged.pt",
         )
-

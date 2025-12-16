@@ -46,17 +46,11 @@ print("-" * 70)
 
 try:
     # Create action embedding layer (from template)
-    action_embedding = nn.Embedding(
-        num_embeddings=NUM_ACTIONS,
-        embedding_dim=64
-    )
+    action_embedding = nn.Embedding(num_embeddings=NUM_ACTIONS, embedding_dim=64)
 
     # Create action projection layer
     action_projection = nn.Sequential(
-        nn.Linear(64, D_MODEL),
-        nn.LayerNorm(D_MODEL),
-        nn.ReLU(),
-        nn.Dropout(0.1)
+        nn.Linear(64, D_MODEL), nn.LayerNorm(D_MODEL), nn.ReLU(), nn.Dropout(0.1)
     )
 
     # Test with random action indices
@@ -67,10 +61,16 @@ try:
     action_features = action_projection(action_emb)
 
     # Verify shapes
-    assert action_emb.shape == (BATCH_SIZE, SEQ_LEN, 64), \
-        f"Expected {(BATCH_SIZE, SEQ_LEN, 64)}, got {action_emb.shape}"
-    assert action_features.shape == (BATCH_SIZE, SEQ_LEN, D_MODEL), \
-        f"Expected {(BATCH_SIZE, SEQ_LEN, D_MODEL)}, got {action_features.shape}"
+    assert action_emb.shape == (
+        BATCH_SIZE,
+        SEQ_LEN,
+        64,
+    ), f"Expected {(BATCH_SIZE, SEQ_LEN, 64)}, got {action_emb.shape}"
+    assert action_features.shape == (
+        BATCH_SIZE,
+        SEQ_LEN,
+        D_MODEL,
+    ), f"Expected {(BATCH_SIZE, SEQ_LEN, D_MODEL)}, got {action_features.shape}"
 
     # Count parameters
     embedding_params = sum(p.numel() for p in action_embedding.parameters())
@@ -103,7 +103,7 @@ try:
         nn.LayerNorm(D_MODEL // 2),
         nn.ReLU(),
         nn.Dropout(0.1),
-        nn.Linear(D_MODEL // 2, NUM_ACTIONS)
+        nn.Linear(D_MODEL // 2, NUM_ACTIONS),
     )
 
     # Test with random features
@@ -113,8 +113,11 @@ try:
     action_logits = action_predictor(random_features)
 
     # Verify shape
-    assert action_logits.shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS), \
-        f"Expected {(BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)}, got {action_logits.shape}"
+    assert action_logits.shape == (
+        BATCH_SIZE,
+        SEQ_LEN,
+        NUM_ACTIONS,
+    ), f"Expected {(BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)}, got {action_logits.shape}"
 
     # Count parameters
     predictor_params = sum(p.numel() for p in action_predictor.parameters())
@@ -139,7 +142,9 @@ print("-" * 70)
 
 try:
     # Create mock outputs and targets
-    mock_action_logits = torch.randn(BATCH_SIZE, SEQ_LEN, NUM_ACTIONS, requires_grad=True)
+    mock_action_logits = torch.randn(
+        BATCH_SIZE, SEQ_LEN, NUM_ACTIONS, requires_grad=True
+    )
     target_actions = torch.randint(0, NUM_ACTIONS, (BATCH_SIZE, SEQ_LEN))
 
     # Reshape for cross-entropy
@@ -156,10 +161,14 @@ try:
     # Verify loss properties
     assert action_loss.dim() == 0, "Loss should be scalar"
     assert action_loss.requires_grad, "Loss should require gradients"
-    assert 0.0 <= action_accuracy <= 1.0, f"Accuracy should be in [0, 1], got {action_accuracy}"
+    assert (
+        0.0 <= action_accuracy <= 1.0
+    ), f"Accuracy should be in [0, 1], got {action_accuracy}"
 
     print(f"✓ Action loss: {action_loss.item():.4f}")
-    print(f"✓ Action accuracy: {action_accuracy.item():.4f} ({action_accuracy.item()*100:.2f}%)")
+    print(
+        f"✓ Action accuracy: {action_accuracy.item():.4f} ({action_accuracy.item()*100:.2f}%)"
+    )
     print(f"✓ Loss is scalar: {action_loss.dim() == 0}")
     print(f"✓ Loss requires grad: {action_loss.requires_grad}")
     print("✓ Test 3 PASSED")
@@ -194,7 +203,7 @@ try:
                 nn.Linear(64, D_MODEL),
                 nn.LayerNorm(D_MODEL),
                 nn.ReLU(),
-                nn.Dropout(0.1)
+                nn.Dropout(0.1),
             )
 
             # Simple transformer encoder
@@ -203,9 +212,11 @@ try:
                 nhead=12,
                 dim_feedforward=D_MODEL * 4,
                 dropout=0.1,
-                batch_first=True
+                batch_first=True,
             )
-            self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=2)
+            self.transformer_encoder = nn.TransformerEncoder(
+                encoder_layer, num_layers=2
+            )
 
             # Decoders
             self.pose_decoder = nn.Linear(D_MODEL, OUTPUT_DIM)
@@ -218,13 +229,17 @@ try:
                 nn.LayerNorm(D_MODEL // 2),
                 nn.ReLU(),
                 nn.Dropout(0.1),
-                nn.Linear(D_MODEL // 2, NUM_ACTIONS)
+                nn.Linear(D_MODEL // 2, NUM_ACTIONS),
             )
 
         def forward(self, motion_sequence, text_embedding, action_sequence=None):
             # Embed motion and text
             motion_features = self.motion_embedding(motion_sequence)
-            text_features = self.text_projection(text_embedding).unsqueeze(1).expand(-1, SEQ_LEN, -1)
+            text_features = (
+                self.text_projection(text_embedding)
+                .unsqueeze(1)
+                .expand(-1, SEQ_LEN, -1)
+            )
 
             # Action conditioning (from template)
             if action_sequence is not None:
@@ -244,10 +259,10 @@ try:
             action_logits = self.action_predictor(encoded)
 
             return {
-                'pose': pose_output,
-                'position': position_output,
-                'velocity': velocity_output,
-                'action_logits': action_logits
+                "pose": pose_output,
+                "position": position_output,
+                "velocity": velocity_output,
+                "action_logits": action_logits,
             }
 
     # Create model
@@ -262,22 +277,30 @@ try:
     outputs_with_actions = model(motion_sequence, text_embedding, action_sequence)
 
     # Verify all outputs present
-    assert 'pose' in outputs_with_actions, "Missing 'pose' output"
-    assert 'position' in outputs_with_actions, "Missing 'position' output"
-    assert 'velocity' in outputs_with_actions, "Missing 'velocity' output"
-    assert 'action_logits' in outputs_with_actions, "Missing 'action_logits' output"
+    assert "pose" in outputs_with_actions, "Missing 'pose' output"
+    assert "position" in outputs_with_actions, "Missing 'position' output"
+    assert "velocity" in outputs_with_actions, "Missing 'velocity' output"
+    assert "action_logits" in outputs_with_actions, "Missing 'action_logits' output"
 
     # Verify shapes
-    assert outputs_with_actions['pose'].shape == (BATCH_SIZE, SEQ_LEN, OUTPUT_DIM)
-    assert outputs_with_actions['position'].shape == (BATCH_SIZE, SEQ_LEN, 2)
-    assert outputs_with_actions['velocity'].shape == (BATCH_SIZE, SEQ_LEN, 2)
-    assert outputs_with_actions['action_logits'].shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)
+    assert outputs_with_actions["pose"].shape == (BATCH_SIZE, SEQ_LEN, OUTPUT_DIM)
+    assert outputs_with_actions["position"].shape == (BATCH_SIZE, SEQ_LEN, 2)
+    assert outputs_with_actions["velocity"].shape == (BATCH_SIZE, SEQ_LEN, 2)
+    assert outputs_with_actions["action_logits"].shape == (
+        BATCH_SIZE,
+        SEQ_LEN,
+        NUM_ACTIONS,
+    )
 
     # Test forward pass WITHOUT action conditioning (backward compatibility)
-    outputs_without_actions = model(motion_sequence, text_embedding, action_sequence=None)
+    outputs_without_actions = model(
+        motion_sequence, text_embedding, action_sequence=None
+    )
 
     # Verify all outputs still present
-    assert 'action_logits' in outputs_without_actions, "Missing 'action_logits' in no-action mode"
+    assert (
+        "action_logits" in outputs_without_actions
+    ), "Missing 'action_logits' in no-action mode"
 
     # Count total parameters
     total_params = sum(p.numel() for p in model.parameters())
@@ -296,6 +319,7 @@ try:
 except Exception as e:
     print(f"✗ Test 4 FAILED: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -320,10 +344,10 @@ try:
     outputs = model(motion_sequence, text_embedding, action_sequence)
 
     # Compute losses (from template)
-    pose_loss = F.mse_loss(outputs['pose'], target_pose)
+    pose_loss = F.mse_loss(outputs["pose"], target_pose)
 
     # Action loss
-    action_logits_flat = outputs['action_logits'].reshape(-1, NUM_ACTIONS)
+    action_logits_flat = outputs["action_logits"].reshape(-1, NUM_ACTIONS)
     target_actions_flat = target_actions.reshape(-1)
     action_loss = F.cross_entropy(action_logits_flat, target_actions_flat)
 
@@ -365,6 +389,7 @@ try:
 except Exception as e:
     print(f"✗ Test 5 FAILED: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -381,13 +406,16 @@ try:
     # Test 6a: All same action
     same_action = torch.full((BATCH_SIZE, SEQ_LEN), 5, dtype=torch.long)  # All WALK
     outputs_same = model(motion_sequence, text_embedding, same_action)
-    assert outputs_same['action_logits'].shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)
+    assert outputs_same["action_logits"].shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)
     print("✓ All same action: OK")
 
     # Test 6b: Sequential actions (0, 1, 2, ..., 59, 0, 1, ...)
-    sequential_actions = torch.arange(SEQ_LEN, dtype=torch.long).unsqueeze(0).expand(BATCH_SIZE, -1) % NUM_ACTIONS
+    sequential_actions = (
+        torch.arange(SEQ_LEN, dtype=torch.long).unsqueeze(0).expand(BATCH_SIZE, -1)
+        % NUM_ACTIONS
+    )
     outputs_seq = model(motion_sequence, text_embedding, sequential_actions)
-    assert outputs_seq['action_logits'].shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)
+    assert outputs_seq["action_logits"].shape == (BATCH_SIZE, SEQ_LEN, NUM_ACTIONS)
     print("✓ Sequential actions: OK")
 
     # Test 6c: Batch size = 1
@@ -395,7 +423,7 @@ try:
     single_text = text_embedding[:1]
     single_action = action_sequence[:1]
     outputs_single = model(single_motion, single_text, single_action)
-    assert outputs_single['action_logits'].shape == (1, SEQ_LEN, NUM_ACTIONS)
+    assert outputs_single["action_logits"].shape == (1, SEQ_LEN, NUM_ACTIONS)
     print("✓ Batch size = 1: OK")
 
     # Test 6d: Perfect predictions (accuracy = 1.0)
@@ -403,11 +431,15 @@ try:
     perfect_targets = torch.randint(0, NUM_ACTIONS, (BATCH_SIZE, SEQ_LEN))
     for b in range(BATCH_SIZE):
         for t in range(SEQ_LEN):
-            perfect_logits[b, t, perfect_targets[b, t]] = 10.0  # High logit for correct class
+            perfect_logits[b, t, perfect_targets[b, t]] = (
+                10.0  # High logit for correct class
+            )
 
     perfect_preds = torch.argmax(perfect_logits.reshape(-1, NUM_ACTIONS), dim=-1)
     perfect_accuracy = (perfect_preds == perfect_targets.reshape(-1)).float().mean()
-    assert perfect_accuracy == 1.0, f"Perfect accuracy should be 1.0, got {perfect_accuracy}"
+    assert (
+        perfect_accuracy == 1.0
+    ), f"Perfect accuracy should be 1.0, got {perfect_accuracy}"
     print(f"✓ Perfect predictions: Accuracy = {perfect_accuracy:.2f}")
 
     print("✓ Test 6 PASSED")
@@ -415,6 +447,7 @@ try:
 except Exception as e:
     print(f"✗ Test 6 FAILED: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -447,4 +480,3 @@ print("2. Add action sequences to existing 100k dataset")
 print("3. Train Phase 1 model with action conditioning")
 print("4. Validate action prediction accuracy (target: >80%)")
 print()
-

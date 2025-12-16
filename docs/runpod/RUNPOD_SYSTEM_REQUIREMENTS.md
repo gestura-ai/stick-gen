@@ -5,15 +5,20 @@ continued pretraining on RunPod using the **curated dataset pipeline**.
 
 ## 1. Pipelines and assumptions
 
-Two data prep modes share the same training code:
+Three data prep modes share the same training code:
 
 - **Legacy pipeline**
   - Raw data (100STYLE, AMASS, synthetic, etc.) → `scripts/prepare_data.py`
   - Output: `data/train_data_final.pt` (embedding-augmented)
-- **Curated pipeline** (new)
+- **Curated pipeline**
   - Canonical `.pt` from real datasets → `scripts/prepare_curated_datasets.py`
   - Outputs: `pretrain_data.pt`, `sft_data.pt`, `curation_stats.json`
   - Then `scripts/build_dataset_for_training.py` adds text embeddings.
+- **2.5D Parallax Augmentation pipeline**
+  - Canonical `.pt` → `stick-gen generate-data --augment-parallax`
+  - Output: `data/2.5d_parallax/sample_XXXXXX/actor_Y/*.png` + `metadata.json`
+  - Used by `MultimodalParallaxDataset` for image+motion multimodal training
+  - Requires Node.js runtime and npm packages: `three`, `pngjs`, `gl` (headless-gl)
 
 Assumptions in estimates below:
 
@@ -65,7 +70,24 @@ Example ballparks:
 | Medium   | 2.0 M             | ~6–8 GB                       | ~8–10 GB                |
 | Large    | 5.0 M             | ~15–20 GB                     | ~20–25 GB               |
 
-### 2.3 Network volume sizing
+### 2.3 2.5D Parallax augmentation storage
+
+The parallax pipeline generates PNG frames for each `(sample, actor, view)` combination:
+
+- Default: 250 views × 4 frames/view = **1,000 PNGs per actor**
+- Each PNG: 256×256 RGB ≈ **50–100 KB** (compressed)
+- Per-sample with 2 actors: ≈ **100–200 MB**
+
+| Samples | Actors | Views | Frames/View | Estimated Size |
+|--------:|-------:|------:|------------:|---------------:|
+| 10k     | 1      | 250   | 4           | ~5–10 GB       |
+| 50k     | 1      | 250   | 4           | ~25–50 GB      |
+| 100k    | 2      | 250   | 4           | ~100–200 GB    |
+| 500k    | 1      | 50    | 2           | ~25–50 GB      |
+
+**Tip:** Use fewer `--views-per-motion` and `--frames-per-view` for development/testing.
+
+### 2.4 Network volume sizing
 
 A RunPod Network Volume must hold:
 
@@ -75,7 +97,9 @@ A RunPod Network Volume must hold:
    - From table above: typically **< 25 GB** even for large curated runs.
 3. **Training datasets with embeddings**
    - 1–25 GB depending on `N_pre` and whether you keep multiple versions.
-4. **Checkpoints + logs**
+4. **2.5D Parallax data** (if enabled)
+   - 5–200 GB depending on sample count and view/frame settings.
+5. **Checkpoints + logs**
    - Each checkpoint ≈ 250–300 MB (base/large models).
    - Keeping 5–10 checkpoints per variant + logs: plan **10–30 GB**.
 
@@ -86,11 +110,13 @@ A RunPod Network Volume must hold:
 | Legacy pipeline only, single run          | 120 GB         |
 | Curated pipeline, ≤ 2M curated samples    | 160 GB         |
 | Curated pipeline, up to ~5M samples + CKPT history | 200 GB |
+| **With 2.5D parallax augmentation**       | **250 GB**     |
 
 You can reduce requirements by:
 
 - Deleting raw text after canonicalization.
 - Pruning older checkpoints once best models are pushed to HuggingFace.
+- Using lower `--views-per-motion` / `--frames-per-view` for parallax.
 
 ## 3. GPU / CPU requirements
 
@@ -167,3 +193,53 @@ For planning:
 Combine these estimates with Section 3 to choose an appropriate GPU type and budget
 for both **curated data prep** and **continued pretraining** runs on RunPod.
 
+## 5. 2.5D Parallax Augmentation Requirements
+
+The parallax pipeline uses a headless Three.js renderer to generate multi-view PNG frames.
+
+### 5.1 System dependencies
+
+The Docker image (`docker/Dockerfile`) includes all required dependencies:
+
+- **Node.js 20.x LTS** (required for `threejs_parallax_renderer.js`)
+- **npm packages**: `three`, `pngjs`, `gl` (headless-gl)
+- **System libraries** (for headless WebGL via `gl`):
+  - `libxi-dev`
+  - `libgl1-mesa-dev`
+  - `libglew-dev`
+  - `xvfb` (virtual framebuffer for headless rendering)
+
+### 5.2 Runtime requirements
+
+- **CPU-bound**: The Node.js renderer runs on CPU; no GPU required for rendering
+- **Memory**: ~2-4 GB RAM per rendering process
+- **Disk I/O**: High write throughput for PNG output (consider SSD storage)
+
+### 5.3 Time estimates
+
+Rendering time scales with: `samples × actors × views × frames`
+
+| Samples | Actors | Views | Frames | Est. Time (4-core) |
+|--------:|-------:|------:|-------:|-------------------:|
+| 1k      | 1      | 250   | 4      | ~1-2 hours         |
+| 10k     | 1      | 250   | 4      | ~10-20 hours       |
+| 50k     | 1      | 50    | 2      | ~5-10 hours        |
+
+**Tips:**
+- Use `--max-samples N` for incremental/test runs
+- Run in parallel across multiple CPU-only pods for large datasets
+- Reduce `--views-per-motion` and `--frames-per-view` for faster iteration
+
+### 5.4 CLI usage
+
+```bash
+# Generate parallax data for training
+stick-gen generate-data \
+  --config configs/medium.yaml \
+  --augment-parallax \
+  --views-per-motion 250 \
+  --frames-per-view 4 \
+  --output /runpod-volume/data/2.5d_parallax
+```
+
+See `README.md` and `docs/architecture/RENDERING.md` for full documentation.

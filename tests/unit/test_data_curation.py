@@ -15,7 +15,9 @@ from src.data_gen.curation import (
 )
 
 
-def make_sample(quality: float, dominant_action: str = "walk", with_camera: bool = True):
+def make_sample(
+    quality: float, dominant_action: str = "walk", with_camera: bool = True
+):
     # Minimal canonical-like sample
     motion = torch.zeros(10, 1, 20)
     physics = torch.zeros(10, 1, 6)
@@ -56,10 +58,14 @@ def test_curate_samples_balances_actions():
     samples = [make_sample(0.9, "walk") for _ in range(8)] + [
         make_sample(0.9, "run") for _ in range(2)
     ]
-    cfg = CurationConfig(min_quality_pretrain=0.5, min_quality_sft=0.8, balance_max_fraction=0.4)
+    cfg = CurationConfig(
+        min_quality_pretrain=0.5, min_quality_sft=0.8, balance_max_fraction=0.4
+    )
 
     # Use non-enhanced filtering to skip physics validation
-    pretrain, sft, stats = curate_samples(samples, cfg, seed=123, use_enhanced_filtering=False)
+    pretrain, sft, stats = curate_samples(
+        samples, cfg, seed=123, use_enhanced_filtering=False
+    )
 
     # All high-quality samples should be available for pretraining
     assert len(pretrain) == 10
@@ -79,7 +85,9 @@ def test_curate_samples_handles_missing_quality():
     s = make_sample(0.9)
     del s["quality_score"]
     del s["annotations"]["quality"]
-    pretrain, sft, stats = curate_samples([s], CurationConfig(), use_enhanced_filtering=False)
+    pretrain, sft, stats = curate_samples(
+        [s], CurationConfig(), use_enhanced_filtering=False
+    )
 
     assert len(pretrain) == 0
     assert len(sft) == 0
@@ -143,10 +151,7 @@ def test_get_sequence_length():
 
 def test_filter_by_length():
     """Test length-based filtering."""
-    samples = [
-        {"motion": torch.randn(T, 20)}
-        for T in [10, 50, 100, 200, 600]
-    ]
+    samples = [{"motion": torch.randn(T, 20)} for T in [10, 50, 100, 200, 600]]
     cfg = CurationConfig(min_frames=25, max_frames=500)
 
     filtered, dropped = filter_by_length(samples, cfg)
@@ -282,4 +287,3 @@ def test_curate_samples_enhanced_filtering():
     # Stats should include source distribution
     if stats["pretrain"]["num_samples"] > 0:
         assert "source_distribution" in stats["pretrain"]
-

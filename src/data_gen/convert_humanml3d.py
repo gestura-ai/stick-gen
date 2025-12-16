@@ -25,99 +25,92 @@ from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # HumanML3D joint indices (SMPL 22-joint model)
 # We map these to our 5-segment stick figure
 HUMANML3D_JOINTS = {
-    'pelvis': 0,
-    'left_hip': 1,
-    'right_hip': 2,
-    'spine1': 3,
-    'left_knee': 4,
-    'right_knee': 5,
-    'spine2': 6,
-    'left_ankle': 7,
-    'right_ankle': 8,
-    'spine3': 9,
-    'left_foot': 10,
-    'right_foot': 11,
-    'neck': 12,
-    'left_collar': 13,
-    'right_collar': 14,
-    'head': 15,
-    'left_shoulder': 16,
-    'right_shoulder': 17,
-    'left_elbow': 18,
-    'right_elbow': 19,
-    'left_wrist': 20,
-    'right_wrist': 21,
+    "pelvis": 0,
+    "left_hip": 1,
+    "right_hip": 2,
+    "spine1": 3,
+    "left_knee": 4,
+    "right_knee": 5,
+    "spine2": 6,
+    "left_ankle": 7,
+    "right_ankle": 8,
+    "spine3": 9,
+    "left_foot": 10,
+    "right_foot": 11,
+    "neck": 12,
+    "left_collar": 13,
+    "right_collar": 14,
+    "head": 15,
+    "left_shoulder": 16,
+    "right_shoulder": 17,
+    "left_elbow": 18,
+    "right_elbow": 19,
+    "left_wrist": 20,
+    "right_wrist": 21,
 }
 
 # Action keywords to ActionType mapping for text-based inference
 ACTION_KEYWORDS = {
     # Walking/Running
-    r'\bwalk(s|ing|ed)?\b': ActionType.WALK,
-    r'\brun(s|ning|ran)?\b': ActionType.RUN,
-    r'\bjog(s|ging|ged)?\b': ActionType.RUN,
-    r'\bsprint(s|ing|ed)?\b': ActionType.SPRINT,
-    r'\bstep(s|ping|ped)?\b': ActionType.WALK,
-    r'\bpace(s|d|ing)?\b': ActionType.WALK,
-    r'\bstroll(s|ing|ed)?\b': ActionType.WALK,
-    r'\bmarch(es|ing|ed)?\b': ActionType.WALK,
-
+    r"\bwalk(s|ing|ed)?\b": ActionType.WALK,
+    r"\brun(s|ning|ran)?\b": ActionType.RUN,
+    r"\bjog(s|ging|ged)?\b": ActionType.RUN,
+    r"\bsprint(s|ing|ed)?\b": ActionType.SPRINT,
+    r"\bstep(s|ping|ped)?\b": ActionType.WALK,
+    r"\bpace(s|d|ing)?\b": ActionType.WALK,
+    r"\bstroll(s|ing|ed)?\b": ActionType.WALK,
+    r"\bmarch(es|ing|ed)?\b": ActionType.WALK,
     # Jumping
-    r'\bjump(s|ing|ed)?\b': ActionType.JUMP,
-    r'\bhop(s|ping|ped)?\b': ActionType.JUMP,
-    r'\bleap(s|ing|ed|t)?\b': ActionType.JUMP,
-    r'\bskip(s|ping|ped)?\b': ActionType.JUMP,
-
+    r"\bjump(s|ing|ed)?\b": ActionType.JUMP,
+    r"\bhop(s|ping|ped)?\b": ActionType.JUMP,
+    r"\bleap(s|ing|ed|t)?\b": ActionType.JUMP,
+    r"\bskip(s|ping|ped)?\b": ActionType.JUMP,
     # Dancing
-    r'\bdanc(e|es|ing|ed|er)?\b': ActionType.DANCE,
-    r'\bballet\b': ActionType.DANCE,
-    r'\bwaltz(es|ing|ed)?\b': ActionType.DANCE,
-    r'\bspin(s|ning)?\b': ActionType.DANCE,
-    r'\btwirl(s|ing|ed)?\b': ActionType.DANCE,
-    r'\bperform(s|ing|ed|ance)?\b': ActionType.DANCE,
-
+    r"\bdanc(e|es|ing|ed|er)?\b": ActionType.DANCE,
+    r"\bballet\b": ActionType.DANCE,
+    r"\bwaltz(es|ing|ed)?\b": ActionType.DANCE,
+    r"\bspin(s|ning)?\b": ActionType.DANCE,
+    r"\btwirl(s|ing|ed)?\b": ActionType.DANCE,
+    r"\bperform(s|ing|ed|ance)?\b": ActionType.DANCE,
     # Sitting/Standing
-    r'\bsit(s|ting|sat)?\b': ActionType.SIT,
-    r'\bstand(s|ing|stood)?\b': ActionType.STAND,
-    r'\bkneel(s|ing|ed)?\b': ActionType.KNEEL,
-    r'\blie(s)?\s*(down)?\b': ActionType.LIE_DOWN,
-    r'\blay(s|ing)?\s*(down)?\b': ActionType.LIE_DOWN,
-
+    r"\bsit(s|ting|sat)?\b": ActionType.SIT,
+    r"\bstand(s|ing|stood)?\b": ActionType.STAND,
+    r"\bkneel(s|ing|ed)?\b": ActionType.KNEEL,
+    r"\blie(s)?\s*(down)?\b": ActionType.LIE_DOWN,
+    r"\blay(s|ing)?\s*(down)?\b": ActionType.LIE_DOWN,
     # Punching/Kicking/Fighting
-    r'\bpunch(es|ing|ed)?\b': ActionType.PUNCH,
-    r'\bkick(s|ing|ed)?\b': ActionType.KICK,
-    r'\bfight(s|ing|fought)?\b': ActionType.FIGHT,
-    r'\bbox(es|ing|ed)?\b': ActionType.PUNCH,
-    r'\bdodge(s|d|ing)?\b': ActionType.DODGE,
-
+    r"\bpunch(es|ing|ed)?\b": ActionType.PUNCH,
+    r"\bkick(s|ing|ed)?\b": ActionType.KICK,
+    r"\bfight(s|ing|fought)?\b": ActionType.FIGHT,
+    r"\bbox(es|ing|ed)?\b": ActionType.PUNCH,
+    r"\bdodge(s|d|ing)?\b": ActionType.DODGE,
     # Waving/Gestures
-    r'\bwave(s|d|ing)?\b': ActionType.WAVE,
-    r'\bpoint(s|ing|ed)?\b': ActionType.POINT,
-    r'\bclap(s|ping|ped)?\b': ActionType.CLAP,
-
+    r"\bwave(s|d|ing)?\b": ActionType.WAVE,
+    r"\bpoint(s|ing|ed)?\b": ActionType.POINT,
+    r"\bclap(s|ping|ped)?\b": ActionType.CLAP,
     # Throwing/Catching
-    r'\bthrow(s|ing|threw|n)?\b': ActionType.THROWING,
-    r'\bcatch(es|ing|caught)?\b': ActionType.CATCHING,
-    r'\bpitch(es|ing|ed)?\b': ActionType.PITCHING,
-
+    r"\bthrow(s|ing|threw|n)?\b": ActionType.THROWING,
+    r"\bcatch(es|ing|caught)?\b": ActionType.CATCHING,
+    r"\bpitch(es|ing|ed)?\b": ActionType.PITCHING,
     # Climbing/Crawling
-    r'\bclimb(s|ing|ed)?\b': ActionType.CLIMBING,
-    r'\bcrawl(s|ing|ed)?\b': ActionType.CRAWLING,
-    r'\bswim(s|ming|swam)?\b': ActionType.SWIMMING,
-
+    r"\bclimb(s|ing|ed)?\b": ActionType.CLIMBING,
+    r"\bcrawl(s|ing|ed)?\b": ActionType.CRAWLING,
+    r"\bswim(s|ming|swam)?\b": ActionType.SWIMMING,
     # Eating/Drinking
-    r'\beat(s|ing|ate)?\b': ActionType.EATING,
-    r'\bdrink(s|ing|drank)?\b': ActionType.DRINKING,
-
+    r"\beat(s|ing|ate)?\b": ActionType.EATING,
+    r"\bdrink(s|ing|drank)?\b": ActionType.DRINKING,
     # Emotional
-    r'\bcelebrat(e|es|ing|ed)?\b': ActionType.CELEBRATE,
-    r'\bcry(ing|ied)?\b': ActionType.CRY,
-    r'\blaugh(s|ing|ed)?\b': ActionType.LAUGH,
+    r"\bcelebrat(e|es|ing|ed)?\b": ActionType.CELEBRATE,
+    r"\bcry(ing|ied)?\b": ActionType.CRY,
+    r"\blaugh(s|ing|ed)?\b": ActionType.LAUGH,
 }
 
 
@@ -168,12 +161,12 @@ def _load_texts_from_zip(zip_path: str) -> dict[str, list[str]]:
                         content = f.read().decode("utf-8")
                         # Parse annotations - each line may have format: "text#start#end"
                         lines = []
-                        for line in content.strip().split('\n'):
+                        for line in content.strip().split("\n"):
                             line = line.strip()
                             if not line:
                                 continue
                             # Extract just the text description (before any # delimiters)
-                            parts = line.split('#')
+                            parts = line.split("#")
                             if parts[0].strip():
                                 lines.append(parts[0].strip())
                         mapping[clip_id] = lines
@@ -191,7 +184,7 @@ def _infer_action_from_text(texts: list[str]) -> ActionType:
         return ActionType.IDLE
 
     # Combine all texts for matching
-    combined = ' '.join(texts).lower()
+    combined = " ".join(texts).lower()
 
     # Count matches for each action
     action_scores: dict[ActionType, int] = {}
@@ -247,8 +240,8 @@ def _features_to_stick(feats: np.ndarray) -> np.ndarray:
         # Torso: neck (index 11) to pelvis (approximated as mean of hips)
         # In local coords, pelvis is at origin, so use spine/neck
         neck_idx = 11  # neck in 21-joint (0-indexed after root)
-        spine_idx = 5   # spine2
-        stick[:, 0, 0:2] = joint_2d[:, neck_idx]      # head/neck
+        spine_idx = 5  # spine2
+        stick[:, 0, 0:2] = joint_2d[:, neck_idx]  # head/neck
         stick[:, 0, 2:4] = joint_2d[:, spine_idx] * 0  # pelvis at origin
 
         # Left arm: shoulder (15) to wrist (19)
@@ -287,6 +280,8 @@ def _features_to_stick(feats: np.ndarray) -> np.ndarray:
         pad = np.zeros((T, 20 - D), dtype=feats.dtype)
         arr = np.concatenate([feats, pad], axis=1)
     return arr.astype(np.float32)
+
+
 def _generate_camera_from_motion(motion: torch.Tensor) -> torch.Tensor | None:
     """Generate basic camera data based on motion trajectory.
 
@@ -309,6 +304,7 @@ def _generate_camera_from_motion(motion: torch.Tensor) -> torch.Tensor | None:
 
     # Smooth the camera trajectory
     from scipy.ndimage import gaussian_filter1d
+
     try:
         center_x = gaussian_filter1d(center_x, sigma=5)
         center_y = gaussian_filter1d(center_y, sigma=5)
@@ -316,8 +312,8 @@ def _generate_camera_from_motion(motion: torch.Tensor) -> torch.Tensor | None:
         # Fallback: simple moving average
         kernel_size = 5
         kernel = np.ones(kernel_size) / kernel_size
-        center_x = np.convolve(center_x, kernel, mode='same')
-        center_y = np.convolve(center_y, kernel, mode='same')
+        center_x = np.convolve(center_x, kernel, mode="same")
+        center_y = np.convolve(center_y, kernel, mode="same")
 
     # Zoom based on motion spread
     spread = np.std(all_x, axis=1) + np.std(all_y, axis=1)
@@ -328,11 +324,13 @@ def _generate_camera_from_motion(motion: torch.Tensor) -> torch.Tensor | None:
     return torch.from_numpy(camera)
 
 
-def _build_sample(feats: np.ndarray,
-                  texts: list[str],
-                  clip_id: str,
-                  stats_fps: int = 20,
-                  include_camera: bool = False) -> dict[str, Any]:
+def _build_sample(
+    feats: np.ndarray,
+    texts: list[str],
+    clip_id: str,
+    stats_fps: int = 20,
+    include_camera: bool = False,
+) -> dict[str, Any]:
     """Build a canonical sample dict from HumanML3D features.
 
     Args:
@@ -356,7 +354,9 @@ def _build_sample(feats: np.ndarray,
     actions = torch.full((T,), action_idx, dtype=torch.long)
 
     # Use first text as primary description, keep all for training
-    description = texts[0] if texts else f"A human motion clip from HumanML3D ({clip_id})."
+    description = (
+        texts[0] if texts else f"A human motion clip from HumanML3D ({clip_id})."
+    )
 
     # Generate camera if requested
     camera = _generate_camera_from_motion(motion) if include_camera else None
@@ -379,7 +379,9 @@ def _build_sample(feats: np.ndarray,
     }
 
 
-def _process_single_clip(args: tuple[str, dict[str, np.ndarray], dict[str, list[str]], int, bool, float]) -> dict[str, Any] | None:
+def _process_single_clip(
+    args: tuple[str, dict[str, np.ndarray], dict[str, list[str]], int, bool, float],
+) -> dict[str, Any] | None:
     """Process a single clip (for parallel processing).
 
     Returns sample dict or None if validation fails.
@@ -402,7 +404,9 @@ def _process_single_clip(args: tuple[str, dict[str, np.ndarray], dict[str, list[
 
         feats_denorm = _denorm(feats, stats)
         texts = text_map.get(clip_id, [])
-        sample = _build_sample(feats_denorm, texts, clip_id, stats_fps=fps, include_camera=include_camera)
+        sample = _build_sample(
+            feats_denorm, texts, clip_id, stats_fps=fps, include_camera=include_camera
+        )
 
         # Physics validation with configurable threshold
         validator = DataValidator(fps=fps)
@@ -480,9 +484,14 @@ def convert_humanml3d(
 
     if num_workers > 1:
         # Parallel processing
-        args_list = [(p, stats, text_map, fps, include_camera, physics_threshold) for p in paths]
+        args_list = [
+            (p, stats, text_map, fps, include_camera, physics_threshold) for p in paths
+        ]
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_process_single_clip, args): args[0] for args in args_list}
+            futures = {
+                executor.submit(_process_single_clip, args): args[0]
+                for args in args_list
+            }
             for future in as_completed(futures):
                 result = future.result()
                 if result is not None:
@@ -495,7 +504,9 @@ def convert_humanml3d(
             if i % 500 == 0:
                 logger.info(f"Processing {i}/{len(paths)}...")
 
-            result = _process_single_clip((path, stats, text_map, fps, include_camera, physics_threshold))
+            result = _process_single_clip(
+                (path, stats, text_map, fps, include_camera, physics_threshold)
+            )
             if result is not None:
                 samples.append(result)
             else:
@@ -540,22 +551,38 @@ Examples:
 Prerequisites:
     Download HumanML3D from: https://github.com/EricGuo5513/HumanML3D
     Required files: new_joint_vecs/*.npy, Mean.npy, Std.npy, texts.zip
-        """
+        """,
     )
-    parser.add_argument("--root", type=str, required=True,
-                        help="Root directory of HumanML3D")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
-    parser.add_argument("--fps", type=int, default=20,
-                        help="Frame rate (default: 20)")
-    parser.add_argument("--max-clips", type=int, default=-1,
-                        help="Maximum clips to process (-1 for all)")
-    parser.add_argument("--include-camera", action="store_true",
-                        help="Generate camera data from motion trajectory")
-    parser.add_argument("--physics-threshold", type=float, default=2.0,
-                        help="Physics validation threshold multiplier (default: 2.0)")
-    parser.add_argument("--num-workers", type=int, default=1,
-                        help="Number of parallel workers (default: 1)")
+    parser.add_argument(
+        "--root", type=str, required=True, help="Root directory of HumanML3D"
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
+    parser.add_argument("--fps", type=int, default=20, help="Frame rate (default: 20)")
+    parser.add_argument(
+        "--max-clips",
+        type=int,
+        default=-1,
+        help="Maximum clips to process (-1 for all)",
+    )
+    parser.add_argument(
+        "--include-camera",
+        action="store_true",
+        help="Generate camera data from motion trajectory",
+    )
+    parser.add_argument(
+        "--physics-threshold",
+        type=float,
+        default=2.0,
+        help="Physics validation threshold multiplier (default: 2.0)",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=1,
+        help="Number of parallel workers (default: 1)",
+    )
     args = parser.parse_args()
 
     convert_humanml3d(

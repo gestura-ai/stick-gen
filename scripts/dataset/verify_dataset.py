@@ -4,7 +4,10 @@ import sys
 import torch
 
 # Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+
 
 def verify_dataset(path="data/test_data.pt"):
     if not os.path.exists(path):
@@ -24,7 +27,10 @@ def verify_dataset(path="data/test_data.pt"):
             if sample["camera"].shape[1] != 3:
                 print(f"Error: Invalid camera shape {sample['camera'].shape}")
 
-        if "heist" in sample["description"].lower() or "dance" in sample["description"].lower():
+        if (
+            "heist" in sample["description"].lower()
+            or "dance" in sample["description"].lower()
+        ):
             has_llm_content = True
 
     print(f"Has Camera Data: {has_camera}")
@@ -34,6 +40,7 @@ def verify_dataset(path="data/test_data.pt"):
         print("SUCCESS: Dataset verification passed!")
     else:
         print("FAILURE: Dataset verification failed.")
+
 
 if __name__ == "__main__":
     from src.data_gen.dataset_generator import generate_dataset

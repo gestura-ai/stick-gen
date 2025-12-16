@@ -6,7 +6,9 @@
 metadata:
   variant: "sft_large"
   display_name: "Stick-Gen Large (SFT)"
-  expected_params: 28_000_000  # 28M base parameters
+  # See docs/MODEL_SIZES.md for detailed breakdown
+  expected_params_motion_only: 44_618_362   # 44.6M (motion-only)
+  expected_params_multimodal: 71_282_874    # 71.3M (with ResNet encoder + cross-attention)
   recommended_hardware:
     cpu: "Not recommended"
     ram: "32GB+"
@@ -26,6 +28,9 @@ model:
   embedding_dim: 1024
   dropout: 0.1
   num_actions: 64
+  # Multimodal image conditioning (when data.use_parallax_augmentation: true)
+  image_encoder_arch: "resnet"
+  fusion_strategy: "cross_attention"
 
 # Training Settings (SFT-specific: lower LR, fewer epochs)
 training:
@@ -76,6 +81,10 @@ data:
   curated_sft_data: "data/curated/sft_data_embedded.pt"
   checkpoint_dir: "checkpoints/sft_large"
   log_dir: "logs/sft_large"
+  use_parallax_augmentation: true            # Master switch for 2.5D parallax training
+  parallax_root: "data/2.5d_parallax"       # Root directory for parallax PNGs + metadata
+  parallax_image_size: [256, 256]            # [H, W] resize for parallax images
+  image_backend: "torchvision"               # Use faster torchvision backend for GPU
 
 # Data Generation Settings (inherited from large.yaml)
 data_generation:
