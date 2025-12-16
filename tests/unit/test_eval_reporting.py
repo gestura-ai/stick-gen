@@ -28,4 +28,3 @@ def test_build_html_report_minimal(tmp_path: Path) -> None:
     out_path.write_text(html_str, encoding="utf-8")
 
     assert out_path.read_text(encoding="utf-8").startswith("<html>")
-

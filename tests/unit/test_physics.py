@@ -10,7 +10,8 @@ Tests:
 """
 
 import sys
-sys.path.insert(0, '/Users/bc/gestura/stick-gen')
+
+sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
 import torch
 import pytest
@@ -23,30 +24,37 @@ from src.inference.generator import InferenceGenerator
 def test_physics_decoder_heads():
     """Test that physics decoder heads exist and output correct shapes"""
     model = StickFigureTransformer()
-    
+
     # Check physics decoder exists
-    assert hasattr(model, 'physics_decoder'), "Model should have physics_decoder"
-    assert hasattr(model, 'environment_decoder'), "Model should have environment_decoder"
-    
+    assert hasattr(model, "physics_decoder"), "Model should have physics_decoder"
+    assert hasattr(
+        model, "environment_decoder"
+    ), "Model should have environment_decoder"
+
     # Test forward pass
     batch_size = 4
     seq_len = 250
     motion = torch.randn(seq_len, batch_size, 20)
     text_embedding = torch.randn(batch_size, 1024)
-    
+
     outputs = model(motion, text_embedding, return_all_outputs=True)
-    
-    assert 'physics' in outputs, "Outputs should include physics predictions"
-    assert 'environment' in outputs, "Outputs should include environment predictions"
-    
+
+    assert "physics" in outputs, "Outputs should include physics predictions"
+    assert "environment" in outputs, "Outputs should include environment predictions"
+
     # Physics: [seq, batch, 6] - vx, vy, ax, ay, momentum_x, momentum_y
-    assert outputs['physics'].shape == (seq_len, batch_size, 6), \
-        f"Physics shape should be (250, 4, 6), got {outputs['physics'].shape}"
-    
+    assert outputs["physics"].shape == (
+        seq_len,
+        batch_size,
+        6,
+    ), f"Physics shape should be (250, 4, 6), got {outputs['physics'].shape}"
+
     # Environment: [batch, 32] - ground_level, obstacles, context
-    assert outputs['environment'].shape == (batch_size, 32), \
-        f"Environment shape should be (4, 32), got {outputs['environment'].shape}"
-    
+    assert outputs["environment"].shape == (
+        batch_size,
+        32,
+    ), f"Environment shape should be (4, 32), got {outputs['environment'].shape}"
+
     print("✓ Physics decoder heads test passed")
 
 
@@ -73,24 +81,26 @@ def test_momentum_conservation():
 def test_collision_detection():
     """Test ground collision detection"""
     renderer = Renderer()
-    
+
     # Test collision detection function
-    if hasattr(renderer, 'detect_collisions'):
+    if hasattr(renderer, "detect_collisions"):
         # Test ground collision
         ground_level = 0.0
-        
+
         # Position above ground
         collision_info = renderer.detect_collisions((0, 1.0), ground_level)
-        assert not collision_info['ground_collision'], "Should not collide when above ground"
-        
+        assert not collision_info[
+            "ground_collision"
+        ], "Should not collide when above ground"
+
         # Position on ground
         collision_info = renderer.detect_collisions((0, 0.0), ground_level)
-        assert collision_info['ground_collision'], "Should collide when on ground"
-        
+        assert collision_info["ground_collision"], "Should collide when on ground"
+
         # Position below ground
         collision_info = renderer.detect_collisions((0, -0.5), ground_level)
-        assert collision_info['ground_collision'], "Should collide when below ground"
-        
+        assert collision_info["ground_collision"], "Should collide when below ground"
+
         print("✓ Collision detection test passed")
     else:
         print("⏳ Collision detection test - pending implementation")
@@ -99,21 +109,23 @@ def test_collision_detection():
 def test_physics_constraints():
     """Test physics constraints in renderer"""
     renderer = Renderer()
-    
-    if hasattr(renderer, 'apply_physics_constraints'):
+
+    if hasattr(renderer, "apply_physics_constraints"):
         # Test gravity application
         position = (0, 5.0)  # Start 5 units above ground
-        velocity = (0, 0)    # No initial velocity
+        velocity = (0, 0)  # No initial velocity
         dt = 0.04
-        
-        new_position, new_velocity = renderer.apply_physics_constraints(position, velocity, dt)
-        
+
+        new_position, new_velocity = renderer.apply_physics_constraints(
+            position, velocity, dt
+        )
+
         # Velocity should be negative (falling)
         assert new_velocity[1] < 0, "Vertical velocity should be negative (falling)"
-        
+
         # Position should be lower
         assert new_position[1] < position[1], "Position should be lower after gravity"
-        
+
         print("✓ Physics constraints test passed")
     else:
         print("⏳ Physics constraints test - pending implementation")
@@ -148,29 +160,28 @@ def test_velocity_smoothness():
 
 if __name__ == "__main__":
     print("Running Physics-Aware World Model Tests...\n")
-    
+
     # Run tests that don't require trained model
     try:
         test_physics_decoder_heads()
     except AssertionError as e:
         print(f"✗ Physics decoder heads test failed: {e}")
-    
+
     try:
         test_collision_detection()
     except Exception as e:
         print(f"⚠ Collision detection test error: {e}")
-    
+
     try:
         test_physics_constraints()
     except Exception as e:
         print(f"⚠ Physics constraints test error: {e}")
-    
+
     # Tests requiring training
     test_gravity_constraint()
     test_momentum_conservation()
     test_no_ground_penetration()
     test_realistic_jump_height()
     test_velocity_smoothness()
-    
-    print("\n✅ Physics-aware world model test suite complete")
 
+    print("\n✅ Physics-aware world model test suite complete")

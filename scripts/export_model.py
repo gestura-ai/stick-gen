@@ -49,12 +49,13 @@ MODEL_CONFIG = {
     "torch_dtype": "float32",
     "framework": "pytorch",
     "license": "apache-2.0",
-    "tags": ["stick-figure", "animation", "transformer", "text-to-motion"]
+    "tags": ["stick-figure", "animation", "transformer", "text-to-motion"],
 }
 
 # ============================================================================
 # Export Functions
 # ============================================================================
+
 
 def export_to_safetensors(model_path: str, output_dir: Path) -> None:
     """Export model to Hugging Face safetensors format"""
@@ -63,43 +64,43 @@ def export_to_safetensors(model_path: str, output_dir: Path) -> None:
     except ImportError:
         print("❌ safetensors not installed. Run: pip install safetensors")
         sys.exit(1)
-    
+
     print("📦 Exporting to Hugging Face format (safetensors)...")
-    
+
     # Load checkpoint
-    checkpoint = torch.load(model_path, map_location='cpu')
-    
+    checkpoint = torch.load(model_path, map_location="cpu")
+
     # Extract state dict
-    if 'model_state_dict' in checkpoint:
-        state_dict = checkpoint['model_state_dict']
+    if "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
     else:
         state_dict = checkpoint
-    
+
     # Save as safetensors
     output_dir.mkdir(parents=True, exist_ok=True)
     safetensors_path = output_dir / "model.safetensors"
     save_file(state_dict, str(safetensors_path))
-    
+
     # Save config
     config_path = output_dir / "config.json"
-    with open(config_path, 'w') as f:
+    with open(config_path, "w") as f:
         json.dump(MODEL_CONFIG, f, indent=2)
-    
+
     # Save training metadata if available
-    if 'epoch' in checkpoint:
+    if "epoch" in checkpoint:
         training_args = {
-            "epoch": checkpoint.get('epoch', 0),
-            "loss": checkpoint.get('loss', 0.0),
-            "action_accuracy": checkpoint.get('action_accuracy', 0.0),
+            "epoch": checkpoint.get("epoch", 0),
+            "loss": checkpoint.get("loss", 0.0),
+            "action_accuracy": checkpoint.get("action_accuracy", 0.0),
             "optimizer": "AdamW",
             "learning_rate": 1e-4,
             "batch_size": 16,
-            "gradient_accumulation_steps": 4
+            "gradient_accumulation_steps": 4,
         }
         training_args_path = output_dir / "training_args.json"
-        with open(training_args_path, 'w') as f:
+        with open(training_args_path, "w") as f:
             json.dump(training_args, f, indent=2)
-    
+
     print(f"✓ Saved to {safetensors_path}")
     print(f"✓ Saved config to {config_path}")
     print(f"✓ Model size: {safetensors_path.stat().st_size / 1024 / 1024:.2f} MB")
@@ -113,66 +114,68 @@ def export_to_onnx(model_path: str, output_dir: Path) -> None:
     except ImportError:
         print("❌ onnx/onnxruntime not installed. Run: pip install onnx onnxruntime")
         sys.exit(1)
-    
+
     print("📦 Exporting to ONNX format...")
-    
+
     # Load model
     from src.model.transformer import StickFigureTransformer
-    
-    checkpoint = torch.load(model_path, map_location='cpu')
+
+    checkpoint = torch.load(model_path, map_location="cpu")
     model = StickFigureTransformer(
-        input_dim=MODEL_CONFIG['input_dim'],
-        output_dim=MODEL_CONFIG['output_dim'],
-        d_model=MODEL_CONFIG['d_model'],
-        nhead=MODEL_CONFIG['nhead'],
-        num_layers=MODEL_CONFIG['num_layers'],
-        dim_feedforward=MODEL_CONFIG['dim_feedforward'],
-        dropout=MODEL_CONFIG['dropout'],
-        text_embedding_dim=MODEL_CONFIG['text_embedding_dim'],
-        num_actions=MODEL_CONFIG['num_actions']
+        input_dim=MODEL_CONFIG["input_dim"],
+        output_dim=MODEL_CONFIG["output_dim"],
+        d_model=MODEL_CONFIG["d_model"],
+        nhead=MODEL_CONFIG["nhead"],
+        num_layers=MODEL_CONFIG["num_layers"],
+        dim_feedforward=MODEL_CONFIG["dim_feedforward"],
+        dropout=MODEL_CONFIG["dropout"],
+        text_embedding_dim=MODEL_CONFIG["text_embedding_dim"],
+        num_actions=MODEL_CONFIG["num_actions"],
     )
-    
-    if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
     else:
         model.load_state_dict(checkpoint)
-    
+
     model.eval()
-    
+
     # Create dummy inputs
     batch_size = 1
-    seq_len = MODEL_CONFIG['sequence_length']
-    motion_sequence = torch.randn(batch_size, seq_len, MODEL_CONFIG['input_dim'])
-    text_embedding = torch.randn(batch_size, MODEL_CONFIG['text_embedding_dim'])
-    action_sequence = torch.randint(0, MODEL_CONFIG['num_actions'], (batch_size, seq_len))
-    
+    seq_len = MODEL_CONFIG["sequence_length"]
+    motion_sequence = torch.randn(batch_size, seq_len, MODEL_CONFIG["input_dim"])
+    text_embedding = torch.randn(batch_size, MODEL_CONFIG["text_embedding_dim"])
+    action_sequence = torch.randint(
+        0, MODEL_CONFIG["num_actions"], (batch_size, seq_len)
+    )
+
     # Export to ONNX
     output_dir.mkdir(parents=True, exist_ok=True)
     onnx_path = output_dir / "model.onnx"
-    
+
     torch.onnx.export(
         model,
         (motion_sequence, text_embedding, action_sequence),
         str(onnx_path),
-        input_names=['motion_sequence', 'text_embedding', 'action_sequence'],
-        output_names=['pose', 'position', 'velocity', 'action_logits'],
+        input_names=["motion_sequence", "text_embedding", "action_sequence"],
+        output_names=["pose", "position", "velocity", "action_logits"],
         dynamic_axes={
-            'motion_sequence': {0: 'batch_size'},
-            'text_embedding': {0: 'batch_size'},
-            'action_sequence': {0: 'batch_size'},
-            'pose': {0: 'batch_size'},
-            'position': {0: 'batch_size'},
-            'velocity': {0: 'batch_size'},
-            'action_logits': {0: 'batch_size'}
+            "motion_sequence": {0: "batch_size"},
+            "text_embedding": {0: "batch_size"},
+            "action_sequence": {0: "batch_size"},
+            "pose": {0: "batch_size"},
+            "position": {0: "batch_size"},
+            "velocity": {0: "batch_size"},
+            "action_logits": {0: "batch_size"},
         },
         opset_version=14,
-        do_constant_folding=True
+        do_constant_folding=True,
     )
-    
+
     # Validate ONNX model
     onnx_model = onnx.load(str(onnx_path))
     onnx.checker.check_model(onnx_model)
-    
+
     print(f"✓ Saved to {onnx_path}")
     print(f"✓ Model size: {onnx_path.stat().st_size / 1024 / 1024:.2f} MB")
     print(f"✓ ONNX validation: PASSED")
@@ -181,44 +184,48 @@ def export_to_onnx(model_path: str, output_dir: Path) -> None:
 def export_to_torchscript(model_path: str, output_dir: Path) -> None:
     """Export model to TorchScript format"""
     print("📦 Exporting to TorchScript format...")
-    
+
     # Load model
     from src.model.transformer import StickFigureTransformer
-    
-    checkpoint = torch.load(model_path, map_location='cpu')
+
+    checkpoint = torch.load(model_path, map_location="cpu")
     model = StickFigureTransformer(
-        input_dim=MODEL_CONFIG['input_dim'],
-        output_dim=MODEL_CONFIG['output_dim'],
-        d_model=MODEL_CONFIG['d_model'],
-        nhead=MODEL_CONFIG['nhead'],
-        num_layers=MODEL_CONFIG['num_layers'],
-        dim_feedforward=MODEL_CONFIG['dim_feedforward'],
-        dropout=MODEL_CONFIG['dropout'],
-        text_embedding_dim=MODEL_CONFIG['text_embedding_dim'],
-        num_actions=MODEL_CONFIG['num_actions']
+        input_dim=MODEL_CONFIG["input_dim"],
+        output_dim=MODEL_CONFIG["output_dim"],
+        d_model=MODEL_CONFIG["d_model"],
+        nhead=MODEL_CONFIG["nhead"],
+        num_layers=MODEL_CONFIG["num_layers"],
+        dim_feedforward=MODEL_CONFIG["dim_feedforward"],
+        dropout=MODEL_CONFIG["dropout"],
+        text_embedding_dim=MODEL_CONFIG["text_embedding_dim"],
+        num_actions=MODEL_CONFIG["num_actions"],
     )
-    
-    if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
     else:
         model.load_state_dict(checkpoint)
-    
+
     model.eval()
-    
+
     # Trace model
     batch_size = 1
-    seq_len = MODEL_CONFIG['sequence_length']
-    motion_sequence = torch.randn(batch_size, seq_len, MODEL_CONFIG['input_dim'])
-    text_embedding = torch.randn(batch_size, MODEL_CONFIG['text_embedding_dim'])
-    action_sequence = torch.randint(0, MODEL_CONFIG['num_actions'], (batch_size, seq_len))
-    
-    traced_model = torch.jit.trace(model, (motion_sequence, text_embedding, action_sequence))
-    
+    seq_len = MODEL_CONFIG["sequence_length"]
+    motion_sequence = torch.randn(batch_size, seq_len, MODEL_CONFIG["input_dim"])
+    text_embedding = torch.randn(batch_size, MODEL_CONFIG["text_embedding_dim"])
+    action_sequence = torch.randint(
+        0, MODEL_CONFIG["num_actions"], (batch_size, seq_len)
+    )
+
+    traced_model = torch.jit.trace(
+        model, (motion_sequence, text_embedding, action_sequence)
+    )
+
     # Save TorchScript
     output_dir.mkdir(parents=True, exist_ok=True)
     torchscript_path = output_dir / "model.pt"
     traced_model.save(str(torchscript_path))
-    
+
     print(f"✓ Saved to {torchscript_path}")
     print(f"✓ Model size: {torchscript_path.stat().st_size / 1024 / 1024:.2f} MB")
 
@@ -360,7 +367,7 @@ Apache 2.0
 """
 
     readme_path = output_dir / "README.md"
-    with open(readme_path, 'w') as f:
+    with open(readme_path, "w") as f:
         f.write(model_card)
 
     print(f"✓ Created model card: {readme_path}")
@@ -386,11 +393,7 @@ def push_to_hub(output_dir: Path, repo_id: str) -> None:
         print(f"⚠️  Repository creation: {e}")
 
     # Upload all files
-    api.upload_folder(
-        folder_path=str(output_dir),
-        repo_id=repo_id,
-        repo_type="model"
-    )
+    api.upload_folder(folder_path=str(output_dir), repo_id=repo_id, repo_type="model")
 
     print(f"✓ Model pushed to https://huggingface.co/{repo_id}")
 
@@ -399,15 +402,24 @@ def push_to_hub(output_dir: Path, repo_id: str) -> None:
 # Main CLI
 # ============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Export stick-gen model to modern formats')
-    parser.add_argument('--input', required=True, help='Input .pth checkpoint path')
-    parser.add_argument('--output', required=True, help='Output directory name')
-    parser.add_argument('--formats', nargs='+', default=['safetensors'],
-                       choices=['safetensors', 'onnx', 'torchscript', 'all'],
-                       help='Export formats (default: safetensors)')
-    parser.add_argument('--push-to-hub', help='Push to Hugging Face Hub (e.g., gestura-ai/stick-gen-v1)')
-    parser.add_argument('--model-name', default='stick-gen', help='Model name for card')
+    parser = argparse.ArgumentParser(
+        description="Export stick-gen model to modern formats"
+    )
+    parser.add_argument("--input", required=True, help="Input .pth checkpoint path")
+    parser.add_argument("--output", required=True, help="Output directory name")
+    parser.add_argument(
+        "--formats",
+        nargs="+",
+        default=["safetensors"],
+        choices=["safetensors", "onnx", "torchscript", "all"],
+        help="Export formats (default: safetensors)",
+    )
+    parser.add_argument(
+        "--push-to-hub", help="Push to Hugging Face Hub (e.g., gestura-ai/stick-gen-v1)"
+    )
+    parser.add_argument("--model-name", default="stick-gen", help="Model name for card")
 
     args = parser.parse_args()
 
@@ -421,8 +433,8 @@ def main():
 
     # Determine formats
     formats = args.formats
-    if 'all' in formats:
-        formats = ['safetensors', 'onnx', 'torchscript']
+    if "all" in formats:
+        formats = ["safetensors", "onnx", "torchscript"]
 
     print("=" * 70)
     print("Model Export Tool")
@@ -434,16 +446,16 @@ def main():
     print()
 
     # Export to each format
-    if 'safetensors' in formats:
+    if "safetensors" in formats:
         export_to_safetensors(str(input_path), output_dir)
         create_model_card(output_dir, args.model_name)
         print()
 
-    if 'onnx' in formats:
+    if "onnx" in formats:
         export_to_onnx(str(input_path), output_dir)
         print()
 
-    if 'torchscript' in formats:
+    if "torchscript" in formats:
         export_to_torchscript(str(input_path), output_dir)
         print()
 
@@ -465,4 +477,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

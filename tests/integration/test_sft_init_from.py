@@ -16,7 +16,11 @@ import torch.nn as nn
 import torch.optim as optim
 
 from src.model.transformer import StickFigureTransformer
-from src.model.lora import inject_lora_adapters, freeze_base_model, count_lora_parameters
+from src.model.lora import (
+    inject_lora_adapters,
+    freeze_base_model,
+    count_lora_parameters,
+)
 
 
 class TestSFTInitFrom:
@@ -46,14 +50,17 @@ class TestSFTInitFrom:
 
         # Save checkpoint
         checkpoint_path = tmp_path / "pretrained.pth"
-        torch.save({
-            'epoch': 10,
-            'global_step': 500,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'best_val_loss': 0.5,
-        }, checkpoint_path)
+        torch.save(
+            {
+                "epoch": 10,
+                "global_step": 500,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "best_val_loss": 0.5,
+            },
+            checkpoint_path,
+        )
 
         return model, checkpoint_path
 
@@ -77,12 +84,11 @@ class TestSFTInitFrom:
         checkpoint = torch.load(checkpoint_path)
 
         # Simulate init_from behavior: load only model weights
-        new_model.load_state_dict(checkpoint['model_state_dict'])
+        new_model.load_state_dict(checkpoint["model_state_dict"])
 
         # Verify weights match
         for (name1, param1), (name2, param2) in zip(
-            original_model.named_parameters(),
-            new_model.named_parameters()
+            original_model.named_parameters(), new_model.named_parameters()
         ):
             assert name1 == name2
             torch.testing.assert_close(param1, param2)
@@ -104,7 +110,7 @@ class TestSFTInitFrom:
         )
 
         checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(checkpoint["model_state_dict"])
 
         # Inject LoRA
         num_modified = inject_lora_adapters(
@@ -133,18 +139,20 @@ class TestSFTInitFrom:
         # This simulates the check in train.py
         with pytest.raises(FileNotFoundError):
             if not os.path.isfile(nonexistent_path):
-                raise FileNotFoundError(f"Init checkpoint not found: {nonexistent_path}")
+                raise FileNotFoundError(
+                    f"Init checkpoint not found: {nonexistent_path}"
+                )
 
     def test_init_from_missing_model_state_dict_raises(self, tmp_path):
         """Test that checkpoint without model_state_dict raises KeyError."""
         # Save incomplete checkpoint
         checkpoint_path = tmp_path / "incomplete.pth"
-        torch.save({'epoch': 5}, checkpoint_path)
+        torch.save({"epoch": 5}, checkpoint_path)
 
         checkpoint = torch.load(checkpoint_path)
 
         with pytest.raises(KeyError):
-            if 'model_state_dict' not in checkpoint:
+            if "model_state_dict" not in checkpoint:
                 raise KeyError("Checkpoint missing 'model_state_dict'")
 
 
@@ -190,4 +198,3 @@ class TestLoRATraining:
                 assert param.grad is not None, f"{name} should have gradient"
             else:
                 assert param.grad is None, f"{name} should not have gradient"
-

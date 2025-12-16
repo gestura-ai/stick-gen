@@ -11,11 +11,14 @@ def test_evaluate_model_uses_eval_metrics():
     executes without errors and returns the expected metric keys, including
     those backed by src.eval.metrics.
     """
+
     class DummyModel(torch.nn.Module):
         def __init__(self):
             super().__init__()
 
-        def forward(self, motion, embedding, return_all_outputs=False, camera_data=None):  # noqa: D401
+        def forward(
+            self, motion, embedding, return_all_outputs=False, camera_data=None
+        ):  # noqa: D401
             seq, batch, dim = motion.shape
             pose = torch.zeros_like(motion)
             physics = torch.zeros(seq, batch, 6, device=motion.device)
@@ -58,4 +61,3 @@ def test_evaluate_model_uses_eval_metrics():
     # Camera metrics should be present and provide stability information
     assert "camera" in results
     assert "mean_stability_score" in results["camera"], results
-

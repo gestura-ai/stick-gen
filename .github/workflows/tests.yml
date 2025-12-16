@@ -39,13 +39,14 @@ jobs:
     - name: Lint with Ruff
       run: |
         # stop the build if there are Python syntax errors or undefined names
-        ruff check . --select=E9,F63,F7,F82 --target-version=py310
+        # exclude templates/ directory (contains code snippets, not standalone modules)
+        ruff check . --select=E9,F63,F7,F82 --target-version=py310 --exclude=templates
         # exit-zero treats all errors as warnings.
-        ruff check . --exit-zero
+        ruff check . --exit-zero --exclude=templates
         
     - name: Check formatting with Black
       run: |
-        black . --check
+        black . --check --exclude="(templates|data)"
         
     - name: Test with pytest
       run: |

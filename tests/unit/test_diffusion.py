@@ -1,15 +1,23 @@
 """
 Phase 3: Diffusion Refinement Module Tests
 """
+
 import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import torch
-from src.model.diffusion import DDPMScheduler, PoseRefinementUNet, DiffusionRefinementModule, count_parameters
+from src.model.diffusion import (
+    DDPMScheduler,
+    PoseRefinementUNet,
+    DiffusionRefinementModule,
+    count_parameters,
+)
+
 
 def test_scheduler():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 1: DDPM Scheduler")
-    print("="*60)
+    print("=" * 60)
     scheduler = DDPMScheduler(num_train_timesteps=1000)
     clean_poses = torch.randn(4, 250, 20)
     noise = torch.randn_like(clean_poses)
@@ -24,9 +32,9 @@ def test_scheduler():
 
 
 def test_unet():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 2: UNet Architecture")
-    print("="*60)
+    print("=" * 60)
     unet = PoseRefinementUNet(pose_dim=20, hidden_dims=[64, 128, 256], time_emb_dim=128)
     num_params = count_parameters(unet)
     print(f"✓ Model parameters: {num_params:,} ({num_params/1e6:.2f}M)")
@@ -40,12 +48,12 @@ def test_unet():
 
 
 def test_refinement():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 3: Diffusion Refinement")
-    print("="*60)
+    print("=" * 60)
     unet = PoseRefinementUNet(pose_dim=20, hidden_dims=[32, 64], time_emb_dim=64)
     scheduler = DDPMScheduler(num_train_timesteps=1000)
-    refinement = DiffusionRefinementModule(unet, scheduler, device='cpu')
+    refinement = DiffusionRefinementModule(unet, scheduler, device="cpu")
     transformer_output = torch.randn(2, 250, 20)
     refined_poses = refinement.refine_poses(transformer_output, num_inference_steps=10)
     assert refined_poses.shape == transformer_output.shape
@@ -54,23 +62,24 @@ def test_refinement():
 
 
 def test_training():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 4: Training Step")
-    print("="*60)
+    print("=" * 60)
     unet = PoseRefinementUNet(pose_dim=20, hidden_dims=[32, 64], time_emb_dim=64)
     scheduler = DDPMScheduler(num_train_timesteps=1000)
-    refinement = DiffusionRefinementModule(unet, scheduler, device='cpu')
+    refinement = DiffusionRefinementModule(unet, scheduler, device="cpu")
     optimizer = torch.optim.Adam(unet.parameters(), lr=1e-4)
     clean_poses = torch.randn(2, 250, 20)
     result = refinement.train_step(clean_poses, optimizer)
-    assert 'loss' in result
+    assert "loss" in result
     print(f"✓ Training step: loss = {result['loss']:.6f}")
     print("\n✅ Training Step: PASSED")
 
+
 if __name__ == "__main__":
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("PHASE 3: DIFFUSION REFINEMENT MODULE - TEST SUITE")
-    print("="*70)
+    print("=" * 70)
     tests = [test_scheduler, test_unet, test_refinement, test_training]
     passed = 0
     for test in tests:
@@ -79,7 +88,7 @@ if __name__ == "__main__":
             passed += 1
         except AssertionError as e:
             print(f"FAILED: {e}")
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print(f"RESULTS: {passed}/{len(tests)} tests passed")
-    print("="*70)
+    print("=" * 70)
     sys.exit(0 if passed == len(tests) else 1)

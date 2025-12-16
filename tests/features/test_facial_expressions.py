@@ -59,7 +59,11 @@ def main() -> None:
         (FacialExpression.NEUTRAL, ActionType.IDLE, "test_expression_neutral.mp4"),
         (FacialExpression.HAPPY, ActionType.WAVE, "test_expression_happy.mp4"),
         (FacialExpression.SAD, ActionType.CRY, "test_expression_sad.mp4"),
-        (FacialExpression.SURPRISED, ActionType.LOOKING_AROUND, "test_expression_surprised.mp4"),
+        (
+            FacialExpression.SURPRISED,
+            ActionType.LOOKING_AROUND,
+            "test_expression_surprised.mp4",
+        ),
         (FacialExpression.ANGRY, ActionType.PUNCH, "test_expression_angry.mp4"),
         (FacialExpression.EXCITED, ActionType.CELEBRATE, "test_expression_excited.mp4"),
     ]

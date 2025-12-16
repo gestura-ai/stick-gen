@@ -33,7 +33,7 @@ class RMSNorm(nn.Module):
             dtype: Data type for parameters
         """
         super().__init__()
-        factory_kwargs = {'device': device, 'dtype': dtype}
+        factory_kwargs = {"device": device, "dtype": dtype}
 
         if isinstance(normalized_shape, int):
             normalized_shape = (normalized_shape,)
@@ -42,9 +42,11 @@ class RMSNorm(nn.Module):
         self.elementwise_affine = elementwise_affine
 
         if self.elementwise_affine:
-            self.weight = nn.Parameter(torch.ones(self.normalized_shape, **factory_kwargs))
+            self.weight = nn.Parameter(
+                torch.ones(self.normalized_shape, **factory_kwargs)
+            )
         else:
-            self.register_parameter('weight', None)
+            self.register_parameter("weight", None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply RMS normalization.
@@ -123,31 +125,36 @@ class RotaryEmbedding(nn.Module):
     def forward(self, x, seq_len):
         if seq_len > self.max_seq_len:
             self.max_seq_len = seq_len
-        
+
         if self.cached_cos is None or self.cached_cos.size(0) < seq_len:
-            t = torch.arange(self.max_seq_len, device=x.device, dtype=self.inv_freq.dtype)
+            t = torch.arange(
+                self.max_seq_len, device=x.device, dtype=self.inv_freq.dtype
+            )
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             emb = torch.cat((freqs, freqs), dim=-1)
             self.cached_cos = emb.cos()
             self.cached_sin = emb.sin()
-        
+
         return self.cached_cos[:seq_len], self.cached_sin[:seq_len]
+
 
 def rotate_half(x):
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)
 
+
 def apply_rotary_pos_emb(q, k, cos, sin):
     # q, k: [seq_len, batch, nhead, head_dim]
     # cos, sin: [seq_len, head_dim]
-    
+
     # Reshape cos/sin for broadcasting: [seq_len, 1, 1, head_dim]
     cos = cos.unsqueeze(1).unsqueeze(1)
     sin = sin.unsqueeze(1).unsqueeze(1)
-    
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
+
 
 class RoPEMultiheadAttention(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
@@ -156,43 +163,46 @@ class RoPEMultiheadAttention(nn.Module):
         self.head_dim = d_model // nhead
         self.nhead = nhead
         self.d_model = d_model
-        
+
         self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Linear(d_model, d_model)
         self.v_proj = nn.Linear(d_model, d_model)
         self.out_proj = nn.Linear(d_model, d_model)
         self.dropout = dropout
         self.batch_first = False
-        
+
         self.rope = RotaryEmbedding(self.head_dim)
 
     def forward(self, x, key_padding_mask=None, need_weights=False, attn_mask=None):
         # x: [seq_len, batch, d_model]
         seq_len, batch_size, _ = x.shape
-        
+
         q = self.q_proj(x).view(seq_len, batch_size, self.nhead, self.head_dim)
         k = self.k_proj(x).view(seq_len, batch_size, self.nhead, self.head_dim)
         v = self.v_proj(x).view(seq_len, batch_size, self.nhead, self.head_dim)
-        
+
         # Apply RoPE
         cos, sin = self.rope(v, seq_len)
         q, k = apply_rotary_pos_emb(q, k, cos, sin)
-        
+
         # Transpose to [batch, nhead, seq_len, head_dim] for SDPA
         q = q.permute(1, 2, 0, 3)
         k = k.permute(1, 2, 0, 3)
         v = v.permute(1, 2, 0, 3)
-        
+
         output = F.scaled_dot_product_attention(
-            q, k, v, 
+            q,
+            k,
+            v,
             attn_mask=attn_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=False
+            is_causal=False,
         )
-        
+
         # [batch, nhead, seq, head_dim] -> [seq, batch, nhead, head_dim] -> [seq, batch, d_model]
         output = output.permute(2, 0, 1, 3).reshape(seq_len, batch_size, self.d_model)
         return self.out_proj(output)
+
 
 class RoPETransformerEncoderLayer(nn.Module):
     """Transformer encoder layer with RoPE, RMSNorm, and SwiGLU.
@@ -203,7 +213,9 @@ class RoPETransformerEncoderLayer(nn.Module):
     - SwiGLU activation for better training dynamics
     """
 
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="gelu"):
+    def __init__(
+        self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="gelu"
+    ):
         """Initialize the encoder layer.
 
         Args:
@@ -244,9 +256,7 @@ class RoPETransformerEncoderLayer(nn.Module):
         """
         # Self-attention block with Pre-Norm
         src2 = self.self_attn(
-            self.norm1(src),
-            key_padding_mask=src_key_padding_mask,
-            attn_mask=src_mask
+            self.norm1(src), key_padding_mask=src_key_padding_mask, attn_mask=src_mask
         )
         src = src + self.dropout1(src2)
 
@@ -281,18 +291,20 @@ class StickFigureTransformer(nn.Module):
     ) -> None:
         """Initialize the Transformer.
 
-        Args:
-            input_dim: Input motion dimension. Default 20 for the canonical
-                stick-figure schema (5 segments  4 coordinates). Legacy
-                configs may use 10 (5 joints  2 coords).
-            d_model: Transformer model dimension (384 for ~11M params).
-            nhead: Number of attention heads.
-            num_layers: Number of Transformer encoder layers.
-            output_dim: Output motion dimension (usually equal to ``input_dim``).
-            embedding_dim: Text embedding dimension
-                (1024 for BAAI/bge-large-en-v1.5).
-            dropout: Dropout rate.
-            num_actions: Number of action types for action conditioning (Phase 1).
+               Args:
+                   input_dim: Input motion dimension. Default 20 for the canonical
+                       stick-figure schema (5 segments
+        4 coordinates). Legacy
+                       configs may use 10 (5 joints
+        2 coords).
+                   d_model: Transformer model dimension (384 for ~11M params).
+                   nhead: Number of attention heads.
+                   num_layers: Number of Transformer encoder layers.
+                   output_dim: Output motion dimension (usually equal to ``input_dim``).
+                   embedding_dim: Text embedding dimension
+                       (1024 for BAAI/bge-large-en-v1.5).
+                   dropout: Dropout rate.
+                   num_actions: Number of action types for action conditioning (Phase 1).
         """
 
         super().__init__()
@@ -458,17 +470,23 @@ class StickFigureTransformer(nn.Module):
         # Phase 1: Action conditioning
         if action_sequence is not None:
             action_emb = self.action_embedding(action_sequence)  # [seq, batch, 64]
-            action_features = self.action_projection(action_emb)  # [seq, batch, d_model]
+            action_features = self.action_projection(
+                action_emb
+            )  # [seq, batch, d_model]
             conditioned_motion = conditioned_motion + action_features
 
         # Camera conditioning
         if camera_data is not None:
-            camera_features = self.camera_projection(camera_data)  # [seq, batch, d_model]
+            camera_features = self.camera_projection(
+                camera_data
+            )  # [seq, batch, d_model]
             conditioned_motion = conditioned_motion + camera_features
 
         # Partner conditioning (Multi-Actor)
         if partner_motion is not None:
-            partner_features = self.partner_projection(partner_motion) # [seq, batch, d_model]
+            partner_features = self.partner_projection(
+                partner_motion
+            )  # [seq, batch, d_model]
             conditioned_motion = conditioned_motion + partner_features
 
         # Combine text token with conditioned motion
@@ -493,7 +511,9 @@ class StickFigureTransformer(nn.Module):
         velocity_output = self.velocity_decoder(pooled)  # [batch, 2]
 
         # Action prediction over sequence
-        action_logits = self.action_predictor(motion_output)  # [seq_len, batch, num_actions]
+        action_logits = self.action_predictor(
+            motion_output
+        )  # [seq_len, batch, num_actions]
 
         # Physics and environment prediction
         physics_output = self.physics_decoder(motion_output)  # [seq_len, batch, 6]

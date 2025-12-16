@@ -21,30 +21,32 @@ import torch.nn.functional as F
 import math
 from typing import Optional, Tuple
 
+
 class DDPMScheduler:
     """
     DDPM noise scheduler for diffusion process
-    
+
     Implements linear beta schedule for adding/removing noise
     """
+
     def __init__(
         self,
         num_train_timesteps: int = 1000,
         beta_start: float = 0.0001,
-        beta_end: float = 0.02
+        beta_end: float = 0.02,
     ):
         self.num_train_timesteps = num_train_timesteps
-        
+
         # Linear beta schedule
         self.betas = torch.linspace(beta_start, beta_end, num_train_timesteps)
         self.alphas = 1.0 - self.betas
         self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
         self.alphas_cumprod_prev = F.pad(self.alphas_cumprod[:-1], (1, 0), value=1.0)
-        
+
         # Calculations for diffusion q(x_t | x_{t-1}) and others
         self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
         self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)
-        
+
         # Calculations for posterior q(x_{t-1} | x_t, x_0)
         self.posterior_variance = (
             self.betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
@@ -67,93 +69,100 @@ class DDPMScheduler:
         self,
         original_samples: torch.Tensor,
         noise: torch.Tensor,
-        timesteps: torch.Tensor
+        timesteps: torch.Tensor,
     ) -> torch.Tensor:
         """
         Add noise to samples according to timestep
-        
+
         Args:
             original_samples: [batch, seq_len, dim]
             noise: [batch, seq_len, dim]
             timesteps: [batch] - timestep indices
-        
+
         Returns:
             Noisy samples [batch, seq_len, dim]
         """
         sqrt_alpha_prod = self.sqrt_alphas_cumprod[timesteps]
         sqrt_one_minus_alpha_prod = self.sqrt_one_minus_alphas_cumprod[timesteps]
-        
+
         # Reshape for broadcasting: [batch, 1, 1]
         sqrt_alpha_prod = sqrt_alpha_prod.view(-1, 1, 1)
         sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.view(-1, 1, 1)
-        
+
         noisy_samples = (
-            sqrt_alpha_prod * original_samples +
-            sqrt_one_minus_alpha_prod * noise
+            sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         )
         return noisy_samples
-    
+
     def step(
-        self,
-        model_output: torch.Tensor,
-        timestep: int,
-        sample: torch.Tensor
+        self, model_output: torch.Tensor, timestep: int, sample: torch.Tensor
     ) -> torch.Tensor:
         """
         Reverse diffusion step: predict x_{t-1} from x_t
-        
+
         Args:
             model_output: Predicted noise [batch, seq_len, dim]
             timestep: Current timestep
             sample: Current noisy sample x_t [batch, seq_len, dim]
-        
+
         Returns:
             Previous sample x_{t-1} [batch, seq_len, dim]
         """
         t = timestep
-        
+
         # Compute coefficients
         alpha_prod_t = self.alphas_cumprod[t]
         alpha_prod_t_prev = self.alphas_cumprod_prev[t]
         beta_prod_t = 1 - alpha_prod_t
-        
+
         # Predict original sample from noise
         pred_original_sample = (
             sample - torch.sqrt(beta_prod_t) * model_output
         ) / torch.sqrt(alpha_prod_t)
-        
+
         # Compute variance
         variance = self.posterior_variance[t]
-        
+
         # Compute previous sample mean
-        pred_sample_direction = torch.sqrt(1 - alpha_prod_t_prev - variance) * model_output
-        prev_sample = (
-            torch.sqrt(alpha_prod_t_prev) * pred_original_sample +
-            pred_sample_direction
+        pred_sample_direction = (
+            torch.sqrt(1 - alpha_prod_t_prev - variance) * model_output
         )
-        
+        prev_sample = (
+            torch.sqrt(alpha_prod_t_prev) * pred_original_sample + pred_sample_direction
+        )
+
         # Add noise if not final step
         if t > 0:
             noise = torch.randn_like(sample)
             prev_sample = prev_sample + torch.sqrt(variance) * noise
-        
+
         return prev_sample
+
 
 class TemporalConvBlock(nn.Module):
     """
     1D Temporal Convolution Block with residual connection
     """
+
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3):
         super().__init__()
-        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, padding=kernel_size//2)
-        self.conv2 = nn.Conv1d(out_channels, out_channels, kernel_size, padding=kernel_size//2)
+        self.conv1 = nn.Conv1d(
+            in_channels, out_channels, kernel_size, padding=kernel_size // 2
+        )
+        self.conv2 = nn.Conv1d(
+            out_channels, out_channels, kernel_size, padding=kernel_size // 2
+        )
         self.norm1 = nn.GroupNorm(8, out_channels)
         self.norm2 = nn.GroupNorm(8, out_channels)
         self.activation = nn.SiLU()
-        
+
         # Residual connection
-        self.residual = nn.Conv1d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
-    
+        self.residual = (
+            nn.Conv1d(in_channels, out_channels, 1)
+            if in_channels != out_channels
+            else nn.Identity()
+        )
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -162,28 +171,28 @@ class TemporalConvBlock(nn.Module):
             [batch, channels, seq_len]
         """
         residual = self.residual(x)
-        
+
         out = self.conv1(x)
         out = self.norm1(out)
         out = self.activation(out)
-        
+
         out = self.conv2(out)
         out = self.norm2(out)
 
         return self.activation(out + residual)
 
+
 class TimeEmbedding(nn.Module):
     """
     Sinusoidal time embedding for diffusion timesteps
     """
+
     def __init__(self, dim: int):
         super().__init__()
         self.dim = dim
 
         self.mlp = nn.Sequential(
-            nn.Linear(dim, dim * 4),
-            nn.SiLU(),
-            nn.Linear(dim * 4, dim)
+            nn.Linear(dim, dim * 4), nn.SiLU(), nn.Linear(dim * 4, dim)
         )
 
     def forward(self, timesteps: torch.Tensor) -> torch.Tensor:
@@ -204,6 +213,7 @@ class TimeEmbedding(nn.Module):
         emb = self.mlp(emb)
         return emb
 
+
 class PoseRefinementUNet(nn.Module):
     """
     Lightweight 1D UNet for pose sequence refinement
@@ -214,11 +224,12 @@ class PoseRefinementUNet(nn.Module):
     - Decoder: 3 upsampling blocks with skip connections
     - Total params: ~3-4M
     """
+
     def __init__(
         self,
         pose_dim: int = 20,  # 5 lines × 4 coords
         hidden_dims: list = [64, 128, 256],
-        time_emb_dim: int = 128
+        time_emb_dim: int = 128,
     ):
         super().__init__()
         self.pose_dim = pose_dim
@@ -236,13 +247,15 @@ class PoseRefinementUNet(nn.Module):
         in_ch = hidden_dims[0]
         for out_ch in hidden_dims:
             self.encoder_blocks.append(TemporalConvBlock(in_ch, out_ch))
-            self.downsample_blocks.append(nn.Conv1d(out_ch, out_ch, kernel_size=3, stride=2, padding=1))
+            self.downsample_blocks.append(
+                nn.Conv1d(out_ch, out_ch, kernel_size=3, stride=2, padding=1)
+            )
             in_ch = out_ch
 
         # Bottleneck
         self.bottleneck = nn.Sequential(
             TemporalConvBlock(hidden_dims[-1], hidden_dims[-1]),
-            TemporalConvBlock(hidden_dims[-1], hidden_dims[-1])
+            TemporalConvBlock(hidden_dims[-1], hidden_dims[-1]),
         )
 
         # Decoder (upsampling)
@@ -252,19 +265,23 @@ class PoseRefinementUNet(nn.Module):
         reversed_dims = list(reversed(hidden_dims))
         for i in range(len(reversed_dims)):
             in_ch = reversed_dims[i]
-            out_ch = reversed_dims[i+1] if i+1 < len(reversed_dims) else hidden_dims[0]
+            out_ch = (
+                reversed_dims[i + 1] if i + 1 < len(reversed_dims) else hidden_dims[0]
+            )
 
             # Skip connection doubles input channels
             self.decoder_blocks.append(TemporalConvBlock(in_ch * 2, out_ch))
-            self.upsample_blocks.append(nn.ConvTranspose1d(in_ch, in_ch, kernel_size=4, stride=2, padding=1))
+            self.upsample_blocks.append(
+                nn.ConvTranspose1d(in_ch, in_ch, kernel_size=4, stride=2, padding=1)
+            )
 
         # Final projection
         self.final_conv = nn.Conv1d(hidden_dims[0], pose_dim, kernel_size=3, padding=1)
 
         # Time conditioning (inject time embedding into each block)
-        self.time_mlps = nn.ModuleList([
-            nn.Linear(time_emb_dim, dim) for dim in hidden_dims
-        ])
+        self.time_mlps = nn.ModuleList(
+            [nn.Linear(time_emb_dim, dim) for dim in hidden_dims]
+        )
 
     def forward(self, x: torch.Tensor, timesteps: torch.Tensor) -> torch.Tensor:
         """
@@ -286,7 +303,9 @@ class PoseRefinementUNet(nn.Module):
 
         # Encoder with skip connections
         skip_connections = []
-        for i, (enc_block, downsample) in enumerate(zip(self.encoder_blocks, self.downsample_blocks)):
+        for i, (enc_block, downsample) in enumerate(
+            zip(self.encoder_blocks, self.downsample_blocks)
+        ):
             x = enc_block(x)
 
             # Add time conditioning
@@ -300,14 +319,18 @@ class PoseRefinementUNet(nn.Module):
         x = self.bottleneck(x)
 
         # Decoder with skip connections
-        for i, (dec_block, upsample) in enumerate(zip(self.decoder_blocks, self.upsample_blocks)):
+        for i, (dec_block, upsample) in enumerate(
+            zip(self.decoder_blocks, self.upsample_blocks)
+        ):
             x = upsample(x)
 
             # Concatenate skip connection
-            skip = skip_connections[-(i+1)]
+            skip = skip_connections[-(i + 1)]
             # Handle size mismatch due to downsampling/upsampling
             if x.shape[2] != skip.shape[2]:
-                x = F.interpolate(x, size=skip.shape[2], mode='linear', align_corners=False)
+                x = F.interpolate(
+                    x, size=skip.shape[2], mode="linear", align_corners=False
+                )
             x = torch.cat([x, skip], dim=1)
 
             x = dec_block(x)
@@ -320,17 +343,16 @@ class PoseRefinementUNet(nn.Module):
 
         return x
 
+
 class DiffusionRefinementModule:
     """
     Phase 3: Diffusion-based pose refinement
 
     Refines transformer outputs using iterative denoising for smoother motion
     """
+
     def __init__(
-        self,
-        unet: PoseRefinementUNet,
-        scheduler: DDPMScheduler,
-        device: str = 'cpu'
+        self, unet: PoseRefinementUNet, scheduler: DDPMScheduler, device: str = "cpu"
     ):
         self.unet = unet.to(device)
         self.scheduler = scheduler
@@ -342,7 +364,7 @@ class DiffusionRefinementModule:
         transformer_output: torch.Tensor,
         text_embedding: Optional[torch.Tensor] = None,
         num_inference_steps: int = 50,
-        guidance_scale: float = 1.0
+        guidance_scale: float = 1.0,
     ) -> torch.Tensor:
         """
         Refine transformer output using diffusion denoising
@@ -368,7 +390,9 @@ class DiffusionRefinementModule:
         # Iterative denoising
         for t in timesteps:
             # Prepare timestep tensor
-            timestep_tensor = torch.full((batch_size,), t, device=self.device, dtype=torch.long)
+            timestep_tensor = torch.full(
+                (batch_size,), t, device=self.device, dtype=torch.long
+            )
 
             # Predict noise
             noise_pred = self.unet(sample, timestep_tensor)
@@ -379,9 +403,7 @@ class DiffusionRefinementModule:
         return sample
 
     def train_step(
-        self,
-        clean_poses: torch.Tensor,
-        optimizer: torch.optim.Optimizer
+        self, clean_poses: torch.Tensor, optimizer: torch.optim.Optimizer
     ) -> dict:
         """
         Single training step for diffusion model
@@ -397,8 +419,7 @@ class DiffusionRefinementModule:
 
         # Sample random timesteps
         timesteps = torch.randint(
-            0, self.scheduler.num_train_timesteps,
-            (batch_size,), device=self.device
+            0, self.scheduler.num_train_timesteps, (batch_size,), device=self.device
         ).long()
 
         # Sample noise
@@ -418,9 +439,9 @@ class DiffusionRefinementModule:
         loss.backward()
         optimizer.step()
 
-        return {'loss': loss.item()}
+        return {"loss": loss.item()}
+
 
 def count_parameters(model: nn.Module) -> int:
     """Count trainable parameters in model"""
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
-

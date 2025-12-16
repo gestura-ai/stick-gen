@@ -4,12 +4,16 @@ import argparse
 import json
 
 # Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 from src.data_gen.llm_story_engine import LLMStoryGenerator
 
 
-def run_llm(provider: str, model: str | None = None, prompt: str = "A ninja fighting a robot") -> None:
+def run_llm(
+    provider: str, model: str | None = None, prompt: str = "A ninja fighting a robot"
+) -> None:
     """Manual CLI helper to exercise LLMStoryGenerator backends.
 
     This is intentionally separate from the pytest suite so it can be used
@@ -31,19 +35,30 @@ def run_llm(provider: str, model: str | None = None, prompt: str = "A ninja figh
         scenes = generator.script_to_scenes(script)
         print(f"Generated {len(scenes)} scenes.")
         for i, scene in enumerate(scenes):
-            print(f"Scene {i+1}: {scene.description} ({len(scene.actors)} actors, {scene.duration}s)")
+            print(
+                f"Scene {i+1}: {scene.description} ({len(scene.actors)} actors, {scene.duration}s)"
+            )
 
     except Exception as e:
         print(f"\nError: {e}")
         import traceback
+
         traceback.print_exc()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test LLM Story Generator")
-    parser.add_argument("--provider", type=str, default="mock", choices=["mock", "grok", "ollama"], help="LLM Provider")
+    parser.add_argument(
+        "--provider",
+        type=str,
+        default="mock",
+        choices=["mock", "grok", "ollama"],
+        help="LLM Provider",
+    )
     parser.add_argument("--model", type=str, help="Specific model name")
-    parser.add_argument("--prompt", type=str, default="A ninja fighting a robot", help="Story prompt")
+    parser.add_argument(
+        "--prompt", type=str, default="A ninja fighting a robot", help="Story prompt"
+    )
 
     args = parser.parse_args()
 
@@ -52,4 +67,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

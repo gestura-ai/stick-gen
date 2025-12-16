@@ -22,17 +22,17 @@ import torch.nn.functional as F
 
 class LoRALinear(nn.Module):
     """Linear layer with Low-Rank Adaptation (LoRA).
-    
+
     Wraps an existing nn.Linear and adds trainable low-rank matrices A and B.
     Output: y = Wx + (alpha/rank) * B @ A @ x
-    
+
     Args:
         base_layer: The original nn.Linear layer to wrap
         rank: Rank of the low-rank decomposition (default: 8)
         alpha: Scaling factor for LoRA output (default: 16)
         dropout: Dropout probability for LoRA path (default: 0.0)
     """
-    
+
     def __init__(
         self,
         base_layer: nn.Linear,
@@ -41,56 +41,56 @@ class LoRALinear(nn.Module):
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
-        
+
         self.base_layer = base_layer
         self.rank = rank
         self.alpha = alpha
         self.scaling = alpha / rank
-        
+
         in_features = base_layer.in_features
         out_features = base_layer.out_features
-        
+
         # LoRA matrices: A projects down, B projects up
         # Initialize A with Kaiming uniform, B with zeros
         # This ensures LoRA starts as identity (no change to base model)
         self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
         self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
-        
+
         # Initialize A with scaled random values
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         # B stays zero-initialized
-        
+
         self.dropout = nn.Dropout(p=dropout) if dropout > 0 else nn.Identity()
-        
+
         # Freeze the base layer
         for param in self.base_layer.parameters():
             param.requires_grad = False
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass with LoRA adaptation."""
         # Base layer output (frozen)
         base_output = self.base_layer(x)
-        
+
         # LoRA path: dropout -> A -> B -> scale
         lora_input = self.dropout(x)
         lora_output = F.linear(lora_input, self.lora_A)  # [*, rank]
         lora_output = F.linear(lora_output, self.lora_B)  # [*, out_features]
         lora_output = lora_output * self.scaling
-        
+
         return base_output + lora_output
-    
+
     def merge_weights(self) -> None:
         """Merge LoRA weights into base layer for inference."""
         with torch.no_grad():
             # W' = W + (alpha/rank) * B @ A
             delta_w = (self.lora_B @ self.lora_A) * self.scaling
             self.base_layer.weight.add_(delta_w)
-    
+
     @property
     def weight(self) -> torch.Tensor:
         """Return effective weight (base + LoRA)."""
         return self.base_layer.weight + (self.lora_B @ self.lora_A) * self.scaling
-    
+
     @property
     def bias(self) -> Optional[torch.Tensor]:
         """Return bias from base layer."""
@@ -122,7 +122,7 @@ def _set_submodule(model: nn.Module, target: str, new_module: nn.Module) -> None
             parent = parent[int(atom)]
         else:
             raise AttributeError(f"Module has no attribute '{atom}'")
-    
+
     final_attr = atoms[-1]
     if final_attr.isdigit():
         parent[int(final_attr)] = new_module
@@ -138,22 +138,22 @@ def inject_lora_adapters(
     dropout: float = 0.0,
 ) -> int:
     """Inject LoRA adapters into target modules of a model.
-    
+
     Args:
         model: The model to modify
         target_modules: List of module name patterns to target (supports regex)
         rank: LoRA rank
         alpha: LoRA alpha scaling factor
         dropout: LoRA dropout probability
-    
+
     Returns:
         Number of layers modified
     """
     modified_count = 0
-    
+
     # Compile patterns
     patterns = [re.compile(p) for p in target_modules]
-    
+
     # Find all Linear layers matching patterns
     targets_to_replace = []
     for name, module in model.named_modules():
@@ -162,7 +162,7 @@ def inject_lora_adapters(
                 if pattern.search(name):
                     targets_to_replace.append(name)
                     break
-    
+
     # Replace with LoRA layers
     for target in targets_to_replace:
         base_layer = _get_submodule(model, target)
@@ -284,4 +284,3 @@ def load_lora_state_dict(model: nn.Module, lora_state: dict) -> int:
             model_state[name].copy_(param)
             loaded_count += 1
     return loaded_count
-

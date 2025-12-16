@@ -118,11 +118,13 @@ class TestLoRAInjection:
 
     def test_inject_lora_with_regex_pattern(self):
         """Test injecting LoRA using regex patterns."""
-        model = nn.ModuleDict({
-            "encoder": nn.Linear(64, 32),
-            "decoder": nn.Linear(32, 16),
-            "other": nn.Linear(16, 8),
-        })
+        model = nn.ModuleDict(
+            {
+                "encoder": nn.Linear(64, 32),
+                "decoder": nn.Linear(32, 16),
+                "other": nn.Linear(16, 8),
+            }
+        )
 
         # Only inject into encoder and decoder
         num_modified = inject_lora_adapters(
@@ -201,4 +203,3 @@ class TestLoRAStateDictManagement:
         assert len(lora_state) == 2
         assert any("lora_A" in k for k in lora_state.keys())
         assert any("lora_B" in k for k in lora_state.keys())
-

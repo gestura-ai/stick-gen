@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 class SafetyIssueType(Enum):
     """Types of safety/quality issues that can be detected."""
+
     MOTION_FROZEN = "motion_frozen"
     MOTION_REPETITIVE = "motion_repetitive"
     MOTION_JITTERY = "motion_jittery"
@@ -44,6 +45,7 @@ class SafetyIssueType(Enum):
 @dataclass
 class SafetyIssue:
     """A detected safety or quality issue."""
+
     issue_type: SafetyIssueType
     severity: float  # 0.0 = minor, 1.0 = critical
     description: str
@@ -54,6 +56,7 @@ class SafetyIssue:
 @dataclass
 class SafetyCriticResult:
     """Result from running the safety critic on a generated sample."""
+
     is_safe: bool
     overall_score: float  # 0.0 = reject, 1.0 = perfect
     issues: List[SafetyIssue] = field(default_factory=list)
@@ -61,11 +64,7 @@ class SafetyCriticResult:
 
     def get_rejection_reasons(self) -> List[str]:
         """Get human-readable rejection reasons for critical issues."""
-        return [
-            issue.description
-            for issue in self.issues
-            if issue.severity >= 0.7
-        ]
+        return [issue.description for issue in self.issues if issue.severity >= 0.7]
 
 
 class SafetyCriticConfig:
@@ -149,32 +148,38 @@ class SafetyCritic:
         frozen_result = self._check_frozen_motion(motion)
         check_results["frozen"] = frozen_result
         if frozen_result.get("is_frozen", False):
-            issues.append(SafetyIssue(
-                issue_type=SafetyIssueType.MOTION_FROZEN,
-                severity=0.9,
-                description=f"Motion is frozen for {frozen_result['frozen_ratio']*100:.1f}% of frames",
-                metadata=frozen_result,
-            ))
+            issues.append(
+                SafetyIssue(
+                    issue_type=SafetyIssueType.MOTION_FROZEN,
+                    severity=0.9,
+                    description=f"Motion is frozen for {frozen_result['frozen_ratio']*100:.1f}% of frames",
+                    metadata=frozen_result,
+                )
+            )
 
         repetition_result = self._check_repetitive_motion(motion)
         check_results["repetition"] = repetition_result
         if repetition_result.get("is_repetitive", False):
-            issues.append(SafetyIssue(
-                issue_type=SafetyIssueType.MOTION_REPETITIVE,
-                severity=0.7,
-                description=f"Detected {repetition_result['num_cycles']} repetitive cycles",
-                metadata=repetition_result,
-            ))
+            issues.append(
+                SafetyIssue(
+                    issue_type=SafetyIssueType.MOTION_REPETITIVE,
+                    severity=0.7,
+                    description=f"Detected {repetition_result['num_cycles']} repetitive cycles",
+                    metadata=repetition_result,
+                )
+            )
 
         jitter_result = self._check_jittery_motion(motion)
         check_results["jitter"] = jitter_result
         if jitter_result.get("is_jittery", False):
-            issues.append(SafetyIssue(
-                issue_type=SafetyIssueType.MOTION_JITTERY,
-                severity=0.6,
-                description=f"Motion is jittery ({jitter_result['jitter_ratio']*100:.1f}% high-accel frames)",
-                metadata=jitter_result,
-            ))
+            issues.append(
+                SafetyIssue(
+                    issue_type=SafetyIssueType.MOTION_JITTERY,
+                    severity=0.6,
+                    description=f"Motion is jittery ({jitter_result['jitter_ratio']*100:.1f}% high-accel frames)",
+                    metadata=jitter_result,
+                )
+            )
 
         # Physics checks (if physics tensor provided)
         if physics is not None:
@@ -182,41 +187,52 @@ class SafetyCritic:
             physics_result = self._check_physics_violations(physics)
             check_results["physics"] = physics_result
             if physics_result.get("velocity_exceeded", False):
-                issues.append(SafetyIssue(
-                    issue_type=SafetyIssueType.PHYSICS_VELOCITY_EXCEEDED,
-                    severity=0.8,
-                    description=f"Velocity exceeded: {physics_result['max_velocity']:.2f} m/s",
-                    metadata=physics_result,
-                ))
+                issues.append(
+                    SafetyIssue(
+                        issue_type=SafetyIssueType.PHYSICS_VELOCITY_EXCEEDED,
+                        severity=0.8,
+                        description=f"Velocity exceeded: {physics_result['max_velocity']:.2f} m/s",
+                        metadata=physics_result,
+                    )
+                )
             if physics_result.get("acceleration_exceeded", False):
-                issues.append(SafetyIssue(
-                    issue_type=SafetyIssueType.PHYSICS_ACCELERATION_EXCEEDED,
-                    severity=0.7,
-                    description=f"Acceleration exceeded: {physics_result['max_acceleration']:.2f} m/s²",
-                    metadata=physics_result,
-                ))
+                issues.append(
+                    SafetyIssue(
+                        issue_type=SafetyIssueType.PHYSICS_ACCELERATION_EXCEEDED,
+                        severity=0.7,
+                        description=f"Acceleration exceeded: {physics_result['max_acceleration']:.2f} m/s²",
+                        metadata=physics_result,
+                    )
+                )
 
         # Ground penetration check
         ground_result = self._check_ground_penetration(motion)
         check_results["ground"] = ground_result
         if ground_result.get("has_penetration", False):
-            issues.append(SafetyIssue(
-                issue_type=SafetyIssueType.PHYSICS_GROUND_PENETRATION,
-                severity=0.6,
-                description=f"Ground penetration detected (min_y={ground_result['min_y']:.3f})",
-                metadata=ground_result,
-            ))
+            issues.append(
+                SafetyIssue(
+                    issue_type=SafetyIssueType.PHYSICS_GROUND_PENETRATION,
+                    severity=0.6,
+                    description=f"Ground penetration detected (min_y={ground_result['min_y']:.3f})",
+                    metadata=ground_result,
+                )
+            )
 
         # Quality score check
         if quality_score is not None:
             check_results["quality"] = {"score": quality_score}
             if quality_score < self.config.min_quality_score:
-                issues.append(SafetyIssue(
-                    issue_type=SafetyIssueType.QUALITY_BELOW_THRESHOLD,
-                    severity=0.5,
-                    description=f"Quality score {quality_score:.2f} below threshold {self.config.min_quality_score}",
-                    metadata={"score": quality_score, "threshold": self.config.min_quality_score},
-                ))
+                issues.append(
+                    SafetyIssue(
+                        issue_type=SafetyIssueType.QUALITY_BELOW_THRESHOLD,
+                        severity=0.5,
+                        description=f"Quality score {quality_score:.2f} below threshold {self.config.min_quality_score}",
+                        metadata={
+                            "score": quality_score,
+                            "threshold": self.config.min_quality_score,
+                        },
+                    )
+                )
 
         # Compute overall score and safety decision
         overall_score = self._compute_overall_score(issues, check_results)
@@ -252,7 +268,9 @@ class SafetyCritic:
         velocity = torch.norm(motion[1:] - motion[:-1], dim=-1)  # [T-1, A]
         mean_velocity = velocity.mean(dim=-1)  # [T-1]
 
-        frozen_frames = (mean_velocity < self.config.frozen_velocity_threshold).sum().item()
+        frozen_frames = (
+            (mean_velocity < self.config.frozen_velocity_threshold).sum().item()
+        )
         frozen_ratio = frozen_frames / (T - 1)
 
         return {
@@ -310,7 +328,9 @@ class SafetyCritic:
         accel_magnitude = torch.norm(acceleration, dim=-1)  # [T-2, A]
         mean_accel = accel_magnitude.mean(dim=-1)  # [T-2]
 
-        jitter_frames = (mean_accel > self.config.jitter_acceleration_threshold).sum().item()
+        jitter_frames = (
+            (mean_accel > self.config.jitter_acceleration_threshold).sum().item()
+        )
         jitter_ratio = jitter_frames / (T - 2)
 
         return {
@@ -426,12 +446,14 @@ def batch_evaluate_safety(
         quality = sample.get("quality_score")
 
         result = critic.evaluate(motion, physics, quality)
-        results.append({
-            "is_safe": result.is_safe,
-            "overall_score": result.overall_score,
-            "issue_count": len(result.issues),
-            "issue_types": [i.issue_type.value for i in result.issues],
-        })
+        results.append(
+            {
+                "is_safe": result.is_safe,
+                "overall_score": result.overall_score,
+                "issue_count": len(result.issues),
+                "issue_types": [i.issue_type.value for i in result.issues],
+            }
+        )
 
     # Aggregate statistics
     total = len(results)
@@ -452,4 +474,3 @@ def batch_evaluate_safety(
         "issue_distribution": issue_counts,
         "per_sample_results": results,
     }
-

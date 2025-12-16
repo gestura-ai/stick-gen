@@ -28,6 +28,9 @@ help:
 	@echo ""
 	@echo "Cloud (RunPod):"
 	@echo "  make cloud-prep       - Prepare and upload data to S3"
+	@echo "  make check-upload VOLUME_ID=xxx - Check upload status"
+	@echo "  make upload-by-file VOLUME_ID=xxx [SKIP_DIRS='dir1,dir2'] - Upload file-by-file (RECOMMENDED)"
+	@echo "  make resume-upload VOLUME_ID=xxx [SKIP_DIRS='dir1,dir2'] - Resume upload (has pagination bugs)"
 	@echo "  make cloud-train-all  - Launch training for all models on RunPod"
 	@echo "  make cloud-deploy     - Full deploy (setup vol, prep data, train)"
 	@echo "  make cloud-check      - Check RunPod connection/credits"
@@ -97,10 +100,28 @@ _chmod-scripts:
 cloud-prep: _chmod-scripts
 	./runpod/deploy.sh --prep-only
 
+.PHONY: check-upload
+check-upload: _chmod-scripts
+	@if [ -z "$(VOLUME_ID)" ]; then echo "Error: VOLUME_ID is required. Run 'make check-upload VOLUME_ID=...'"; exit 1; fi
+	./runpod/check_upload_status.sh --volume-id $(VOLUME_ID) --datacenter EU-CZ-1
+
+.PHONY: upload-by-file
+upload-by-file: _chmod-scripts
+	@if [ -z "$(VOLUME_ID)" ]; then echo "Error: VOLUME_ID is required. Run 'make upload-by-file VOLUME_ID=...'"; exit 1; fi
+	@if [ -n "$(SKIP_DIRS)" ]; then \
+		./runpod/upload_all_by_file.sh --volume-id $(VOLUME_ID) --datacenter EU-CZ-1 --skip "$(SKIP_DIRS)"; \
+	else \
+		./runpod/upload_all_by_file.sh --volume-id $(VOLUME_ID) --datacenter EU-CZ-1; \
+	fi
+
 .PHONY: resume-upload
 resume-upload: _chmod-scripts
 	@if [ -z "$(VOLUME_ID)" ]; then echo "Error: VOLUME_ID is required. Run 'make resume-upload VOLUME_ID=...'"; exit 1; fi
-	./runpod/resume_upload.sh --volume-id $(VOLUME_ID) --datacenter EU-CZ-1
+	@if [ -n "$(SKIP_DIRS)" ]; then \
+		./runpod/resume_upload.sh --volume-id $(VOLUME_ID) --datacenter EU-CZ-1 --skip "$(SKIP_DIRS)"; \
+	else \
+		./runpod/resume_upload.sh --volume-id $(VOLUME_ID) --datacenter EU-CZ-1; \
+	fi
 
 .PHONY: cloud-train-all
 cloud-train-all: _chmod-scripts

@@ -34,14 +34,14 @@ def compute_motion_temporal_metrics(motion: torch.Tensor) -> Dict[str, float]:
     # Collapse batch/actor dims into one
     m = m.view(-1, m.shape[-2], m.shape[-1])  # [B, T, D]
 
-    diffs = m[:, 1:] - m[:, :-1]              # velocity proxy
-    vel = torch.norm(diffs, dim=-1)          # [B, T-1]
+    diffs = m[:, 1:] - m[:, :-1]  # velocity proxy
+    vel = torch.norm(diffs, dim=-1)  # [B, T-1]
 
     acc = diffs[:, 1:] - diffs[:, :-1]
-    acc_mag = torch.norm(acc, dim=-1)        # [B, T-2]
+    acc_mag = torch.norm(acc, dim=-1)  # [B, T-2]
 
     jerk = acc[:, 1:] - acc[:, :-1]
-    jerk_mag = torch.norm(jerk, dim=-1)      # [B, T-3]
+    jerk_mag = torch.norm(jerk, dim=-1)  # [B, T-3]
 
     mean_vel = vel.mean().item() if vel.numel() else 0.0
     mean_acc = acc_mag.mean().item() if acc_mag.numel() else 0.0
@@ -57,8 +57,9 @@ def compute_motion_temporal_metrics(motion: torch.Tensor) -> Dict[str, float]:
     }
 
 
-def compute_camera_metrics(camera: torch.Tensor,
-                           motion: Optional[torch.Tensor] = None) -> Dict[str, Any]:
+def compute_camera_metrics(
+    camera: torch.Tensor, motion: Optional[torch.Tensor] = None
+) -> Dict[str, Any]:
     """Camera stability and behavior metrics.
 
     Args:
@@ -130,11 +131,13 @@ def compute_physics_consistency_metrics(
     validator = validator or DataValidator()
     ok, score, reason = validator.check_physics_consistency(phys.squeeze(0))
 
-    stats.update({
-        "is_valid": bool(ok),
-        "validator_score": float(score),
-        "validator_reason": reason,
-    })
+    stats.update(
+        {
+            "is_valid": bool(ok),
+            "validator_score": float(score),
+            "validator_reason": reason,
+        }
+    )
     return stats
 
 
@@ -195,7 +198,7 @@ def compute_motion_features(motion: torch.Tensor) -> torch.Tensor:
 
     # Position statistics per dimension
     mean_pos = m.mean(dim=0)  # [D]
-    std_pos = m.std(dim=0)    # [D]
+    std_pos = m.std(dim=0)  # [D]
     features.extend([mean_pos, std_pos])
 
     # Velocity statistics
@@ -218,13 +221,15 @@ def compute_motion_features(motion: torch.Tensor) -> torch.Tensor:
     features.extend([mean_acc, std_acc])
 
     # Global motion statistics
-    global_stats = torch.tensor([
-        float(m.mean()),
-        float(m.std()),
-        float(vel.mean()) if T > 1 else 0.0,
-        float(vel.std()) if T > 1 else 0.0,
-        float(T),  # sequence length as feature
-    ])
+    global_stats = torch.tensor(
+        [
+            float(m.mean()),
+            float(m.std()),
+            float(vel.mean()) if T > 1 else 0.0,
+            float(vel.std()) if T > 1 else 0.0,
+            float(T),  # sequence length as feature
+        ]
+    )
     features.append(global_stats)
 
     return torch.cat(features)
@@ -355,8 +360,7 @@ def compute_synthetic_artifact_score(motion: torch.Tensor) -> Dict[str, float]:
         for lag in [5, 10, 15, 20]:
             if lag < T:
                 corr = F.cosine_similarity(
-                    flat[:-lag].unsqueeze(0),
-                    flat[lag:].unsqueeze(0)
+                    flat[:-lag].unsqueeze(0), flat[lag:].unsqueeze(0)
                 ).item()
                 max_corr = max(max_corr, abs(corr))
         repetition_score = float(max_corr)
@@ -366,10 +370,10 @@ def compute_synthetic_artifact_score(motion: torch.Tensor) -> Dict[str, float]:
     # --- Overall Artifact Score ---
     # Weighted combination (lower is better)
     artifact_score = (
-        0.3 * min(jitter_score, 1.0) +
-        0.2 * static_ratio +
-        0.3 * explosion_ratio * 10 +  # Explosions are very bad
-        0.2 * repetition_score
+        0.3 * min(jitter_score, 1.0)
+        + 0.2 * static_ratio
+        + 0.3 * explosion_ratio * 10  # Explosions are very bad
+        + 0.2 * repetition_score
     )
 
     return {
@@ -407,9 +411,9 @@ def compute_motion_realism_score(motion: torch.Tensor) -> Dict[str, float]:
 
     # Combine into realism score
     realism = (
-        0.4 * smoothness +
-        0.3 * (1.0 - min(artifact_penalty, 1.0)) +
-        0.3 * velocity_score
+        0.4 * smoothness
+        + 0.3 * (1.0 - min(artifact_penalty, 1.0))
+        + 0.3 * velocity_score
     )
 
     return {
@@ -481,4 +485,3 @@ def compute_frechet_distance(
 
     fid = mean_diff_sq + trace_term
     return float(max(0.0, fid))
-

@@ -23,10 +23,21 @@ from src.eval.reporting import write_html_report  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Render HTML evaluation report")
-    parser.add_argument("--model-results", type=str, required=True, help="Path to model evaluation JSON")
-    parser.add_argument("--dataset-results", type=str, default=None, help="Optional dataset quality JSON")
-    parser.add_argument("--output", type=str, default="evaluation_report.html", help="Output HTML path")
-    parser.add_argument("--title", type=str, default="Stick-Gen Evaluation Report", help="Report title")
+    parser.add_argument(
+        "--model-results", type=str, required=True, help="Path to model evaluation JSON"
+    )
+    parser.add_argument(
+        "--dataset-results",
+        type=str,
+        default=None,
+        help="Optional dataset quality JSON",
+    )
+    parser.add_argument(
+        "--output", type=str, default="evaluation_report.html", help="Output HTML path"
+    )
+    parser.add_argument(
+        "--title", type=str, default="Stick-Gen Evaluation Report", help="Report title"
+    )
 
     args = parser.parse_args()
 
@@ -41,4 +52,3 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover - exercised via CLI
     main()
-

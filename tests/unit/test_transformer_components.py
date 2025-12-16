@@ -47,9 +47,13 @@ class TestRMSNorm:
     def test_learnable_weight(self):
         """RMSNorm should have learnable weight parameter"""
         rms = RMSNorm(128)
-        assert hasattr(rms, 'weight'), "RMSNorm should have weight parameter"
-        assert rms.weight.shape == (128,), f"Weight shape should be (128,), got {rms.weight.shape}"
-        assert torch.allclose(rms.weight, torch.ones(128)), "Weight should be initialized to ones"
+        assert hasattr(rms, "weight"), "RMSNorm should have weight parameter"
+        assert rms.weight.shape == (
+            128,
+        ), f"Weight shape should be (128,), got {rms.weight.shape}"
+        assert torch.allclose(
+            rms.weight, torch.ones(128)
+        ), "Weight should be initialized to ones"
         print("✓ RMSNorm learnable weight test passed")
 
     def test_no_affine(self):
@@ -145,7 +149,7 @@ class TestRoPETransformerEncoderLayer:
     def test_uses_swiglu(self):
         """Encoder layer should use SwiGLU for feed-forward"""
         layer = RoPETransformerEncoderLayer(d_model=256, nhead=8, dim_feedforward=1024)
-        assert hasattr(layer, 'ffn'), "Layer should have ffn attribute"
+        assert hasattr(layer, "ffn"), "Layer should have ffn attribute"
         assert isinstance(layer.ffn, SwiGLU), "ffn should be SwiGLU"
         print("✓ RoPETransformerEncoderLayer uses SwiGLU test passed")
 
@@ -187,15 +191,15 @@ class TestStickFigureTransformerIntegration:
     def test_initialization_all_sizes(self):
         """Model should initialize for all three tier sizes"""
         configs = {
-            'small': {'d_model': 256, 'nhead': 8, 'num_layers': 6},
-            'medium': {'d_model': 384, 'nhead': 12, 'num_layers': 8},
-            'large': {'d_model': 512, 'nhead': 16, 'num_layers': 10},
+            "small": {"d_model": 256, "nhead": 8, "num_layers": 6},
+            "medium": {"d_model": 384, "nhead": 12, "num_layers": 8},
+            "large": {"d_model": 512, "nhead": 16, "num_layers": 10},
         }
         for name, cfg in configs.items():
             model = StickFigureTransformer(
-                d_model=cfg['d_model'],
-                nhead=cfg['nhead'],
-                num_layers=cfg['num_layers'],
+                d_model=cfg["d_model"],
+                nhead=cfg["nhead"],
+                num_layers=cfg["num_layers"],
             )
             params = sum(p.numel() for p in model.parameters())
             print(f"✓ {name} model: {params:,} parameters ({params/1e6:.1f}M)")
@@ -219,7 +223,14 @@ class TestStickFigureTransformerIntegration:
         text_emb = torch.randn(4, 1024)
         with torch.no_grad():
             outputs = model(motion, text_emb, return_all_outputs=True)
-        expected_keys = ['pose', 'position', 'velocity', 'action_logits', 'physics', 'environment']
+        expected_keys = [
+            "pose",
+            "position",
+            "velocity",
+            "action_logits",
+            "physics",
+            "environment",
+        ]
         for key in expected_keys:
             assert key in outputs, f"Missing key: {key}"
         print("✓ StickFigureTransformer all outputs test passed")
@@ -234,7 +245,9 @@ class TestStickFigureTransformerIntegration:
         action_seq = torch.randint(0, 60, (seq_len, batch))
         camera_data = torch.randn(seq_len, batch, 3)
         with torch.no_grad():
-            out = model(motion, text_emb, action_sequence=action_seq, camera_data=camera_data)
+            out = model(
+                motion, text_emb, action_sequence=action_seq, camera_data=camera_data
+            )
         assert out.shape == (seq_len, batch, 20)
         print("✓ StickFigureTransformer conditioning test passed")
 
@@ -278,7 +291,7 @@ def run_all_tests():
 
         instance = test_class()
         for method_name in dir(instance):
-            if method_name.startswith('test_'):
+            if method_name.startswith("test_"):
                 try:
                     getattr(instance, method_name)()
                     passed += 1

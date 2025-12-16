@@ -32,17 +32,20 @@ try:
         compute_motion_diversity,
         compute_synthetic_artifact_score,
         compute_motion_realism_score,
-        compute_motion_features
+        compute_motion_features,
     )
+
     # Mocking DataValidator if not available/configured to avoid dependency hell in this script
     # In a real run, this would load the actual validator
-    DataValidator = None 
+    DataValidator = None
 except ImportError as e:
     print(f"❌ Error importing metrics: {e}")
     sys.exit(1)
 
 
-def generate_mock_data(num_samples: int = 10, seq_len: int = 250, input_dim: int = 20) -> torch.Tensor:
+def generate_mock_data(
+    num_samples: int = 10, seq_len: int = 250, input_dim: int = 20
+) -> torch.Tensor:
     """Generate random motion data for testing the eval pipeline."""
     print("⚠️  No model/data provided. Generating MOCK data for demonstration.")
     # shape: [Batch, Time, Dim]
@@ -54,7 +57,7 @@ def load_model_and_generate(checkpoint_path: str, num_samples: int) -> torch.Ten
     if not Path(checkpoint_path).exists():
         print(f"⚠️  Checkpoint {checkpoint_path} not found.")
         return generate_mock_data(num_samples)
-    
+
     print(f"Loading model from {checkpoint_path}...")
     # TODO: Implement actual model loading and generation
     # For now, return mock data to ensure script runs through
@@ -64,33 +67,29 @@ def load_model_and_generate(checkpoint_path: str, num_samples: int) -> torch.Ten
 def run_evaluation(motions: torch.Tensor) -> Dict[str, Any]:
     """Run all metrics on the provided motion tensor."""
     print("Running evaluation suite...")
-    
+
     # 1. Per-sample metrics
     sample_metrics = []
     print(f"Evaluating {len(motions)} samples...")
-    
+
     for i, m in enumerate(motions):
         # m is [T, D]
         temp = compute_motion_temporal_metrics(m)
         phys = compute_physics_consistency_metrics(
             # Physics tensor usually different form, here approximating for demo
             # In real pipeline, model returns separate physics tensor
-            physics=torch.cat([m[:, :2], m[:, :2], m[:, :2]], dim=-1) # Mock 6-dim physics
+            physics=torch.cat(
+                [m[:, :2], m[:, :2], m[:, :2]], dim=-1
+            )  # Mock 6-dim physics
         )
         artifact = compute_synthetic_artifact_score(m)
         realism = compute_motion_realism_score(m)
-        
-        sample_metrics.append({
-            "id": i,
-            **temp,
-            **phys,
-            **artifact,
-            **realism
-        })
+
+        sample_metrics.append({"id": i, **temp, **phys, **artifact, **realism})
 
     # 2. Aggregate metrics
     print("Computing aggregate metrics...")
-    
+
     # Convert list of dicts to dict of lists
     agg_keys = sample_metrics[0].keys()
     aggregates = {}
@@ -102,38 +101,36 @@ def run_evaluation(motions: torch.Tensor) -> Dict[str, Any]:
     # 3. Diversity metrics
     print("Computing diversity metrics...")
     div = compute_motion_diversity([m for m in motions])
-    
-    return {
-        "summary": {
-            **aggregates,
-            **div
-        },
-        "details": sample_metrics
-    }
+
+    return {"summary": {**aggregates, **div}, "details": sample_metrics}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run comprehensive evaluation")
     parser.add_argument("--checkpoint", help="Path to model checkpoint")
-    parser.add_argument("--output", default="eval_report.json", help="Output JSON report path")
-    parser.add_argument("--num_samples", type=int, default=10, help="Number of samples to evaluate")
-    
+    parser.add_argument(
+        "--output", default="eval_report.json", help="Output JSON report path"
+    )
+    parser.add_argument(
+        "--num_samples", type=int, default=10, help="Number of samples to evaluate"
+    )
+
     args = parser.parse_args()
-    
+
     # Get motions
     if args.checkpoint:
         motions = load_model_and_generate(args.checkpoint, args.num_samples)
     else:
         motions = generate_mock_data(args.num_samples)
-        
+
     # Run Eval
     results = run_evaluation(motions)
-    
+
     # Save Report
     output_path = Path(args.output)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
-        
+
     print(f"\n✅ Evaluation Complete!")
     print(f"Report saved to: {output_path.absolute()}")
     print("\nSummary Results:")

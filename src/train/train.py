@@ -18,18 +18,23 @@ from src.model.physics_layer import DifferentiablePhysicsLoss
 LOG_LEVEL = logging.INFO  # Change to logging.DEBUG for verbose debugging
 logging.basicConfig(
     level=LOG_LEVEL,
-    format='%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s',
+    format="%(asctime)s [%(levelname)s] %(funcName)s:%(lineno)d - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('training_verbose.log', mode='w')
-    ]
+        logging.FileHandler("training_verbose.log", mode="w"),
+    ],
 )
 logger = logging.getLogger(__name__)
 logger.info(f"Logging initialized at level: {logging.getLevelName(LOG_LEVEL)}")
 
 # Phase 3: Diffusion refinement (optional)
 try:
-    from src.model.diffusion import PoseRefinementUNet, DDPMScheduler, DiffusionRefinementModule
+    from src.model.diffusion import (
+        PoseRefinementUNet,
+        DDPMScheduler,
+        DiffusionRefinementModule,
+    )
+
     DIFFUSION_AVAILABLE = True
 except ImportError:
     DIFFUSION_AVAILABLE = False
@@ -44,10 +49,12 @@ try:
         count_lora_parameters,
         get_lora_state_dict,
     )
+
     LORA_AVAILABLE = True
 except ImportError:
     LORA_AVAILABLE = False
     print("⚠️  LoRA module not available - training without LoRA support")
+
 
 class StickFigureDataset(Dataset):
     def __init__(self, data_path="data/train_data_embedded.pt"):
@@ -60,13 +67,20 @@ class StickFigureDataset(Dataset):
         # Item is dict {"description": str, "motion": tensor, "embedding": tensor, "actions": tensor, "physics": tensor}
         item = self.data[idx]
         motion = item["motion"]
-        embedding = item["embedding"] # [1024]
+        embedding = item["embedding"]  # [1024]
         actions = item.get("actions", None)  # [num_frames] - Phase 1
         physics = item.get("physics", None)  # [num_frames, 6] - Phase 2
 
         # Input: Frame t
         # Target: Frame t+1
-        return motion[:-1], embedding, motion[1:], actions[:-1] if actions is not None else None, physics[:-1] if physics is not None else None
+        return (
+            motion[:-1],
+            embedding,
+            motion[1:],
+            actions[:-1] if actions is not None else None,
+            physics[:-1] if physics is not None else None,
+        )
+
 
 def temporal_consistency_loss(predictions):
     """
@@ -85,10 +99,11 @@ def temporal_consistency_loss(predictions):
     frame_diff = predictions[1:] - predictions[:-1]
     logger.debug(f"      frame_diff shape: {frame_diff.shape}")
 
-    loss = torch.mean(frame_diff ** 2)
+    loss = torch.mean(frame_diff**2)
     logger.debug(f"      temporal loss: {loss.item():.6f}")
     logger.debug("    EXIT temporal_consistency_loss()")
     return loss
+
 
 def physics_loss(physics_output, physics_targets):
     """
@@ -126,40 +141,40 @@ def physics_loss(physics_output, physics_targets):
     # 3. Momentum conservation: momentum should change smoothly
     momentum_diff_x = pred_mx[1:] - pred_mx[:-1]
     momentum_diff_y = pred_my[1:] - pred_my[:-1]
-    momentum_loss = torch.mean(momentum_diff_x ** 2 + momentum_diff_y ** 2)
+    momentum_loss = torch.mean(momentum_diff_x**2 + momentum_diff_y**2)
 
     # 4. Velocity-acceleration consistency: v(t+1) ≈ v(t) + a(t) * dt
     dt = 1.0 / 25.0  # 25 FPS
     expected_vx = pred_vx[:-1] + pred_ax[:-1] * dt
     expected_vy = pred_vy[:-1] + pred_ay[:-1] * dt
-    consistency_loss = torch.mean((pred_vx[1:] - expected_vx) ** 2 + (pred_vy[1:] - expected_vy) ** 2)
+    consistency_loss = torch.mean(
+        (pred_vx[1:] - expected_vx) ** 2 + (pred_vy[1:] - expected_vy) ** 2
+    )
 
     # Combine losses with weights
     total_loss = (
-        mse_loss +
-        0.1 * gravity_loss +
-        0.1 * momentum_loss +
-        0.2 * consistency_loss
+        mse_loss + 0.1 * gravity_loss + 0.1 * momentum_loss + 0.2 * consistency_loss
     )
 
     # Phase 2: Physics-aware loss function (Standard)
-    
+
     # Phase 2: Physics-aware loss function (Standard)
     # physics_output is already passed in argument
 
     # physics_targets would be needed here, currently reusing what we have or skipping if not available
     # For now, we keep the existing logic but wrap the new layer
-    
+
     # NEW: Differentiable Physics Layer (Brax)
     # We instantiate it once outside the loop in a real scenario, but for minimal diff:
     # (In practice, pass this instance from main())
-    
+
     return total_loss, {
-        'physics_mse': mse_loss.item(),
-        'gravity_loss': gravity_loss.item(),
-        'momentum_loss': momentum_loss.item(),
-        'consistency_loss': consistency_loss.item()
+        "physics_mse": mse_loss.item(),
+        "gravity_loss": gravity_loss.item(),
+        "momentum_loss": momentum_loss.item(),
+        "consistency_loss": consistency_loss.item(),
     }
+
 
 def compute_evaluation_metrics(predictions, targets):
     """
@@ -178,9 +193,10 @@ def compute_evaluation_metrics(predictions, targets):
         position_error = torch.mean((predictions[:, :, :2] - targets[:, :, :2]) ** 2)
 
         return {
-            'smoothness_error': smoothness_error.item(),
-            'position_error': position_error.item()
+            "smoothness_error": smoothness_error.item(),
+            "position_error": position_error.item(),
         }
+
 
 def train(
     config_path="configs/base.yaml",
@@ -217,7 +233,9 @@ def train(
     config.print_config()
 
     # Determine data and checkpoint paths (CLI overrides take precedence)
-    data_path = data_path_override or config.get("data.train_data", "data/train_data_final.pt")
+    data_path = data_path_override or config.get(
+        "data.train_data", "data/train_data_final.pt"
+    )
     checkpoint_dir = checkpoint_dir_override or config.get("data.checkpoint_dir", ".")
 
     # If data_path is a directory, look for train_data_final.pt inside it
@@ -257,7 +275,9 @@ def train(
     DIFFUSION_LR = config.get("diffusion.learning_rate", 1e-4)
 
     if USE_DIFFUSION and not DIFFUSION_AVAILABLE:
-        print("⚠️  Diffusion enabled in config but diffusion module not available; continuing without diffusion.")
+        print(
+            "⚠️  Diffusion enabled in config but diffusion module not available; continuing without diffusion."
+        )
         USE_DIFFUSION = False
 
     # LoRA settings
@@ -265,10 +285,14 @@ def train(
     LORA_RANK = config.get("lora.rank", 8)
     LORA_ALPHA = config.get("lora.alpha", 16.0)
     LORA_DROPOUT = config.get("lora.dropout", 0.05)
-    LORA_TARGET_MODULES = config.get("lora.target_modules", ["transformer_encoder", "pose_decoder"])
+    LORA_TARGET_MODULES = config.get(
+        "lora.target_modules", ["transformer_encoder", "pose_decoder"]
+    )
 
     if USE_LORA and not LORA_AVAILABLE:
-        print("⚠️  LoRA enabled in config but LoRA module not available; continuing without LoRA.")
+        print(
+            "⚠️  LoRA enabled in config but LoRA module not available; continuing without LoRA."
+        )
         USE_LORA = False
 
     # Training stage (pretraining vs sft)
@@ -286,7 +310,9 @@ def train(
         if torch.backends.mps.is_available():
             device = torch.device("mps")
         else:
-            print("⚠️  Requested MPS but no MPS device is available. Falling back to CPU.")
+            print(
+                "⚠️  Requested MPS but no MPS device is available. Falling back to CPU."
+            )
     elif device_type == "cpu":
         device = torch.device("cpu")
     else:  # "auto"
@@ -309,15 +335,17 @@ def train(
         torch.set_num_threads(torch.get_num_threads())  # Use all CPU cores
         print(f"   Using {torch.get_num_threads()} CPU threads")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("INITIALIZING 11M+ PARAMETER MODEL")
-    print("="*60)
+    print("=" * 60)
     print(f"  - d_model: {D_MODEL}")
     print(f"  - num_layers: {NUM_LAYERS}")
     print(f"  - nhead: {NHEAD}")
     print(f"  - dropout: {DROPOUT}")
     print(f"  - batch_size: {BATCH_SIZE}")
-    print(f"  - gradient_accumulation: {GRAD_ACCUM_STEPS} (effective batch: {BATCH_SIZE * GRAD_ACCUM_STEPS})")
+    print(
+        f"  - gradient_accumulation: {GRAD_ACCUM_STEPS} (effective batch: {BATCH_SIZE * GRAD_ACCUM_STEPS})"
+    )
 
     # Qwen3-Embedding-8B (GTE-Qwen2-7B) embedding dim is 4096
     model = StickFigureTransformer(
@@ -328,7 +356,7 @@ def train(
         output_dim=INPUT_DIM,
         embedding_dim=1024,  # Updated for BAAI/bge-large-en-v1.5
         dropout=DROPOUT,
-        num_actions=NUM_ACTIONS  # Phase 1: Action conditioning
+        num_actions=NUM_ACTIONS,  # Phase 1: Action conditioning
     ).to(device)
 
     # Initialize Physics Loss Layer
@@ -366,16 +394,18 @@ def train(
             raise KeyError(msg)
 
         model.load_state_dict(checkpoint["model_state_dict"])
-        logger.info("Model weights initialized from checkpoint (optimizer/scheduler NOT restored)")
+        logger.info(
+            "Model weights initialized from checkpoint (optimizer/scheduler NOT restored)"
+        )
         print("  ✓ Model weights loaded (fresh optimizer for SFT)")
 
     # ------------------------------------------------------------------
     # Optional: Inject LoRA adapters for efficient fine-tuning
     # ------------------------------------------------------------------
     if USE_LORA:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("INJECTING LORA ADAPTERS")
-        print("="*60)
+        print("=" * 60)
         num_lora_layers = inject_lora_adapters(
             model,
             target_modules=LORA_TARGET_MODULES,
@@ -400,21 +430,24 @@ def train(
     diffusion_module = None
     diffusion_optimizer = None
     if USE_DIFFUSION:
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("INITIALIZING DIFFUSION REFINEMENT MODULE")
-        print("="*60)
+        print("=" * 60)
         unet = PoseRefinementUNet(
-            pose_dim=INPUT_DIM,
-            hidden_dims=[64, 128, 256],
-            time_emb_dim=128
+            pose_dim=INPUT_DIM, hidden_dims=[64, 128, 256], time_emb_dim=128
         )
         scheduler = DDPMScheduler(num_train_timesteps=1000)
-        diffusion_module = DiffusionRefinementModule(unet, scheduler, device=str(device))
+        diffusion_module = DiffusionRefinementModule(
+            unet, scheduler, device=str(device)
+        )
         diffusion_optimizer = optim.Adam(unet.parameters(), lr=DIFFUSION_LR)
 
         from src.model.diffusion import count_parameters
+
         diffusion_params = count_parameters(unet)
-        print(f"  - Diffusion UNet parameters: {diffusion_params:,} ({diffusion_params/1e6:.2f}M)")
+        print(
+            f"  - Diffusion UNet parameters: {diffusion_params:,} ({diffusion_params/1e6:.2f}M)"
+        )
         print(f"  - Diffusion learning rate: {DIFFUSION_LR}")
         print(f"  - Diffusion loss weight: {DIFFUSION_LOSS_WEIGHT}")
 
@@ -426,48 +459,53 @@ def train(
         logger.debug("ENTER multi_task_loss()")
         logger.debug(f"  outputs keys: {outputs.keys()}")
         logger.debug(f"  targets shape: {targets.shape}")
-        logger.debug(f"  action_targets: {action_targets.shape if action_targets is not None else None}")
-        logger.debug(f"  physics_targets: {physics_targets.shape if physics_targets is not None else None}")
+        logger.debug(
+            f"  action_targets: {action_targets.shape if action_targets is not None else None}"
+        )
+        logger.debug(
+            f"  physics_targets: {physics_targets.shape if physics_targets is not None else None}"
+        )
 
         # Main pose reconstruction loss
         logger.debug("  Computing pose loss...")
-        pose_loss = nn.MSELoss()(outputs['pose'], targets)
+        pose_loss = nn.MSELoss()(outputs["pose"], targets)
         logger.debug(f"  pose_loss computed: {pose_loss.item():.6f}")
 
         # Temporal consistency loss
         logger.debug("  Computing temporal loss...")
-        temporal_loss = temporal_consistency_loss(outputs['pose'])
+        temporal_loss = temporal_consistency_loss(outputs["pose"])
         logger.debug(f"  temporal_loss computed: {temporal_loss.item():.6f}")
 
         # Initialize loss components (store tensors, not .item() values)
-        loss_components = {
-            'pose_loss': pose_loss,
-            'temporal_loss': temporal_loss
-        }
+        loss_components = {"pose_loss": pose_loss, "temporal_loss": temporal_loss}
 
         total_loss = pose_loss + TEMPORAL_LOSS_WEIGHT * temporal_loss
         logger.debug(f"  total_loss (pose + temporal): {total_loss.item():.6f}")
 
         # Phase 1: Action prediction loss
-        if action_targets is not None and 'action_logits' in outputs:
+        if action_targets is not None and "action_logits" in outputs:
             logger.debug("  Computing action loss...")
             # action_logits: [seq_len, batch, num_actions]
             # action_targets: [batch, seq_len]
-            action_logits = outputs['action_logits'].permute(1, 2, 0)  # [batch, num_actions, seq_len]
+            action_logits = outputs["action_logits"].permute(
+                1, 2, 0
+            )  # [batch, num_actions, seq_len]
             action_loss = nn.CrossEntropyLoss()(action_logits, action_targets)
             total_loss += ACTION_LOSS_WEIGHT * action_loss
-            loss_components['action_loss'] = action_loss
+            loss_components["action_loss"] = action_loss
             logger.debug(f"  action_loss computed: {action_loss.item():.6f}")
 
         # Phase 2: Physics loss
-        if physics_targets is not None and 'physics' in outputs:
+        if physics_targets is not None and "physics" in outputs:
             logger.debug("  Computing physics loss...")
             # physics: [seq_len, batch, 6]
             # physics_targets: [batch, seq_len, 6] -> permute to [seq_len, batch, 6]
             physics_targets_permuted = physics_targets.permute(1, 0, 2)
 
             # Phase 2: Physics-aware loss function (Standard)
-            phys_loss, phys_components = physics_loss(outputs["physics"], physics_targets_permuted)
+            phys_loss, phys_components = physics_loss(
+                outputs["physics"], physics_targets_permuted
+            )
             current_physics_loss = phys_loss
 
             # NEW: Differentiable Physics Layer (Brax)
@@ -477,15 +515,20 @@ def train(
                 # outputs['pose'] is [seq_len, batch, input_dim]
                 # outputs['physics'] is [seq_len, batch, 6]
                 diff_phys_loss = diff_physics_layer(outputs["pose"], outputs["physics"])
-                current_physics_loss = current_physics_loss + DIFF_PHYSICS_LOSS_WEIGHT * diff_phys_loss
-                loss_components['diff_physics_loss'] = diff_phys_loss
-                logger.debug(f"  differentiable physics_loss computed: {diff_phys_loss.item():.6f}")
+                current_physics_loss = (
+                    current_physics_loss + DIFF_PHYSICS_LOSS_WEIGHT * diff_phys_loss
+                )
+                loss_components["diff_physics_loss"] = diff_phys_loss
+                logger.debug(
+                    f"  differentiable physics_loss computed: {diff_phys_loss.item():.6f}"
+                )
 
             total_loss += PHYSICS_LOSS_WEIGHT * current_physics_loss
-            loss_components['physics_loss'] = phys_loss # Keep original physics_loss for logging
+            loss_components["physics_loss"] = (
+                phys_loss  # Keep original physics_loss for logging
+            )
             loss_components.update(phys_components)
             logger.debug(f"  physics_loss computed: {phys_loss.item():.6f}")
-
 
         logger.debug(f"  FINAL total_loss: {total_loss.item():.6f}")
         logger.debug("EXIT multi_task_loss()")
@@ -496,10 +539,16 @@ def train(
     # When using LoRA, only optimize LoRA parameters
     if USE_LORA:
         lora_params = list(get_lora_parameters(model))
-        optimizer = optim.AdamW(lora_params, lr=LEARNING_RATE, weight_decay=weight_decay)
-        logger.info(f"Optimizer configured for LoRA parameters only ({len(lora_params)} parameter groups)")
+        optimizer = optim.AdamW(
+            lora_params, lr=LEARNING_RATE, weight_decay=weight_decay
+        )
+        logger.info(
+            f"Optimizer configured for LoRA parameters only ({len(lora_params)} parameter groups)"
+        )
     else:
-        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=weight_decay)
+        optimizer = optim.AdamW(
+            model.parameters(), lr=LEARNING_RATE, weight_decay=weight_decay
+        )
 
     # Learning rate scheduler with longer warmup
     def lr_lambda(epoch):
@@ -550,9 +599,14 @@ def train(
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
         # Optional diffusion optimizer state
-        if diffusion_optimizer is not None and "diffusion_optimizer_state_dict" in checkpoint:
+        if (
+            diffusion_optimizer is not None
+            and "diffusion_optimizer_state_dict" in checkpoint
+        ):
             try:
-                diffusion_optimizer.load_state_dict(checkpoint["diffusion_optimizer_state_dict"])
+                diffusion_optimizer.load_state_dict(
+                    checkpoint["diffusion_optimizer_state_dict"]
+                )
             except Exception as e:  # pragma: no cover - defensive logging
                 logger.warning(f"Failed to restore diffusion optimizer state: {e}")
 
@@ -566,7 +620,9 @@ def train(
         # Epoch and step counters
         ckpt_epoch = int(checkpoint.get("epoch", -1))
         if ckpt_epoch < -1:
-            logger.warning(f"Checkpoint epoch {ckpt_epoch} is invalid; starting from epoch 0")
+            logger.warning(
+                f"Checkpoint epoch {ckpt_epoch} is invalid; starting from epoch 0"
+            )
             start_epoch = 0
         else:
             start_epoch = ckpt_epoch + 1
@@ -581,9 +637,9 @@ def train(
             f"global_step={global_step}, best_val_loss={best_val_loss:.6f})"
         )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("LOADING DATASET")
-    print("="*60)
+    print("=" * 60)
     print(f"  - Data path: {data_path}")
     dataset = StickFigureDataset(data_path=data_path)
     print(f"  - Total samples loaded: {len(dataset)}")
@@ -629,9 +685,9 @@ def train(
     print(f"  - Validation samples: {val_size} (10%)")
     print(f"  - Test samples: {test_size} (10%)")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("STARTING TRAINING LOOP")
-    print("="*60)
+    print("=" * 60)
 
     # Track metrics
     train_metrics_history = []
@@ -681,7 +737,7 @@ def train(
                 physics = physics.to(device)
 
             # data: [batch, seq, dim] -> [seq, batch, dim] for transformer
-            logger.debug(f"  Permuting data: {data.shape} -> ", end='')
+            logger.debug(f"  Permuting data: {data.shape} -> ", end="")
             data = data.permute(1, 0, 2)
             logger.debug(f"{data.shape}")
             target = target.permute(1, 0, 2)
@@ -696,7 +752,9 @@ def train(
 
             # Forward pass with multi-task outputs and action conditioning
             logger.debug(f"  Running forward pass...")
-            outputs = model(data, embedding, return_all_outputs=True, action_sequence=actions_seq)
+            outputs = model(
+                data, embedding, return_all_outputs=True, action_sequence=actions_seq
+            )
             logger.debug(f"  Forward pass complete. Output keys: {outputs.keys()}")
 
             # Compute multi-task loss (Phase 2: includes physics)
@@ -715,46 +773,60 @@ def train(
             # Accumulate losses (convert tensors to scalars)
             logger.debug(f"  Accumulating losses...")
             total_train_loss += loss.item() * GRAD_ACCUM_STEPS
-            total_pose_loss += loss_components['pose_loss'].item()
-            total_temporal_loss += loss_components['temporal_loss'].item()
+            total_pose_loss += loss_components["pose_loss"].item()
+            total_temporal_loss += loss_components["temporal_loss"].item()
 
-            if 'action_loss' in loss_components:
-                total_action_loss += loss_components['action_loss'].item()
-                logger.debug(f"    action_loss: {loss_components['action_loss'].item():.6f}")
+            if "action_loss" in loss_components:
+                total_action_loss += loss_components["action_loss"].item()
+                logger.debug(
+                    f"    action_loss: {loss_components['action_loss'].item():.6f}"
+                )
 
                 # Compute action accuracy
-                if 'action_logits' in outputs and actions is not None:
-                    action_preds = outputs['action_logits'].argmax(dim=-1).permute(1, 0)  # [batch, seq]
+                if "action_logits" in outputs and actions is not None:
+                    action_preds = (
+                        outputs["action_logits"].argmax(dim=-1).permute(1, 0)
+                    )  # [batch, seq]
                     action_acc = (action_preds == actions).float().mean().item()
                     total_action_accuracy += action_acc
                     logger.debug(f"    action_accuracy: {action_acc:.4f}")
 
             # Phase 2: Accumulate physics loss
-            if 'physics_loss' in loss_components:
-                total_physics_loss += loss_components['physics_loss'].item()
-                logger.debug(f"    physics_loss: {loss_components['physics_loss'].item():.6f}")
+            if "physics_loss" in loss_components:
+                total_physics_loss += loss_components["physics_loss"].item()
+                logger.debug(
+                    f"    physics_loss: {loss_components['physics_loss'].item():.6f}"
+                )
 
             # Phase 3: Diffusion refinement training (optional)
             if diffusion_module is not None and diffusion_optimizer is not None:
                 # Get transformer predictions (detach to avoid backprop through transformer)
-                transformer_poses = outputs['pose'].permute(1, 0, 2).detach()  # [batch, seq, dim]
+                transformer_poses = (
+                    outputs["pose"].permute(1, 0, 2).detach()
+                )  # [batch, seq, dim]
 
                 # Train diffusion model to denoise transformer outputs
-                diffusion_result = diffusion_module.train_step(transformer_poses, diffusion_optimizer)
-                total_diffusion_loss += diffusion_result['loss']
+                diffusion_result = diffusion_module.train_step(
+                    transformer_poses, diffusion_optimizer
+                )
+                total_diffusion_loss += diffusion_result["loss"]
 
             # Compute evaluation metrics
-            metrics = compute_evaluation_metrics(outputs['pose'], target)
-            total_smoothness_error += metrics['smoothness_error']
-            total_position_error += metrics['position_error']
+            metrics = compute_evaluation_metrics(outputs["pose"], target)
+            total_smoothness_error += metrics["smoothness_error"]
+            total_position_error += metrics["position_error"]
 
             # Gradient accumulation: only step every GRAD_ACCUM_STEPS
             if (batch_idx + 1) % GRAD_ACCUM_STEPS == 0:
-                logger.debug(f"  Gradient accumulation step {(batch_idx + 1) // GRAD_ACCUM_STEPS}")
+                logger.debug(
+                    f"  Gradient accumulation step {(batch_idx + 1) // GRAD_ACCUM_STEPS}"
+                )
 
                 # Gradient clipping
                 logger.debug(f"  Clipping gradients (max_norm={MAX_GRAD_NORM})")
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=MAX_GRAD_NORM)
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_norm=MAX_GRAD_NORM
+                )
 
                 logger.debug(f"  Optimizer step")
                 optimizer.step()
@@ -765,8 +837,12 @@ def train(
                 # Print progress every 10 gradient steps
                 if ((batch_idx + 1) // GRAD_ACCUM_STEPS) % 10 == 0:
                     avg_loss = total_train_loss / (batch_idx + 1)
-                    logger.info(f"  Step {(batch_idx + 1) // GRAD_ACCUM_STEPS}, Batch {batch_idx+1}/{len(train_loader)}, Avg Loss: {avg_loss:.4f}")
-                    print(f"  Step {(batch_idx + 1) // GRAD_ACCUM_STEPS}, Batch {batch_idx+1}/{len(train_loader)}, Avg Loss: {avg_loss:.4f}")
+                    logger.info(
+                        f"  Step {(batch_idx + 1) // GRAD_ACCUM_STEPS}, Batch {batch_idx+1}/{len(train_loader)}, Avg Loss: {avg_loss:.4f}"
+                    )
+                    print(
+                        f"  Step {(batch_idx + 1) // GRAD_ACCUM_STEPS}, Batch {batch_idx+1}/{len(train_loader)}, Avg Loss: {avg_loss:.4f}"
+                    )
 
         # Step optimizer if there are remaining gradients
         logger.debug(f"Checking for remaining gradients...")
@@ -780,10 +856,20 @@ def train(
         avg_train_loss = total_train_loss / len(train_loader)
         avg_pose_loss = total_pose_loss / len(train_loader)
         avg_temporal_loss = total_temporal_loss / len(train_loader)
-        avg_action_loss = total_action_loss / len(train_loader) if total_action_loss > 0 else 0
-        avg_action_accuracy = total_action_accuracy / len(train_loader) if total_action_accuracy > 0 else 0
-        avg_physics_loss = total_physics_loss / len(train_loader) if total_physics_loss > 0 else 0  # Phase 2
-        avg_diffusion_loss = total_diffusion_loss / len(train_loader) if total_diffusion_loss > 0 else 0  # Phase 3
+        avg_action_loss = (
+            total_action_loss / len(train_loader) if total_action_loss > 0 else 0
+        )
+        avg_action_accuracy = (
+            total_action_accuracy / len(train_loader)
+            if total_action_accuracy > 0
+            else 0
+        )
+        avg_physics_loss = (
+            total_physics_loss / len(train_loader) if total_physics_loss > 0 else 0
+        )  # Phase 2
+        avg_diffusion_loss = (
+            total_diffusion_loss / len(train_loader) if total_diffusion_loss > 0 else 0
+        )  # Phase 3
         avg_smoothness_error = total_smoothness_error / len(train_loader)
         avg_position_error = total_position_error / len(train_loader)
 
@@ -822,14 +908,19 @@ def train(
                 else:
                     actions_seq = None
 
-                outputs = model(data, embedding, return_all_outputs=True, action_sequence=actions_seq)
+                outputs = model(
+                    data,
+                    embedding,
+                    return_all_outputs=True,
+                    action_sequence=actions_seq,
+                )
                 loss, _ = multi_task_loss(outputs, target, actions, physics)
                 total_val_loss += loss.item()
 
                 # Compute metrics
-                metrics = compute_evaluation_metrics(outputs['pose'], target)
-                total_val_smoothness += metrics['smoothness_error']
-                total_val_position += metrics['position_error']
+                metrics = compute_evaluation_metrics(outputs["pose"], target)
+                total_val_smoothness += metrics["smoothness_error"]
+                total_val_position += metrics["position_error"]
 
         avg_val_loss = total_val_loss / len(val_loader)
         avg_val_smoothness = total_val_smoothness / len(val_loader)
@@ -844,116 +935,133 @@ def train(
         print(f"  Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
         print(f"  Pose: {avg_pose_loss:.6f} | Temporal: {avg_temporal_loss:.6f}")
         if avg_action_loss > 0:
-            print(f"  Action Loss: {avg_action_loss:.6f} | Action Acc: {avg_action_accuracy:.2%}")
+            print(
+                f"  Action Loss: {avg_action_loss:.6f} | Action Acc: {avg_action_accuracy:.2%}"
+            )
         if avg_physics_loss > 0:  # Phase 2
             print(f"  Physics Loss: {avg_physics_loss:.6f}")
         if avg_diffusion_loss > 0:  # Phase 3
             print(f"  Diffusion Loss: {avg_diffusion_loss:.6f}")
-        print(f"  Smoothness: {avg_smoothness_error:.6f} | Position: {avg_position_error:.6f}")
-        print(f"  Val Smoothness: {avg_val_smoothness:.6f} | Val Position: {avg_val_position:.6f}")
+        print(
+            f"  Smoothness: {avg_smoothness_error:.6f} | Position: {avg_position_error:.6f}"
+        )
+        print(
+            f"  Val Smoothness: {avg_val_smoothness:.6f} | Val Position: {avg_val_position:.6f}"
+        )
         print(f"  LR: {current_lr:.6f}")
 
         # Save best model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             checkpoint_data = {
-                'epoch': epoch,
-                'global_step': global_step,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'best_val_loss': best_val_loss,
-                'train_loss': avg_train_loss,
-                'val_loss': avg_val_loss,
-                'val_smoothness': avg_val_smoothness,
-                'val_position': avg_val_position,
-                'training_stage': TRAINING_STAGE,
-                'lora_enabled': USE_LORA,
+                "epoch": epoch,
+                "global_step": global_step,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "best_val_loss": best_val_loss,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+                "val_smoothness": avg_val_smoothness,
+                "val_position": avg_val_position,
+                "training_stage": TRAINING_STAGE,
+                "lora_enabled": USE_LORA,
             }
             # Save LoRA state separately for easy extraction
             if USE_LORA:
-                checkpoint_data['lora_state_dict'] = get_lora_state_dict(model)
-                checkpoint_data['lora_config'] = {
-                    'rank': LORA_RANK,
-                    'alpha': LORA_ALPHA,
-                    'dropout': LORA_DROPOUT,
-                    'target_modules': LORA_TARGET_MODULES,
+                checkpoint_data["lora_state_dict"] = get_lora_state_dict(model)
+                checkpoint_data["lora_config"] = {
+                    "rank": LORA_RANK,
+                    "alpha": LORA_ALPHA,
+                    "dropout": LORA_DROPOUT,
+                    "target_modules": LORA_TARGET_MODULES,
                 }
-            torch.save(checkpoint_data, os.path.join(checkpoint_dir, "model_checkpoint_best.pth"))
-            print(f"  ✓ Best model saved to {checkpoint_dir}/model_checkpoint_best.pth (val_loss: {best_val_loss:.6f})")
+            torch.save(
+                checkpoint_data,
+                os.path.join(checkpoint_dir, "model_checkpoint_best.pth"),
+            )
+            print(
+                f"  ✓ Best model saved to {checkpoint_dir}/model_checkpoint_best.pth (val_loss: {best_val_loss:.6f})"
+            )
 
         # Save checkpoint every 10 epochs
         if (epoch + 1) % 10 == 0:
             checkpoint_data = {
-                'epoch': epoch,
-                'global_step': global_step,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
-                'best_val_loss': best_val_loss,
-                'train_loss': avg_train_loss,
-                'val_loss': avg_val_loss,
-                'training_stage': TRAINING_STAGE,
-                'lora_enabled': USE_LORA,
+                "epoch": epoch,
+                "global_step": global_step,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "best_val_loss": best_val_loss,
+                "train_loss": avg_train_loss,
+                "val_loss": avg_val_loss,
+                "training_stage": TRAINING_STAGE,
+                "lora_enabled": USE_LORA,
             }
             if USE_LORA:
-                checkpoint_data['lora_state_dict'] = get_lora_state_dict(model)
-            torch.save(checkpoint_data, os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch+1}.pth"))
-            print(f"  ✓ Checkpoint saved: {checkpoint_dir}/checkpoint_epoch_{epoch+1}.pth")
+                checkpoint_data["lora_state_dict"] = get_lora_state_dict(model)
+            torch.save(
+                checkpoint_data,
+                os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch+1}.pth"),
+            )
+            print(
+                f"  ✓ Checkpoint saved: {checkpoint_dir}/checkpoint_epoch_{epoch+1}.pth"
+            )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TRAINING COMPLETE!")
-    print("="*60)
+    print("=" * 60)
     torch.save(model.state_dict(), os.path.join(checkpoint_dir, "model_checkpoint.pth"))
     print(f"Final model saved to {checkpoint_dir}/model_checkpoint.pth")
     print(f"Best validation loss: {best_val_loss:.6f}")
     print("\nModel ready for inference!")
 
-if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="Train stick figure generation model")
-	parser.add_argument(
-	    "--config",
-	    type=str,
-	    default="configs/base.yaml",
-	    help="Path to YAML configuration file (default: configs/base.yaml)"
-	)
-	parser.add_argument(
-	    "--data_path",
-	    type=str,
-	    default=None,
-	    help="Override path to training data directory (for RunPod deployments)"
-	)
-	parser.add_argument(
-	    "--checkpoint_dir",
-	    type=str,
-	    default=None,
-	    help="Override path to checkpoint output directory (for RunPod deployments)"
-	)
-	parser.add_argument(
-	    "--resume_from",
-	    type=str,
-	    default=None,
-	    help="Optional path to checkpoint file for continued pretraining/resume (loads model, optimizer, scheduler, epoch)"
-	)
-	parser.add_argument(
-	    "--init_from",
-	    type=str,
-	    default=None,
-	    help="Optional path to checkpoint file for SFT initialization (loads model weights only, fresh optimizer)"
-	)
-	parser.add_argument(
-	    "--seed",
-	    type=int,
-	    default=42,
-	    help="Random seed for reproducibility (default: 42)"
-	)
-	args = parser.parse_args()
 
-	train(
-	    config_path=args.config,
-	    data_path_override=args.data_path,
-	    checkpoint_dir_override=args.checkpoint_dir,
-	    resume_from_cli=args.resume_from,
-	    init_from_cli=args.init_from,
-	    seed=args.seed,
-	)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Train stick figure generation model")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/base.yaml",
+        help="Path to YAML configuration file (default: configs/base.yaml)",
+    )
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default=None,
+        help="Override path to training data directory (for RunPod deployments)",
+    )
+    parser.add_argument(
+        "--checkpoint_dir",
+        type=str,
+        default=None,
+        help="Override path to checkpoint output directory (for RunPod deployments)",
+    )
+    parser.add_argument(
+        "--resume_from",
+        type=str,
+        default=None,
+        help="Optional path to checkpoint file for continued pretraining/resume (loads model, optimizer, scheduler, epoch)",
+    )
+    parser.add_argument(
+        "--init_from",
+        type=str,
+        default=None,
+        help="Optional path to checkpoint file for SFT initialization (loads model weights only, fresh optimizer)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
+    args = parser.parse_args()
+
+    train(
+        config_path=args.config,
+        data_path_override=args.data_path,
+        checkpoint_dir_override=args.checkpoint_dir,
+        resume_from_cli=args.resume_from,
+        init_from_cli=args.init_from,
+        seed=args.seed,
+    )

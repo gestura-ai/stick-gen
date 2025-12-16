@@ -56,7 +56,7 @@ class TestSafetyCriticFrozenMotion:
         # Create frozen motion (all zeros)
         motion = torch.zeros(100, 20)
         result = critic.evaluate(motion)
-        
+
         assert not result.is_safe
         assert any(i.issue_type == SafetyIssueType.MOTION_FROZEN for i in result.issues)
 
@@ -67,16 +67,20 @@ class TestSafetyCriticFrozenMotion:
         motion = torch.randn(100, 20) * 0.1
         motion = torch.cumsum(motion, dim=0)  # Cumulative sum for smooth motion
         result = critic.evaluate(motion)
-        
-        assert not any(i.issue_type == SafetyIssueType.MOTION_FROZEN for i in result.issues)
+
+        assert not any(
+            i.issue_type == SafetyIssueType.MOTION_FROZEN for i in result.issues
+        )
 
     def test_short_sequence_not_frozen(self):
         """Test that very short sequences don't trigger frozen detection."""
         critic = SafetyCritic()
         motion = torch.zeros(1, 20)  # Single frame
         result = critic.evaluate(motion)
-        
-        assert not any(i.issue_type == SafetyIssueType.MOTION_FROZEN for i in result.issues)
+
+        assert not any(
+            i.issue_type == SafetyIssueType.MOTION_FROZEN for i in result.issues
+        )
 
 
 class TestSafetyCriticRepetitiveMotion:
@@ -84,17 +88,21 @@ class TestSafetyCriticRepetitiveMotion:
 
     def test_repetitive_motion_detected(self):
         """Test that repetitive motion is detected."""
-        critic = SafetyCritic(SafetyCriticConfig(
-            repetition_window=10,
-            repetition_min_cycles=3,
-            repetition_similarity_threshold=0.99,
-        ))
+        critic = SafetyCritic(
+            SafetyCriticConfig(
+                repetition_window=10,
+                repetition_min_cycles=3,
+                repetition_similarity_threshold=0.99,
+            )
+        )
         # Create repetitive motion (same pattern repeated)
         pattern = torch.randn(10, 20)
         motion = pattern.repeat(10, 1)  # Repeat 10 times
         result = critic.evaluate(motion)
-        
-        assert any(i.issue_type == SafetyIssueType.MOTION_REPETITIVE for i in result.issues)
+
+        assert any(
+            i.issue_type == SafetyIssueType.MOTION_REPETITIVE for i in result.issues
+        )
 
     def test_varied_motion_not_repetitive(self):
         """Test that varied motion is not flagged as repetitive."""
@@ -102,8 +110,10 @@ class TestSafetyCriticRepetitiveMotion:
         # Create varied motion
         motion = torch.randn(100, 20)
         result = critic.evaluate(motion)
-        
-        assert not any(i.issue_type == SafetyIssueType.MOTION_REPETITIVE for i in result.issues)
+
+        assert not any(
+            i.issue_type == SafetyIssueType.MOTION_REPETITIVE for i in result.issues
+        )
 
 
 class TestSafetyCriticJitteryMotion:
@@ -111,15 +121,19 @@ class TestSafetyCriticJitteryMotion:
 
     def test_jittery_motion_detected(self):
         """Test that jittery motion is detected."""
-        critic = SafetyCritic(SafetyCriticConfig(
-            jitter_acceleration_threshold=10.0,
-            jitter_frame_ratio=0.2,
-        ))
+        critic = SafetyCritic(
+            SafetyCriticConfig(
+                jitter_acceleration_threshold=10.0,
+                jitter_frame_ratio=0.2,
+            )
+        )
         # Create jittery motion (high frequency noise)
         motion = torch.randn(100, 20) * 100  # Large random jumps
         result = critic.evaluate(motion)
-        
-        assert any(i.issue_type == SafetyIssueType.MOTION_JITTERY for i in result.issues)
+
+        assert any(
+            i.issue_type == SafetyIssueType.MOTION_JITTERY for i in result.issues
+        )
 
     def test_smooth_motion_not_jittery(self):
         """Test that smooth motion is not flagged as jittery."""
@@ -128,8 +142,10 @@ class TestSafetyCriticJitteryMotion:
         t = torch.linspace(0, 2 * 3.14159, 100).unsqueeze(1)
         motion = torch.sin(t) * torch.randn(1, 20) * 0.1
         result = critic.evaluate(motion)
-        
-        assert not any(i.issue_type == SafetyIssueType.MOTION_JITTERY for i in result.issues)
+
+        assert not any(
+            i.issue_type == SafetyIssueType.MOTION_JITTERY for i in result.issues
+        )
 
 
 class TestSafetyCriticPhysicsViolations:
@@ -142,10 +158,13 @@ class TestSafetyCriticPhysicsViolations:
         # Physics: [vx, vy, ax, ay, mx, my]
         physics = torch.zeros(100, 6)
         physics[:, 0] = 20.0  # vx = 20 m/s (exceeds 10)
-        
+
         result = critic.evaluate(motion, physics)
-        
-        assert any(i.issue_type == SafetyIssueType.PHYSICS_VELOCITY_EXCEEDED for i in result.issues)
+
+        assert any(
+            i.issue_type == SafetyIssueType.PHYSICS_VELOCITY_EXCEEDED
+            for i in result.issues
+        )
 
     def test_normal_velocity_ok(self):
         """Test that normal velocity passes."""
@@ -153,10 +172,13 @@ class TestSafetyCriticPhysicsViolations:
         motion = torch.zeros(100, 20)
         physics = torch.zeros(100, 6)
         physics[:, 0] = 5.0  # vx = 5 m/s (within limit)
-        
+
         result = critic.evaluate(motion, physics)
-        
-        assert not any(i.issue_type == SafetyIssueType.PHYSICS_VELOCITY_EXCEEDED for i in result.issues)
+
+        assert not any(
+            i.issue_type == SafetyIssueType.PHYSICS_VELOCITY_EXCEEDED
+            for i in result.issues
+        )
 
 
 class TestSafetyCriticGroundPenetration:
@@ -171,7 +193,10 @@ class TestSafetyCriticGroundPenetration:
 
         result = critic.evaluate(motion)
 
-        assert any(i.issue_type == SafetyIssueType.PHYSICS_GROUND_PENETRATION for i in result.issues)
+        assert any(
+            i.issue_type == SafetyIssueType.PHYSICS_GROUND_PENETRATION
+            for i in result.issues
+        )
 
     def test_above_ground_ok(self):
         """Test that motion above ground passes."""
@@ -180,7 +205,10 @@ class TestSafetyCriticGroundPenetration:
 
         result = critic.evaluate(motion)
 
-        assert not any(i.issue_type == SafetyIssueType.PHYSICS_GROUND_PENETRATION for i in result.issues)
+        assert not any(
+            i.issue_type == SafetyIssueType.PHYSICS_GROUND_PENETRATION
+            for i in result.issues
+        )
 
 
 class TestSafetyCriticQualityScore:
@@ -194,7 +222,10 @@ class TestSafetyCriticQualityScore:
 
         result = critic.evaluate(motion, quality_score=0.2)
 
-        assert any(i.issue_type == SafetyIssueType.QUALITY_BELOW_THRESHOLD for i in result.issues)
+        assert any(
+            i.issue_type == SafetyIssueType.QUALITY_BELOW_THRESHOLD
+            for i in result.issues
+        )
 
     def test_high_quality_ok(self):
         """Test that high quality score passes."""
@@ -204,7 +235,10 @@ class TestSafetyCriticQualityScore:
 
         result = critic.evaluate(motion, quality_score=0.8)
 
-        assert not any(i.issue_type == SafetyIssueType.QUALITY_BELOW_THRESHOLD for i in result.issues)
+        assert not any(
+            i.issue_type == SafetyIssueType.QUALITY_BELOW_THRESHOLD
+            for i in result.issues
+        )
 
 
 class TestSafetyCriticOverallScoring:
@@ -303,4 +337,3 @@ class TestSafetyCriticMultiActor:
         result = critic.evaluate(motion)
 
         assert isinstance(result, SafetyCriticResult)
-

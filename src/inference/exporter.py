@@ -1,9 +1,9 @@
-
 import json
 import torch
 import numpy as np
 import datetime
 from typing import Dict, Any, Optional
+
 
 class MotionExporter:
     """
@@ -22,15 +22,17 @@ class MotionExporter:
         # 5. Right Arm (Neck -> R Hand)
         self.segment_names = ["torso", "l_leg", "r_leg", "l_arm", "r_arm"]
 
-    def export_to_json(self, 
-                       motion_tensor: torch.Tensor, 
-                       action_names: Optional[list] = None,
-                       description: str = "",
-                       physics_data: Optional[torch.Tensor] = None,
-                       camera_data: Optional[torch.Tensor] = None) -> str:
+    def export_to_json(
+        self,
+        motion_tensor: torch.Tensor,
+        action_names: Optional[list] = None,
+        description: str = "",
+        physics_data: Optional[torch.Tensor] = None,
+        camera_data: Optional[torch.Tensor] = None,
+    ) -> str:
         """
         Convert motion tensor to JSON string.
-        
+
         Args:
             motion_tensor: [seq_len, input_dim] (e.g., [250, 20])
             action_names: List of action labels per frame
@@ -45,10 +47,10 @@ class MotionExporter:
 
         seq_len, dim = motion_np.shape
         duration = seq_len / self.fps
-        
+
         # Round decimals for smaller file size
         motion_flat = np.round(motion_np.flatten(), 4).tolist()
-        
+
         data = {
             "meta": {
                 "version": "1.0",
@@ -57,34 +59,34 @@ class MotionExporter:
                 "fps": self.fps,
                 "duration": duration,
                 "total_frames": seq_len,
-                "description": description
+                "description": description,
             },
             "skeleton": {
                 "type": "stick_figure_5_segment",
                 "joint_format": "xy_lines_flat",
                 "input_dim": dim,
-                "segments": self.segment_names
+                "segments": self.segment_names,
             },
             "motion": motion_flat,
             "actions": action_names if action_names else [],
         }
-        
+
         if physics_data is not None:
-             if isinstance(physics_data, torch.Tensor):
+            if isinstance(physics_data, torch.Tensor):
                 phys_np = physics_data.detach().cpu().numpy()
-             else:
+            else:
                 phys_np = physics_data
-             data["physics"] = np.round(phys_np.flatten(), 4).tolist()
+            data["physics"] = np.round(phys_np.flatten(), 4).tolist()
 
         if camera_data is not None:
-             if isinstance(camera_data, torch.Tensor):
+            if isinstance(camera_data, torch.Tensor):
                 cam_np = camera_data.detach().cpu().numpy()
-             else:
+            else:
                 cam_np = camera_data
-             data["camera"] = np.round(cam_np.flatten(), 4).tolist()
+            data["camera"] = np.round(cam_np.flatten(), 4).tolist()
 
-        return json.dumps(data, indent=None) # Minified for network transfer
+        return json.dumps(data, indent=None)  # Minified for network transfer
 
     def save(self, data: str, filepath: str):
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             f.write(data)

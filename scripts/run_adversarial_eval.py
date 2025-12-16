@@ -37,11 +37,15 @@ from src.model.transformer import StickFigureTransformer
 from src.data_gen.schema import ActionType, ACTION_TO_IDX, NUM_ACTIONS
 from transformers import AutoTokenizer, AutoModel
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
-def load_prompt_suites(config_path: str = "configs/eval/prompt_suites.yaml") -> Dict[str, Any]:
+def load_prompt_suites(
+    config_path: str = "configs/eval/prompt_suites.yaml",
+) -> Dict[str, Any]:
     """Load prompt suites from YAML configuration."""
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
@@ -49,7 +53,11 @@ def load_prompt_suites(config_path: str = "configs/eval/prompt_suites.yaml") -> 
 
 def get_adversarial_suites(suites: Dict[str, Any]) -> List[str]:
     """Get list of adversarial suite names (those starting with 'adversarial_')."""
-    return [name for name in suites.get("suites", {}).keys() if name.startswith("adversarial_")]
+    return [
+        name
+        for name in suites.get("suites", {}).keys()
+        if name.startswith("adversarial_")
+    ]
 
 
 def load_model(checkpoint_path: str, device: str = "cpu") -> StickFigureTransformer:
@@ -65,7 +73,7 @@ def load_model(checkpoint_path: str, device: str = "cpu") -> StickFigureTransfor
         dropout=0.1,
         num_actions=NUM_ACTIONS,
     )
-    
+
     if os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=device)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
@@ -74,22 +82,28 @@ def load_model(checkpoint_path: str, device: str = "cpu") -> StickFigureTransfor
             model.load_state_dict(checkpoint)
         logger.info(f"Loaded model from {checkpoint_path}")
     else:
-        logger.warning(f"Checkpoint not found: {checkpoint_path}. Using random weights.")
-    
+        logger.warning(
+            f"Checkpoint not found: {checkpoint_path}. Using random weights."
+        )
+
     model.to(device)
     model.eval()
     return model
 
 
-def get_text_embedding(text: str, tokenizer, embed_model, device: str = "cpu") -> torch.Tensor:
+def get_text_embedding(
+    text: str, tokenizer, embed_model, device: str = "cpu"
+) -> torch.Tensor:
     """Get text embedding using BAAI/bge-large-en-v1.5."""
-    inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
+    inputs = tokenizer(
+        text, return_tensors="pt", padding=True, truncation=True, max_length=512
+    )
     inputs = {k: v.to(device) for k, v in inputs.items()}
-    
+
     with torch.no_grad():
         outputs = embed_model(**inputs)
         embedding = outputs.last_hidden_state.mean(dim=1)
-    
+
     return embedding
 
 
@@ -103,28 +117,28 @@ def generate_motion_for_prompt(
 ) -> torch.Tensor:
     """Generate motion sequence for a given prompt."""
     text_embedding = get_text_embedding(prompt, tokenizer, embed_model, device)
-    
+
     # Use IDLE action for all frames (baseline)
     action_indices = torch.zeros(1, num_frames, dtype=torch.long, device=device)
-    
+
     # Initialize motion sequence
     motion_sequence = torch.zeros(1, num_frames, 20, device=device)
-    
+
     with torch.no_grad():
         for t in range(1, num_frames):
             motion_input = motion_sequence[:, :t, :].permute(1, 0, 2)
             action_input = action_indices[:, :t].permute(1, 0)
-            
+
             output = model(
                 motion_input,
                 text_embedding,
                 return_all_outputs=False,
                 action_sequence=action_input,
             )
-            
+
             next_frame = output[-1, 0, :]
             motion_sequence[0, t, :] = next_frame
-    
+
     return motion_sequence[0]  # [T, D]
 
 
@@ -140,14 +154,14 @@ def evaluate_suite(
     """Evaluate a single prompt suite."""
     prompts = suite_config.get("prompts", [])
     expect_degradation = suite_config.get("expect_degradation", False)
-    
+
     results = []
     for prompt_config in prompts:
         prompt_id = prompt_config.get("id", "unknown")
         prompt_text = prompt_config.get("text", "")
         seconds = prompt_config.get("seconds", 10)
         num_frames = min(max(int(seconds * 25), 25), 250)  # 25 FPS, clamp to [25, 250]
-        
+
         logger.info(f"  Evaluating prompt: {prompt_id}")
 
         try:
@@ -159,34 +173,52 @@ def evaluate_suite(
             # Run safety critic
             safety_result = safety_critic.evaluate(motion)
 
-            results.append({
-                "prompt_id": prompt_id,
-                "prompt_text": prompt_text[:100] + "..." if len(prompt_text) > 100 else prompt_text,
-                "seconds": seconds,
-                "num_frames": num_frames,
-                "is_safe": safety_result.is_safe,
-                "overall_score": safety_result.overall_score,
-                "issue_count": len(safety_result.issues),
-                "issue_types": [i.issue_type.value for i in safety_result.issues],
-                "rejection_reasons": safety_result.get_rejection_reasons(),
-                "check_results": {k: {kk: float(vv) if isinstance(vv, (int, float)) else vv
-                                      for kk, vv in v.items()}
-                                 for k, v in safety_result.check_results.items()},
-            })
+            results.append(
+                {
+                    "prompt_id": prompt_id,
+                    "prompt_text": (
+                        prompt_text[:100] + "..."
+                        if len(prompt_text) > 100
+                        else prompt_text
+                    ),
+                    "seconds": seconds,
+                    "num_frames": num_frames,
+                    "is_safe": safety_result.is_safe,
+                    "overall_score": safety_result.overall_score,
+                    "issue_count": len(safety_result.issues),
+                    "issue_types": [i.issue_type.value for i in safety_result.issues],
+                    "rejection_reasons": safety_result.get_rejection_reasons(),
+                    "check_results": {
+                        k: {
+                            kk: float(vv) if isinstance(vv, (int, float)) else vv
+                            for kk, vv in v.items()
+                        }
+                        for k, v in safety_result.check_results.items()
+                    },
+                }
+            )
         except Exception as e:
             logger.error(f"  Error evaluating {prompt_id}: {e}")
-            results.append({
-                "prompt_id": prompt_id,
-                "prompt_text": prompt_text[:100] + "..." if len(prompt_text) > 100 else prompt_text,
-                "error": str(e),
-                "is_safe": False,
-                "overall_score": 0.0,
-            })
+            results.append(
+                {
+                    "prompt_id": prompt_id,
+                    "prompt_text": (
+                        prompt_text[:100] + "..."
+                        if len(prompt_text) > 100
+                        else prompt_text
+                    ),
+                    "error": str(e),
+                    "is_safe": False,
+                    "overall_score": 0.0,
+                }
+            )
 
     # Aggregate suite statistics
     safe_count = sum(1 for r in results if r.get("is_safe", False))
     total = len(results)
-    mean_score = sum(r.get("overall_score", 0) for r in results) / total if total > 0 else 0
+    mean_score = (
+        sum(r.get("overall_score", 0) for r in results) / total if total > 0 else 0
+    )
 
     # Issue distribution
     issue_counts: Dict[str, int] = {}
@@ -208,15 +240,33 @@ def evaluate_suite(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run adversarial evaluation on Stick-Gen model")
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to model checkpoint")
-    parser.add_argument("--prompt_suites", type=str, default="configs/eval/prompt_suites.yaml",
-                        help="Path to prompt suites YAML")
-    parser.add_argument("--suites", nargs="+", default=None,
-                        help="Specific suites to evaluate (default: all adversarial_* suites)")
-    parser.add_argument("--output_dir", type=str, default="eval_results/adversarial",
-                        help="Output directory for results")
-    parser.add_argument("--device", type=str, default="cpu", help="Device to use (cpu/cuda)")
+    parser = argparse.ArgumentParser(
+        description="Run adversarial evaluation on Stick-Gen model"
+    )
+    parser.add_argument(
+        "--checkpoint", type=str, required=True, help="Path to model checkpoint"
+    )
+    parser.add_argument(
+        "--prompt_suites",
+        type=str,
+        default="configs/eval/prompt_suites.yaml",
+        help="Path to prompt suites YAML",
+    )
+    parser.add_argument(
+        "--suites",
+        nargs="+",
+        default=None,
+        help="Specific suites to evaluate (default: all adversarial_* suites)",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="eval_results/adversarial",
+        help="Output directory for results",
+    )
+    parser.add_argument(
+        "--device", type=str, default="cpu", help="Device to use (cpu/cuda)"
+    )
     args = parser.parse_args()
 
     # Create output directory
@@ -254,7 +304,13 @@ def main():
         logger.info(f"Evaluating suite: {suite_name}")
         suite_config = all_suites[suite_name]
         result = evaluate_suite(
-            suite_name, suite_config, model, tokenizer, embed_model, safety_critic, args.device
+            suite_name,
+            suite_config,
+            model,
+            tokenizer,
+            embed_model,
+            safety_critic,
+            args.device,
         )
         all_results.append(result)
 
@@ -264,18 +320,29 @@ def main():
     overall_safe_ratio = total_safe / total_prompts if total_prompts > 0 else 0
 
     # Separate baseline vs adversarial
-    baseline_results = [r for r in all_results if not r.get("expect_degradation", False)]
+    baseline_results = [
+        r for r in all_results if not r.get("expect_degradation", False)
+    ]
     adversarial_results = [r for r in all_results if r.get("expect_degradation", False)]
 
     baseline_safe_ratio = (
-        sum(r["safe_count"] for r in baseline_results) /
-        sum(r["total_prompts"] for r in baseline_results)
-    ) if baseline_results and sum(r["total_prompts"] for r in baseline_results) > 0 else 0
+        (
+            sum(r["safe_count"] for r in baseline_results)
+            / sum(r["total_prompts"] for r in baseline_results)
+        )
+        if baseline_results and sum(r["total_prompts"] for r in baseline_results) > 0
+        else 0
+    )
 
     adversarial_safe_ratio = (
-        sum(r["safe_count"] for r in adversarial_results) /
-        sum(r["total_prompts"] for r in adversarial_results)
-    ) if adversarial_results and sum(r["total_prompts"] for r in adversarial_results) > 0 else 0
+        (
+            sum(r["safe_count"] for r in adversarial_results)
+            / sum(r["total_prompts"] for r in adversarial_results)
+        )
+        if adversarial_results
+        and sum(r["total_prompts"] for r in adversarial_results) > 0
+        else 0
+    )
 
     # Build final report
     report = {
@@ -293,7 +360,10 @@ def main():
     }
 
     # Save report
-    report_path = os.path.join(args.output_dir, f"adversarial_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    report_path = os.path.join(
+        args.output_dir,
+        f"adversarial_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+    )
     with open(report_path, "w") as f:
         json.dump(report, f, indent=2)
     logger.info(f"Report saved to {report_path}")
@@ -311,12 +381,17 @@ def main():
     print("=" * 60)
 
     for result in all_results:
-        status = "✓" if result["safe_ratio"] > 0.8 else "⚠️" if result["safe_ratio"] > 0.5 else "✗"
-        print(f"{status} {result['suite_name']}: {result['safe_ratio']:.2%} safe ({result['safe_count']}/{result['total_prompts']})")
+        status = (
+            "✓"
+            if result["safe_ratio"] > 0.8
+            else "⚠️" if result["safe_ratio"] > 0.5 else "✗"
+        )
+        print(
+            f"{status} {result['suite_name']}: {result['safe_ratio']:.2%} safe ({result['safe_count']}/{result['total_prompts']})"
+        )
 
     print("=" * 60)
 
 
 if __name__ == "__main__":
     main()
-

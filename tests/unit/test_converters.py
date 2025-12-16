@@ -96,7 +96,7 @@ def test_humanml3d_features_to_stick_shape():
     # HumanML3D has 263 dimensions
     feats = np.random.randn(100, 263).astype(np.float32)
     stick = humanml3d_features_to_stick(feats)
-    
+
     assert stick.shape == (100, 20)
     assert stick.dtype == np.float32
 
@@ -105,7 +105,7 @@ def test_humanml3d_features_to_stick_small_input():
     """Test feature mapping with smaller input."""
     feats = np.random.randn(50, 67).astype(np.float32)
     stick = humanml3d_features_to_stick(feats)
-    
+
     assert stick.shape == (50, 20)
 
 
@@ -116,7 +116,7 @@ def test_kit_features_to_stick_shape():
     """Test KIT-ML feature mapping."""
     feats = np.random.randn(100, 251).astype(np.float32)
     stick = kit_features_to_stick(feats)
-    
+
     assert stick.shape == (100, 20)
     assert stick.dtype == np.float32
 
@@ -152,7 +152,7 @@ def test_babel_get_segment_actions_empty():
     """Test segment action extraction with no annotations."""
     annotations = {}
     actions, labels, desc = _get_segment_actions(annotations, "seq_001", 100)
-    
+
     assert actions.shape == (100,)
     assert labels == ["idle"]
     assert "BABEL" in desc
@@ -163,9 +163,17 @@ def test_babel_get_segment_actions_empty():
 
 def test_beat_emotion_mapping_complete():
     """Test that all BEAT emotions have mappings."""
-    expected_emotions = ["neutral", "happy", "sad", "angry", "surprised", "fear", "disgust", "contempt"]
-    
+    expected_emotions = [
+        "neutral",
+        "happy",
+        "sad",
+        "angry",
+        "surprised",
+        "fear",
+        "disgust",
+        "contempt",
+    ]
+
     for emotion in expected_emotions:
         assert emotion in BEAT_EMOTION_TO_ACTION
         assert isinstance(BEAT_EMOTION_TO_ACTION[emotion], ActionType)
-

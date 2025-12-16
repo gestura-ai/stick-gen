@@ -1,0 +1,49 @@
+# Ruff configuration for stick-gen project
+# https://docs.astral.sh/ruff/configuration/
+
+# Exclude template files and other non-executable code
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*.egg-info",
+    "build",
+    "dist",
+    "templates",  # Template files contain code snippets, not standalone modules
+    "data",       # Third-party datasets and preprocessing code
+]
+
+# Target Python 3.10+
+target-version = "py310"
+
+# Line length
+line-length = 100
+
+[lint]
+# Enable specific rule sets
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "B008",  # Do not perform function call in argument defaults
+    "B905",  # zip() without an explicit strict= parameter
+]
+
+[lint.per-file-ignores]
+# Allow unused imports in __init__.py files
+"__init__.py" = ["F401"]
+# Allow print statements in scripts
+"scripts/*.py" = ["T201"]
+# Allow assert statements in tests
+"tests/**/*.py" = ["S101"]
+

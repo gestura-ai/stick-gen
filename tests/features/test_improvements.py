@@ -19,7 +19,7 @@ gen = InferenceGenerator("model_checkpoint.pth")
 print("\n1. Baseball scenario (players running bases)...")
 gen.generate(
     "Two teams playing against each other in a World Series playoff",
-    "test_baseball_improved.mp4"
+    "test_baseball_improved.mp4",
 )
 print("✓ Baseball video generated: test_baseball_improved.mp4")
 
@@ -27,7 +27,7 @@ print("✓ Baseball video generated: test_baseball_improved.mp4")
 print("\n2. Space exploration scenario (walking through space)...")
 gen.generate(
     "A man exploring space and meets an alien and eats a first meal with them",
-    "test_space_improved.mp4"
+    "test_space_improved.mp4",
 )
 print("✓ Space video generated: test_space_improved.mp4")
 
@@ -46,4 +46,3 @@ print("  ✓ Baseball players run around bases")
 print("  ✓ Space explorer walks from ship to aliens")
 print("  ✓ Movements are smooth and realistic")
 print()
-

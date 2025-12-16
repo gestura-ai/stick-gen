@@ -38,31 +38,31 @@ VARIANT_CONFIG = {
         "model_card": "model_cards/small.md",
         "repo_suffix": "stick-gen-small",
         "expected_params": 5_600_000,
-        "tolerance": 0.05  # 5% tolerance
+        "tolerance": 0.05,  # 5% tolerance
     },
     "base": {
         "config_file": "configs/base.yaml",
         "model_card": "model_cards/base.md",
         "repo_suffix": "stick-gen-base",
         "expected_params": 15_800_000,
-        "tolerance": 0.05
+        "tolerance": 0.05,
     },
     "large": {
         "config_file": "configs/large.yaml",
         "model_card": "model_cards/large.md",
         "repo_suffix": "stick-gen-large",
         "expected_params": 28_000_000,
-        "tolerance": 0.05
-    }
+        "tolerance": 0.05,
+    },
 }
 
 
 def count_parameters(checkpoint_path: str) -> int:
     """Count total parameters in model checkpoint."""
     try:
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            state_dict = checkpoint['model_state_dict']
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
         else:
             state_dict = checkpoint
 
@@ -130,7 +130,7 @@ def validate_model_card(model_card_path: str) -> bool:
         print(f"  ❌ Model card not found: {model_card_path}")
         return False
 
-    with open(model_card_path, 'r') as f:
+    with open(model_card_path, "r") as f:
         content = f.read()
 
     # Check for TBD values
@@ -144,7 +144,7 @@ def validate_model_card(model_card_path: str) -> bool:
         "## Model Details",
         "## Intended Uses",
         "## Training Details",
-        "## Citation"
+        "## Citation",
     ]
 
     missing_sections = []
@@ -164,7 +164,7 @@ def prepare_model_files(
     checkpoint_path: str,
     variant: str,
     output_dir: str = "hf_upload",
-    version: Optional[str] = None
+    version: Optional[str] = None,
 ):
     """
     Prepare model files for Hugging Face upload.
@@ -244,7 +244,7 @@ def prepare_model_files(
     # Create version file if specified
     if version:
         version_file = os.path.join(output_dir, "VERSION")
-        with open(version_file, 'w') as f:
+        with open(version_file, "w") as f:
             f.write(f"{version}\n")
         print(f"  Created VERSION file: {version}")
 
@@ -258,7 +258,7 @@ def upload_to_hub_with_retry(
     private: bool = False,
     version: Optional[str] = None,
     max_retries: int = 3,
-    initial_delay: float = 5.0
+    initial_delay: float = 5.0,
 ):
     """
     Upload model to Hugging Face Hub with retry logic and exponential backoff.
@@ -283,23 +283,22 @@ def upload_to_hub_with_retry(
     repo_created = False
     for attempt in range(1, max_retries + 1):
         try:
-            create_repo(
-                repo_id=repo_name,
-                token=token,
-                private=private,
-                exist_ok=True
-            )
+            create_repo(repo_id=repo_name, token=token, private=private, exist_ok=True)
             print("  ✅ Repository created/verified")
             repo_created = True
             break
         except Exception as e:
             if attempt < max_retries:
                 delay = initial_delay * (2 ** (attempt - 1))  # Exponential backoff
-                print(f"  ⚠️  Repository creation failed (attempt {attempt}/{max_retries}): {e}")
+                print(
+                    f"  ⚠️  Repository creation failed (attempt {attempt}/{max_retries}): {e}"
+                )
                 print(f"  ⏳ Retrying in {delay:.1f} seconds...")
                 time.sleep(delay)
             else:
-                print(f"  ⚠️  Repository creation failed after {max_retries} attempts: {e}")
+                print(
+                    f"  ⚠️  Repository creation failed after {max_retries} attempts: {e}"
+                )
                 print("  Continuing with upload (repository may already exist)...")
 
     # Prepare commit message
@@ -318,7 +317,7 @@ def upload_to_hub_with_retry(
                 folder_path=output_dir,
                 repo_id=repo_name,
                 token=token,
-                commit_message=commit_message
+                commit_message=commit_message,
             )
             print("  ✅ Files uploaded successfully!")
             print(f"\n🎉 Model uploaded successfully!")
@@ -336,7 +335,9 @@ def upload_to_hub_with_retry(
                 time.sleep(delay)
             else:
                 print(f"  ❌ Upload failed after {max_retries} attempts: {e}")
-                raise Exception(f"Failed to upload model after {max_retries} attempts: {last_error}")
+                raise Exception(
+                    f"Failed to upload model after {max_retries} attempts: {last_error}"
+                )
 
 
 def upload_to_hub(
@@ -344,7 +345,7 @@ def upload_to_hub(
     output_dir: str = "hf_upload",
     token: Optional[str] = None,
     private: bool = False,
-    version: Optional[str] = None
+    version: Optional[str] = None,
 ):
     """
     Upload model to Hugging Face Hub (legacy function, calls upload_to_hub_with_retry).
@@ -364,7 +365,7 @@ def upload_to_hub(
         private=private,
         version=version,
         max_retries=3,
-        initial_delay=5.0
+        initial_delay=5.0,
     )
 
 
@@ -372,11 +373,11 @@ def upload_dataset(
     dataset_path: str,
     repo_name: str,
     token: Optional[str] = None,
-    private: bool = False
+    private: bool = False,
 ):
     """
     Upload dataset to Hugging Face Hub.
-    
+
     Args:
         dataset_path: Path to dataset file or directory
         repo_name: Repository name (e.g., "GesturaAI/stick-gen-dataset")
@@ -384,7 +385,7 @@ def upload_dataset(
         private: Whether to make repo private
     """
     print(f"\n🚀 Uploading dataset to {repo_name}...")
-    
+
     # Create repo
     try:
         create_repo(
@@ -392,12 +393,12 @@ def upload_dataset(
             token=token,
             private=private,
             repo_type="dataset",
-            exist_ok=True
+            exist_ok=True,
         )
         print("  ✅ Dataset repository created/verified")
     except Exception as e:
         print(f"  ⚠️  Dataset repo creation failed: {e}")
-    
+
     # Upload
     try:
         if os.path.isfile(dataset_path):
@@ -407,7 +408,7 @@ def upload_dataset(
                 path_in_repo=os.path.basename(dataset_path),
                 repo_id=repo_name,
                 repo_type="dataset",
-                commit_message="Upload dataset"
+                commit_message="Upload dataset",
             )
         else:
             upload_folder(
@@ -415,7 +416,7 @@ def upload_dataset(
                 repo_id=repo_name,
                 repo_type="dataset",
                 token=token,
-                commit_message="Upload dataset"
+                commit_message="Upload dataset",
             )
         print("  ✅ Dataset uploaded successfully!")
         print(f"   View at: https://huggingface.co/datasets/{repo_name}")
@@ -440,71 +441,67 @@ Examples (run from repository root):
 
   # Prepare files without uploading
   python scripts/push_to_huggingface.py --checkpoint checkpoints/best_model.pt --variant base --no-upload
-        """
+        """,
     )
     parser.add_argument(
         "--checkpoint",
         type=str,
         required=True,
-        help="Path to trained model checkpoint (e.g., checkpoints/best_model.pt)"
+        help="Path to trained model checkpoint (e.g., checkpoints/best_model.pt)",
     )
     parser.add_argument(
         "--variant",
         type=str,
         choices=["small", "base", "large"],
         default="base",
-        help="Model variant: small (5.6M), base (15.8M), or large (28M) (default: base)"
+        help="Model variant: small (5.6M), base (15.8M), or large (28M) (default: base)",
     )
     parser.add_argument(
         "--version",
         type=str,
         default=None,
-        help="Model version (e.g., 1.0.0) for semantic versioning"
+        help="Model version (e.g., 1.0.0) for semantic versioning",
     )
     parser.add_argument(
         "--repo-name",
         type=str,
         default=None,
-        help="Hugging Face repository name (default: GesturaAI/stick-gen-{variant})"
+        help="Hugging Face repository name (default: GesturaAI/stick-gen-{variant})",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default="hf_upload",
-        help="Directory to prepare files for upload (default: hf_upload)"
+        help="Directory to prepare files for upload (default: hf_upload)",
     )
     parser.add_argument(
         "--token",
         type=str,
         default=None,
-        help="Hugging Face API token (or set HF_TOKEN environment variable)"
+        help="Hugging Face API token (or set HF_TOKEN environment variable)",
     )
     parser.add_argument(
-        "--private",
-        action="store_true",
-        help="Create a private repository"
+        "--private", action="store_true", help="Create a private repository"
     )
     parser.add_argument(
-        "--no-upload",
-        action="store_true",
-        help="Only prepare files, don't upload"
+        "--no-upload", action="store_true", help="Only prepare files, don't upload"
     )
     parser.add_argument(
         "--skip-validation",
         action="store_true",
-        help="Skip validation checks (not recommended)"
+        help="Skip validation checks (not recommended)",
     )
     parser.add_argument(
         "--dataset",
         type=str,
         default=None,
-        help="Path to dataset file/folder to upload (optional)"
+        help="Path to dataset file/folder to upload (optional)",
     )
     parser.add_argument(
         "--dataset-repo",
         type=str,
         default="GesturaAI/stick-gen-dataset",
-        help="Dataset repository name (default: GesturaAI/stick-gen-dataset)"
+        help="Dataset repository name (default: GesturaAI/stick-gen-dataset)",
     )
 
     args = parser.parse_args()
@@ -524,7 +521,7 @@ Examples (run from repository root):
     if not args.skip_validation:
         if not validate_checkpoint(args.checkpoint, args.variant):
             response = input("\n⚠️  Validation failed. Continue anyway? (y/N): ")
-            if response.lower() != 'y':
+            if response.lower() != "y":
                 print("❌ Upload cancelled")
                 return 1
 
@@ -541,7 +538,7 @@ Examples (run from repository root):
         checkpoint_path=args.checkpoint,
         variant=args.variant,
         output_dir=args.output_dir,
-        version=args.version
+        version=args.version,
     )
 
     # Upload to Hub
@@ -551,16 +548,16 @@ Examples (run from repository root):
             output_dir=args.output_dir,
             token=args.token,
             private=args.private,
-            version=args.version
+            version=args.version,
         )
-        
+
         # Upload dataset if requested
         if args.dataset:
             upload_dataset(
                 dataset_path=args.dataset,
                 repo_name=args.dataset_repo,
                 token=args.token,
-                private=args.private
+                private=args.private,
             )
     else:
         print(f"\n✅ Files prepared in {args.output_dir}/")
@@ -571,5 +568,5 @@ Examples (run from repository root):
 
 if __name__ == "__main__":
     import sys
-    sys.exit(main())
 
+    sys.exit(main())

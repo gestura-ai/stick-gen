@@ -54,7 +54,10 @@ def build_html_report(
 
     parts.append("<table>")
     rows = [
-        ("MSE (mean ± std)", f"{_fmt(mse.get('mean', 'n/a'))} ± {_fmt(mse.get('std', 'n/a'))}"),
+        (
+            "MSE (mean ± std)",
+            f"{_fmt(mse.get('mean', 'n/a'))} ± {_fmt(mse.get('std', 'n/a'))}",
+        ),
         ("Smoothness score", _fmt(temporal.get("smoothness_score", "n/a"))),
         ("Physics validator score", _fmt(physics.get("validator_score", "n/a"))),
         ("Camera stability", _fmt(camera.get("mean_stability_score", "n/a"))),
@@ -104,4 +107,3 @@ def write_html_report(
 
     html_str = build_html_report(model_results, dataset_results, title=title)
     Path(output_path).write_text(html_str, encoding="utf-8")
-

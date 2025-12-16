@@ -41,13 +41,13 @@ from src.eval.metrics import (
 
 class EvaluationDataset(Dataset):
     """Dataset for evaluation."""
-    
+
     def __init__(self, data_path: str):
         self.data = torch.load(data_path)
-    
+
     def __len__(self):
         return len(self.data)
-    
+
     def __getitem__(self, idx):
         item = self.data[idx]
         motion = item["motion"]
@@ -55,8 +55,15 @@ class EvaluationDataset(Dataset):
         actions = item.get("actions", torch.zeros(motion.shape[0], dtype=torch.long))
         physics = item.get("physics", torch.zeros(motion.shape[0], 6))
         camera = item.get("camera", torch.zeros(motion.shape[0], 3))
-        
-        return motion[:-1], embedding, motion[1:], actions[:-1], physics[:-1], camera[:-1]
+
+        return (
+            motion[:-1],
+            embedding,
+            motion[1:],
+            actions[:-1],
+            physics[:-1],
+            camera[:-1],
+        )
 
 
 def compute_mse(predictions: torch.Tensor, targets: torch.Tensor) -> float:
@@ -77,16 +84,18 @@ def compute_temporal_consistency(predictions: torch.Tensor) -> dict:
     return metrics
 
 
-def compute_action_accuracy(action_logits: torch.Tensor, action_targets: torch.Tensor) -> dict:
+def compute_action_accuracy(
+    action_logits: torch.Tensor, action_targets: torch.Tensor
+) -> dict:
     """Compute action prediction accuracy."""
     # action_logits: [seq, batch, num_actions]
     # action_targets: [batch, seq]
-    
+
     predictions = action_logits.argmax(dim=-1)  # [seq, batch]
     predictions = predictions.permute(1, 0)  # [batch, seq]
-    
+
     correct = (predictions == action_targets).float()
-    
+
     # Per-action accuracy
     action_accuracies = {}
     for action_idx in range(NUM_ACTIONS):
@@ -94,15 +103,16 @@ def compute_action_accuracy(action_logits: torch.Tensor, action_targets: torch.T
         if mask.sum() > 0:
             action_name = IDX_TO_ACTION.get(action_idx, f"action_{action_idx}")
             action_accuracies[action_name] = correct[mask].mean().item()
-    
+
     return {
-        'overall_accuracy': correct.mean().item(),
-        'per_action_accuracy': action_accuracies
+        "overall_accuracy": correct.mean().item(),
+        "per_action_accuracy": action_accuracies,
     }
 
 
-def compute_physics_metrics(physics_output: torch.Tensor,
-                            physics_targets: torch.Tensor) -> dict:
+def compute_physics_metrics(
+    physics_output: torch.Tensor, physics_targets: torch.Tensor
+) -> dict:
     """Compute physics validation metrics.
 
     This preserves the original MSE-based metrics and augments them with the
@@ -155,27 +165,27 @@ def compute_physics_metrics(physics_output: torch.Tensor,
 def compute_diversity_metrics(all_predictions: list) -> dict:
     """Compute diversity of generated motions."""
     if len(all_predictions) < 2:
-        return {'diversity_score': 0.0}
-    
+        return {"diversity_score": 0.0}
+
     # Stack all predictions
     stacked = torch.stack(all_predictions)  # [num_samples, seq, dim]
-    
+
     # Compute pairwise distances
     flat = stacked.reshape(len(all_predictions), -1)  # [num_samples, seq*dim]
-    
+
     # Sample pairs for efficiency
     num_pairs = min(1000, len(all_predictions) * (len(all_predictions) - 1) // 2)
     distances = []
-    
+
     for _ in range(num_pairs):
         i, j = np.random.choice(len(all_predictions), 2, replace=False)
         dist = torch.norm(flat[i] - flat[j]).item()
         distances.append(dist)
-    
+
     return {
-        'mean_pairwise_distance': np.mean(distances),
-        'std_pairwise_distance': np.std(distances),
-        'diversity_score': np.mean(distances) / (np.std(distances) + 1e-6)
+        "mean_pairwise_distance": np.mean(distances),
+        "std_pairwise_distance": np.std(distances),
+        "diversity_score": np.mean(distances) / (np.std(distances) + 1e-6),
     }
 
 
@@ -191,7 +201,9 @@ def evaluate_model(model, loader, device) -> dict:
     all_predictions = []
 
     with torch.no_grad():
-        for motion, embedding, targets, actions, physics, camera in tqdm(loader, desc="Evaluating"):
+        for motion, embedding, targets, actions, physics, camera in tqdm(
+            loader, desc="Evaluating"
+        ):
             motion = motion.permute(1, 0, 2).to(device)
             embedding = embedding.to(device)
             targets = targets.permute(1, 0, 2).to(device)
@@ -199,24 +211,28 @@ def evaluate_model(model, loader, device) -> dict:
             physics = physics.permute(1, 0, 2).to(device)
             camera = camera.permute(1, 0, 2).to(device)
 
-            outputs = model(motion, embedding, return_all_outputs=True, camera_data=camera)
+            outputs = model(
+                motion, embedding, return_all_outputs=True, camera_data=camera
+            )
 
             # MSE
-            mse = compute_mse(outputs['pose'], targets)
+            mse = compute_mse(outputs["pose"], targets)
             all_mse.append(mse)
 
             # Temporal consistency
-            temporal = compute_temporal_consistency(outputs['pose'])
+            temporal = compute_temporal_consistency(outputs["pose"])
             all_temporal.append(temporal)
 
             # Action accuracy
-            if 'action_logits' in outputs:
-                action_metrics = compute_action_accuracy(outputs['action_logits'], actions)
-                all_action_correct.append(action_metrics['overall_accuracy'])
+            if "action_logits" in outputs:
+                action_metrics = compute_action_accuracy(
+                    outputs["action_logits"], actions
+                )
+                all_action_correct.append(action_metrics["overall_accuracy"])
 
             # Physics
-            if 'physics' in outputs:
-                phys_metrics = compute_physics_metrics(outputs['physics'], physics)
+            if "physics" in outputs:
+                phys_metrics = compute_physics_metrics(outputs["physics"], physics)
                 all_physics.append(phys_metrics)
 
             # Camera metrics (per-sample, using eval toolkit)
@@ -227,76 +243,98 @@ def evaluate_model(model, loader, device) -> dict:
                 all_camera.append(cam_stats)
 
             # Store predictions for diversity
-            all_predictions.append(outputs['pose'].cpu())
+            all_predictions.append(outputs["pose"].cpu())
 
     # Aggregate metrics
     results = {
-        'mse': {
-            'mean': np.mean(all_mse),
-            'std': np.std(all_mse),
-            'min': np.min(all_mse),
-            'max': np.max(all_mse)
+        "mse": {
+            "mean": np.mean(all_mse),
+            "std": np.std(all_mse),
+            "min": np.min(all_mse),
+            "max": np.max(all_mse),
         },
-        'temporal_consistency': {
-            'smoothness_score': np.mean([t['smoothness_score'] for t in all_temporal]),
-            'mean_velocity': np.mean([t['mean_velocity'] for t in all_temporal]),
-            'mean_jerk': np.mean([t['mean_jerk'] for t in all_temporal])
-        }
+        "temporal_consistency": {
+            "smoothness_score": np.mean([t["smoothness_score"] for t in all_temporal]),
+            "mean_velocity": np.mean([t["mean_velocity"] for t in all_temporal]),
+            "mean_jerk": np.mean([t["mean_jerk"] for t in all_temporal]),
+        },
     }
 
     if all_action_correct:
-        results['action_accuracy'] = {
-            'mean': np.mean(all_action_correct),
-            'std': np.std(all_action_correct)
+        results["action_accuracy"] = {
+            "mean": np.mean(all_action_correct),
+            "std": np.std(all_action_correct),
         }
 
     if all_physics:
-        results['physics'] = {
-            'velocity_mse': np.mean([p['velocity_mse'] for p in all_physics]),
-            'physics_score': np.mean([p['physics_score'] for p in all_physics]),
-            'gravity_error': np.mean([p['gravity_error'] for p in all_physics]),
+        results["physics"] = {
+            "velocity_mse": np.mean([p["velocity_mse"] for p in all_physics]),
+            "physics_score": np.mean([p["physics_score"] for p in all_physics]),
+            "gravity_error": np.mean([p["gravity_error"] for p in all_physics]),
             # Aggregate validator-backed metrics
-            'validator_score': np.mean([p['validator']['validator_score'] for p in all_physics]),
-            'validator_valid_fraction': np.mean([1.0 if p['validator']['is_valid'] else 0.0 for p in all_physics]),
+            "validator_score": np.mean(
+                [p["validator"]["validator_score"] for p in all_physics]
+            ),
+            "validator_valid_fraction": np.mean(
+                [1.0 if p["validator"]["is_valid"] else 0.0 for p in all_physics]
+            ),
         }
 
     if all_camera:
         # Shot/motion type distributions and stability stats
-        shot_types = [m['shot_type'] for m in all_camera]
-        motion_types = [m['motion_type'] for m in all_camera]
+        shot_types = [m["shot_type"] for m in all_camera]
+        motion_types = [m["motion_type"] for m in all_camera]
 
         shot_counts = Counter(shot_types)
         motion_counts = Counter(motion_types)
         total = max(len(all_camera), 1)
 
-        results['camera'] = {
-            'mean_stability_score': np.mean([m['stability_score'] for m in all_camera]),
-            'mean_zoom_range': np.mean([m['zoom_range'] for m in all_camera]),
-            'shot_type_distribution': {k: v / total for k, v in shot_counts.items()},
-            'motion_type_distribution': {k: v / total for k, v in motion_counts.items()},
+        results["camera"] = {
+            "mean_stability_score": np.mean([m["stability_score"] for m in all_camera]),
+            "mean_zoom_range": np.mean([m["zoom_range"] for m in all_camera]),
+            "shot_type_distribution": {k: v / total for k, v in shot_counts.items()},
+            "motion_type_distribution": {
+                k: v / total for k, v in motion_counts.items()
+            },
         }
 
     # Diversity
-    flat_predictions = [p.reshape(-1, p.shape[-1]) for batch in all_predictions for p in batch]
+    flat_predictions = [
+        p.reshape(-1, p.shape[-1]) for batch in all_predictions for p in batch
+    ]
     if len(flat_predictions) > 10:
-        results['diversity'] = compute_diversity_metrics(flat_predictions[:100])
+        results["diversity"] = compute_diversity_metrics(flat_predictions[:100])
 
     return results
 
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate Stick-Gen model")
-    parser.add_argument("--checkpoint", type=str, required=True,
-                        help="Path to model checkpoint")
-    parser.add_argument("--data", type=str, default="data/train_data_final.pt",
-                        help="Path to evaluation data")
-    parser.add_argument("--output", type=str, default="evaluation_results.json",
-                        help="Output path for results JSON")
-    parser.add_argument("--batch-size", type=int, default=4,
-                        help="Batch size for evaluation")
-    parser.add_argument("--split", type=str, default="test",
-                        choices=["train", "val", "test", "all"],
-                        help="Data split to evaluate on")
+    parser.add_argument(
+        "--checkpoint", type=str, required=True, help="Path to model checkpoint"
+    )
+    parser.add_argument(
+        "--data",
+        type=str,
+        default="data/train_data_final.pt",
+        help="Path to evaluation data",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="evaluation_results.json",
+        help="Output path for results JSON",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=4, help="Batch size for evaluation"
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="test",
+        choices=["train", "val", "test", "all"],
+        help="Data split to evaluate on",
+    )
 
     args = parser.parse_args()
 
@@ -314,18 +352,23 @@ def main():
     checkpoint = torch.load(args.checkpoint, map_location=device)
 
     # Get model config from checkpoint
-    model_config = checkpoint.get('config', {})
+    model_config = checkpoint.get("config", {})
     if not model_config:
         # Default config
         model_config = {
-            'input_dim': 20, 'd_model': 384, 'nhead': 12,
-            'num_layers': 8, 'output_dim': 20, 'embedding_dim': 1024,
-            'dropout': 0.1, 'num_actions': NUM_ACTIONS
+            "input_dim": 20,
+            "d_model": 384,
+            "nhead": 12,
+            "num_layers": 8,
+            "output_dim": 20,
+            "embedding_dim": 1024,
+            "dropout": 0.1,
+            "num_actions": NUM_ACTIONS,
         }
 
     # Initialize model
     model = StickFigureTransformer(**model_config).to(device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint["model_state_dict"])
     print(f"Model loaded: {sum(p.numel() for p in model.parameters()):,} parameters")
 
     # Load data
@@ -339,8 +382,9 @@ def main():
     test_size = total - train_size - val_size
 
     train_set, val_set, test_set = torch.utils.data.random_split(
-        dataset, [train_size, val_size, test_size],
-        generator=torch.Generator().manual_seed(42)  # Reproducible split
+        dataset,
+        [train_size, val_size, test_size],
+        generator=torch.Generator().manual_seed(42),  # Reproducible split
     )
 
     if args.split == "train":
@@ -354,19 +398,21 @@ def main():
 
     print(f"Evaluating on {args.split} split: {len(eval_set)} samples")
 
-    loader = DataLoader(eval_set, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    loader = DataLoader(
+        eval_set, batch_size=args.batch_size, shuffle=False, num_workers=4
+    )
 
     # Run evaluation
     print("\nRunning evaluation...")
     results = evaluate_model(model, loader, device)
 
     # Add metadata
-    results['metadata'] = {
-        'checkpoint': args.checkpoint,
-        'data': args.data,
-        'split': args.split,
-        'num_samples': len(eval_set),
-        'model_params': sum(p.numel() for p in model.parameters())
+    results["metadata"] = {
+        "checkpoint": args.checkpoint,
+        "data": args.data,
+        "split": args.split,
+        "num_samples": len(eval_set),
+        "model_params": sum(p.numel() for p in model.parameters()),
     }
 
     # Print results
@@ -374,20 +420,22 @@ def main():
     print("Evaluation Results")
     print("=" * 60)
     print(f"\nMSE: {results['mse']['mean']:.6f} ± {results['mse']['std']:.6f}")
-    print(f"Smoothness Score: {results['temporal_consistency']['smoothness_score']:.4f}")
+    print(
+        f"Smoothness Score: {results['temporal_consistency']['smoothness_score']:.4f}"
+    )
 
-    if 'action_accuracy' in results:
+    if "action_accuracy" in results:
         print(f"Action Accuracy: {results['action_accuracy']['mean']:.4f}")
 
-    if 'physics' in results:
+    if "physics" in results:
         print(f"Physics Score: {results['physics']['physics_score']:.4f}")
 
-    if 'diversity' in results:
+    if "diversity" in results:
         print(f"Diversity Score: {results['diversity']['diversity_score']:.4f}")
 
     # Save results
     print(f"\nSaving results to: {args.output}")
-    with open(args.output, 'w') as f:
+    with open(args.output, "w") as f:
         json.dump(results, f, indent=2)
 
     print("\nEvaluation complete!")
@@ -395,4 +443,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

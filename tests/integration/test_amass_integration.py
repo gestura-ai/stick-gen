@@ -10,7 +10,8 @@ Tests:
 """
 
 import sys
-sys.path.insert(0, '/Users/bc/gestura/stick-gen')
+
+sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
 import torch
 import pytest
@@ -84,7 +85,7 @@ def test_action_diversity():
 
 if __name__ == "__main__":
     print("Running AMASS Dataset Integration Tests...\n")
-    
+
     # All tests require implementation/processing
     test_amass_converter()
     test_smpl_to_stick_mapping()
@@ -93,6 +94,5 @@ if __name__ == "__main__":
     test_dataset_merging()
     test_amass_embeddings()
     test_action_diversity()
-    
-    print("\n✅ AMASS integration test suite complete")
 
+    print("\n✅ AMASS integration test suite complete")

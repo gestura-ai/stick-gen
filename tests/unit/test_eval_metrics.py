@@ -200,4 +200,3 @@ def test_compute_frechet_distance_different():
 
     # Different distributions should have positive FID
     assert fid > 0
-

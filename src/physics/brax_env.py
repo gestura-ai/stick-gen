@@ -1,22 +1,22 @@
-
 import brax
 from brax import envs
 from brax.envs import math as brax_math
 import jax.numpy as jnp
 
+
 class StickFigureEnv(envs.Env):
     """
     A 2D stick figure environment compatible with Brax.
-    
+
     Represents a 5-segment body:
     - Torso (Root)
     - Left Leg, Right Leg
     - Left Arm, Right Arm
-    
+
     Restricted to 2D plane (Z-axis constrained).
     """
-    
-    def __init__(self, backend='positional'):
+
+    def __init__(self, backend="positional"):
         # Define the system config (MJCF-like format)
         # Simplified humanoid: Torso + 4 limbs
         self._config = """
@@ -130,15 +130,17 @@ class StickFigureEnv(envs.Env):
     def step(self, state, action):
         qp, info = self.sys.step(state.qp, action)
         obs = self._get_obs(qp, info)
-        
+
         # Simple reward for upright posture (z-axis of torso)
-        # In a real training scenario, this would be the difference 
+        # In a real training scenario, this would be the difference
         # between simulated pose and target pose.
         pos = qp.pos[0]  # Torso position
         reward = pos[2]  # Maximize height (keep standing)
-        
+
         return state.replace(qp=qp, obs=obs, reward=reward)
 
     def _get_obs(self, qp, info):
         """Observe body position and velocities."""
-        return jnp.concatenate([qp.pos.ravel(), qp.rot.ravel(), qp.vel.ravel(), qp.ang.ravel()])
+        return jnp.concatenate(
+            [qp.pos.ravel(), qp.rot.ravel(), qp.vel.ravel(), qp.ang.ravel()]
+        )

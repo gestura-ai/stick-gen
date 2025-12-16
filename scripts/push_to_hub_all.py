@@ -25,8 +25,9 @@ except ImportError:
 DEFINED_MODELS = {
     "small": "stick-gen-small",
     "medium": "stick-gen-medium",
-    "large": "stick-gen-large"
+    "large": "stick-gen-large",
 }
+
 
 def push_model(variant: str, checkpoint_path: Path, org: str):
     """Push a single model variant to HF."""
@@ -37,13 +38,13 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
 
     repo_id = f"{org}/{model_name}"
     print(f"\n🚀 Processing {variant.upper()} -> {repo_id}...")
-    
+
     if not checkpoint_path.exists():
         print(f"❌ Checkpoint not found: {checkpoint_path}")
         return
 
     api = HfApi()
-    
+
     # 1. Create Repo
     try:
         url = create_repo(repo_id, exist_ok=True, repo_type="model")
@@ -61,7 +62,7 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
             path_or_fileobj=str(checkpoint_path),
             path_in_repo="pytorch_model.bin",
             repo_id=repo_id,
-            repo_type="model"
+            repo_type="model",
         )
         print(f"   ✓ Weights uploaded")
     except Exception as e:
@@ -76,7 +77,7 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
                 path_or_fileobj=str(card_path),
                 path_in_repo="README.md",
                 repo_id=repo_id,
-                repo_type="model"
+                repo_type="model",
             )
             print(f"   ✓ Model card uploaded")
         except Exception as e:
@@ -88,18 +89,22 @@ def push_model(variant: str, checkpoint_path: Path, org: str):
 def main():
     parser = argparse.ArgumentParser(description="Batch push models to Hugging Face")
     parser.add_argument("--org", default="gestura-ai", help="Hugging Face Organization")
-    parser.add_argument("--checkpoints_dir", default="checkpoints", help="Directory containing .pth files")
+    parser.add_argument(
+        "--checkpoints_dir",
+        default="checkpoints",
+        help="Directory containing .pth files",
+    )
     args = parser.parse_args()
-    
+
     print(f"Gestura AI - Batch Model Uploader")
     print(f"Target Org: {args.org}")
     print("=" * 40)
-    
+
     base_dir = Path(args.checkpoints_dir)
-    
+
     # Check for expected filenames like 'small.pth', 'medium.pth', 'best_model.pth' etc.
     # This is slightly heuristic.
-    
+
     for variant in DEFINED_MODELS.keys():
         # Heuristic: look for {variant}.pth or stick-gen-{variant}.pth
         candidates = [
@@ -107,16 +112,18 @@ def main():
             base_dir / f"stick-gen-{variant}.pth",
             # Fallback if user manually specifies one file, but this script is for batch
         ]
-        
+
         found = False
         for p in candidates:
             if p.exists():
                 push_model(variant, p, args.org)
                 found = True
                 break
-        
+
         if not found:
-            print(f"\n⚪️ Skipping {variant.upper()} (Checkpoint not found in {base_dir})")
+            print(
+                f"\n⚪️ Skipping {variant.upper()} (Checkpoint not found in {base_dir})"
+            )
 
     print("\n✅ Batch process complete.")
 

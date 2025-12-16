@@ -11,9 +11,12 @@ from src.data_gen.auto_annotator import (
 
 
 def test_infer_shot_type_wide_medium_close():
-    cam_wide = torch.zeros((10, 3)); cam_wide[:, 2] = 0.5
-    cam_medium = torch.zeros((10, 3)); cam_medium[:, 2] = 1.0
-    cam_close = torch.zeros((10, 3)); cam_close[:, 2] = 1.8
+    cam_wide = torch.zeros((10, 3))
+    cam_wide[:, 2] = 0.5
+    cam_medium = torch.zeros((10, 3))
+    cam_medium[:, 2] = 1.0
+    cam_close = torch.zeros((10, 3))
+    cam_close[:, 2] = 1.8
 
     assert infer_shot_type(cam_wide) == "wide"
     assert infer_shot_type(cam_medium) == "medium"
@@ -67,4 +70,3 @@ def test_annotate_sample_end_to_end():
     assert "shot_type" in out
     assert "camera_motion" in out
     assert "quality_score" in out
-

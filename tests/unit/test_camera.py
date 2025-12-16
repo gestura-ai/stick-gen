@@ -10,7 +10,8 @@ Tests:
 """
 
 import sys
-sys.path.insert(0, '/Users/bc/gestura/stick-gen')
+
+sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
 import pytest
 import numpy as np
@@ -23,7 +24,7 @@ from src.data_gen.camera import (
     Pan,
     Zoom,
     TrackingCamera,
-    Camera
+    Camera,
 )
 
 
@@ -72,10 +73,7 @@ class TestPan:
     def test_pan_before_start_time(self):
         """Pan should return None before start time"""
         pan = Pan(
-            start_pos=(0.0, 0.0),
-            end_pos=(10.0, 0.0),
-            start_time=2.0,
-            duration=3.0
+            start_pos=(0.0, 0.0), end_pos=(10.0, 0.0), start_time=2.0, duration=3.0
         )
         assert pan.get_state(0.0) is None
         assert pan.get_state(1.9) is None
@@ -84,10 +82,7 @@ class TestPan:
     def test_pan_at_start(self):
         """Pan should return start position at start time"""
         pan = Pan(
-            start_pos=(0.0, 0.0),
-            end_pos=(10.0, 0.0),
-            start_time=0.0,
-            duration=2.0
+            start_pos=(0.0, 0.0), end_pos=(10.0, 0.0), start_time=0.0, duration=2.0
         )
         state = pan.get_state(0.0)
         assert state is not None
@@ -97,10 +92,7 @@ class TestPan:
     def test_pan_at_end(self):
         """Pan should return end position after duration"""
         pan = Pan(
-            start_pos=(0.0, 0.0),
-            end_pos=(10.0, 5.0),
-            start_time=0.0,
-            duration=2.0
+            start_pos=(0.0, 0.0), end_pos=(10.0, 5.0), start_time=0.0, duration=2.0
         )
         state = pan.get_state(2.0)
         assert state is not None
@@ -111,10 +103,7 @@ class TestPan:
     def test_pan_smooth_interpolation(self):
         """Pan should use smooth step interpolation"""
         pan = Pan(
-            start_pos=(0.0, 0.0),
-            end_pos=(10.0, 0.0),
-            start_time=0.0,
-            duration=2.0
+            start_pos=(0.0, 0.0), end_pos=(10.0, 0.0), start_time=0.0, duration=2.0
         )
         # At halfway point with smoothstep, progress should be 0.5 * 0.5 * (3 - 2*0.5) = 0.5
         state = pan.get_state(1.0)
@@ -134,7 +123,7 @@ class TestZoom:
             start_zoom=1.0,
             end_zoom=2.0,
             start_time=1.0,
-            duration=2.0
+            duration=2.0,
         )
         assert zoom.get_state(0.5) is None
         print("✓ Zoom before start test passed")
@@ -146,7 +135,7 @@ class TestZoom:
             start_zoom=1.0,
             end_zoom=2.0,
             start_time=0.0,
-            duration=2.0
+            duration=2.0,
         )
         state = zoom.get_state(0.0)
         assert state is not None
@@ -160,7 +149,7 @@ class TestZoom:
             start_zoom=1.0,
             end_zoom=3.0,
             start_time=0.0,
-            duration=1.0
+            duration=1.0,
         )
         state = zoom.get_state(1.0)
         assert state is not None
@@ -174,7 +163,7 @@ class TestZoom:
             start_zoom=1.0,
             end_zoom=2.0,
             start_time=0.0,
-            duration=1.0
+            duration=1.0,
         )
         state = zoom.get_state(0.5)
         assert state is not None
@@ -272,9 +261,9 @@ class TestCamera:
 
 # Run tests if executed directly
 if __name__ == "__main__":
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Running Camera System Tests")
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
     # CameraState tests
     test_state = TestCameraState()
@@ -310,6 +299,6 @@ if __name__ == "__main__":
     test_camera.test_view_limits_with_offset()
     test_camera.test_camera_update_with_movement()
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("All Camera System Tests Passed! ✓")
-    print("="*50)
+    print("=" * 50)
