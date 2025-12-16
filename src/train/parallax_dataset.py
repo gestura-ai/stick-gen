@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -31,9 +31,9 @@ class MultimodalParallaxDataset(Dataset):
         self,
         parallax_root: str,
         motion_data_path: str,
-        image_size: Tuple[int, int] = (256, 256),
+        image_size: tuple[int, int] = (256, 256),
         image_backend: str = "pil",
-        image_transform: Optional[Any] = None,
+        image_transform: Any | None = None,
     ) -> None:
         super().__init__()
         self.parallax_root = parallax_root
@@ -62,7 +62,7 @@ class MultimodalParallaxDataset(Dataset):
                 ) from exc
 
         # Load motion / text / labels dataset (list[dict])
-        self.samples: List[Dict[str, Any]] = torch.load(self.motion_data_path)
+        self.samples: list[dict[str, Any]] = torch.load(self.motion_data_path)
         if not isinstance(self.samples, list):
             raise ValueError(
                 f"Expected a list of samples in {self.motion_data_path}, "
@@ -70,7 +70,7 @@ class MultimodalParallaxDataset(Dataset):
             )
 
         # Build flat index over all PNG frames across samples/actors
-        self.index: List[Dict[str, Any]] = []
+        self.index: list[dict[str, Any]] = []
         self._build_index()
 
     def _build_index(self) -> None:
@@ -78,12 +78,10 @@ class MultimodalParallaxDataset(Dataset):
             if "metadata.json" not in files:
                 continue
             meta_path = os.path.join(root, "metadata.json")
-            with open(meta_path, "r", encoding="utf-8") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
 
-            sample_id = meta.get("sample_id") or os.path.basename(
-                os.path.dirname(root)
-            )
+            sample_id = meta.get("sample_id") or os.path.basename(os.path.dirname(root))
             actor_id = meta.get("actor_id") or os.path.basename(root)
             sample_idx = self._parse_trailing_int(str(sample_id))
             actor_idx = self._parse_trailing_int(str(actor_id))
@@ -168,7 +166,7 @@ class MultimodalParallaxDataset(Dataset):
 
     def _select_action_label(
         self, actions: Any, frame_idx: int, actor_idx: int
-    ) -> Optional[torch.Tensor]:
+    ) -> torch.Tensor | None:
         """Handle both per-frame and clip-level action labels.
 
         - [T] or [T, A]: per-frame indexing
@@ -232,4 +230,3 @@ class MultimodalParallaxDataset(Dataset):
             img = self.image_transform(img)
 
         return img
-

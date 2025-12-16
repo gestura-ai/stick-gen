@@ -29,6 +29,7 @@ import torch
 @dataclass
 class ModelConfig:
     """Configuration for a model variant."""
+
     name: str
     d_model: int
     nhead: int
@@ -98,7 +99,7 @@ def count_parameters_by_component(model: torch.nn.Module) -> dict[str, int]:
         "fusion_module": 0,
         "other": 0,
     }
-    
+
     for name, param in model.named_parameters():
         matched = False
         for component in components:
@@ -109,7 +110,7 @@ def count_parameters_by_component(model: torch.nn.Module) -> dict[str, int]:
 
         if not matched:
             components["other"] += param.numel()
-    
+
     return {k: v for k, v in components.items() if v > 0}
 
 
@@ -125,9 +126,9 @@ def format_params(n: int) -> str:
 def calculate_all_variants() -> dict[str, Any]:
     """Calculate parameter counts for all model variants."""
     from src.model.transformer import StickFigureTransformer
-    
+
     results = {}
-    
+
     for variant_name, config in MODEL_CONFIGS.items():
         variant_results = {
             "name": variant_name,
@@ -141,7 +142,7 @@ def calculate_all_variants() -> dict[str, Any]:
             "motion_only": {},
             "multimodal": {},
         }
-        
+
         # Motion-only model
         model_motion_only = StickFigureTransformer(
             input_dim=config.input_dim,
@@ -154,16 +155,16 @@ def calculate_all_variants() -> dict[str, Any]:
             num_actions=config.num_actions,
             enable_image_conditioning=False,
         )
-        
+
         motion_only_total = count_parameters(model_motion_only)
         motion_only_breakdown = count_parameters_by_component(model_motion_only)
-        
+
         variant_results["motion_only"] = {
             "total": motion_only_total,
             "formatted": format_params(motion_only_total),
             "breakdown": motion_only_breakdown,
         }
-        
+
         # Multimodal model
         model_multimodal = StickFigureTransformer(
             input_dim=config.input_dim,
@@ -179,13 +180,13 @@ def calculate_all_variants() -> dict[str, Any]:
             image_size=config.image_size,
             fusion_strategy=config.fusion_strategy,
         )
-        
+
         multimodal_total = count_parameters(model_multimodal)
         multimodal_breakdown = count_parameters_by_component(model_multimodal)
-        
+
         # Calculate overhead
         overhead = multimodal_total - motion_only_total
-        
+
         variant_results["multimodal"] = {
             "total": multimodal_total,
             "formatted": format_params(multimodal_total),
@@ -195,13 +196,13 @@ def calculate_all_variants() -> dict[str, Any]:
             "overhead": overhead,
             "overhead_formatted": format_params(overhead),
         }
-        
+
         results[variant_name] = variant_results
-        
+
         # Clean up
         del model_motion_only
         del model_multimodal
-    
+
     return results
 
 
@@ -211,23 +212,25 @@ def print_summary(results: dict[str, Any]) -> None:
     print("STICK-GEN MODEL PARAMETER COUNTS")
     print("=" * 80)
     print()
-    
+
     # Summary table
     print("SUMMARY TABLE")
     print("-" * 80)
-    print(f"{'Variant':<10} {'Motion-Only':>15} {'Multimodal':>15} {'Overhead':>15} {'Encoder':>15}")
+    print(
+        f"{'Variant':<10} {'Motion-Only':>15} {'Multimodal':>15} {'Overhead':>15} {'Encoder':>15}"
+    )
     print("-" * 80)
-    
+
     for name, data in results.items():
         mo = data["motion_only"]["formatted"]
         mm = data["multimodal"]["formatted"]
         oh = data["multimodal"]["overhead_formatted"]
         enc = data["multimodal"]["image_encoder_arch"]
         print(f"{name:<10} {mo:>15} {mm:>15} {oh:>15} {enc:>15}")
-    
+
     print("-" * 80)
     print()
-    
+
     # Detailed breakdown for each variant
     for name, data in results.items():
         print(f"\n{'=' * 40}")
@@ -237,18 +240,26 @@ def print_summary(results: dict[str, Any]) -> None:
         print(f"  nhead: {data['config']['nhead']}")
         print(f"  num_layers: {data['config']['num_layers']}")
         print()
-        
-        print(f"  MOTION-ONLY: {data['motion_only']['formatted']} ({data['motion_only']['total']:,} params)")
+
+        print(
+            f"  MOTION-ONLY: {data['motion_only']['formatted']} ({data['motion_only']['total']:,} params)"
+        )
         print("  Breakdown:")
-        for component, count in sorted(data["motion_only"]["breakdown"].items(), key=lambda x: -x[1]):
+        for component, count in sorted(
+            data["motion_only"]["breakdown"].items(), key=lambda x: -x[1]
+        ):
             print(f"    {component}: {format_params(count)} ({count:,})")
-        
+
         print()
-        print(f"  MULTIMODAL: {data['multimodal']['formatted']} ({data['multimodal']['total']:,} params)")
+        print(
+            f"  MULTIMODAL: {data['multimodal']['formatted']} ({data['multimodal']['total']:,} params)"
+        )
         print(f"    Image encoder: {data['multimodal']['image_encoder_arch']}")
         print(f"    Fusion: {data['multimodal']['fusion_strategy']}")
         print("  Breakdown:")
-        for component, count in sorted(data["multimodal"]["breakdown"].items(), key=lambda x: -x[1]):
+        for component, count in sorted(
+            data["multimodal"]["breakdown"].items(), key=lambda x: -x[1]
+        ):
             print(f"    {component}: {format_params(count)} ({count:,})")
 
 
@@ -257,7 +268,7 @@ def print_markdown(results: dict[str, Any]) -> None:
     print("## Model Parameter Counts\n")
     print("| Variant | Motion-Only | Multimodal | Overhead | Image Encoder | Fusion |")
     print("|---------|-------------|------------|----------|---------------|--------|")
-    
+
     for name, data in results.items():
         mo = data["motion_only"]["formatted"]
         mm = data["multimodal"]["formatted"]
@@ -265,20 +276,24 @@ def print_markdown(results: dict[str, Any]) -> None:
         enc = data["multimodal"]["image_encoder_arch"]
         fus = data["multimodal"]["fusion_strategy"]
         print(f"| {name.capitalize()} | {mo} | {mm} | +{oh} | {enc} | {fus} |")
-    
+
     print("\n### Detailed Breakdown\n")
-    
+
     for name, data in results.items():
-        print(f"#### {name.capitalize()} ({data['config']['d_model']}d, {data['config']['num_layers']}L)\n")
+        print(
+            f"#### {name.capitalize()} ({data['config']['d_model']}d, {data['config']['num_layers']}L)\n"
+        )
         print("| Component | Motion-Only | Multimodal |")
         print("|-----------|-------------|------------|")
-        
-        all_components = set(data["motion_only"]["breakdown"].keys()) | set(data["multimodal"]["breakdown"].keys())
+
+        all_components = set(data["motion_only"]["breakdown"].keys()) | set(
+            data["multimodal"]["breakdown"].keys()
+        )
         for comp in sorted(all_components):
             mo_val = data["motion_only"]["breakdown"].get(comp, 0)
             mm_val = data["multimodal"]["breakdown"].get(comp, 0)
             print(f"| {comp} | {format_params(mo_val)} | {format_params(mm_val)} |")
-        
+
         print()
 
 
@@ -290,16 +305,18 @@ def print_json(results: dict[str, Any]) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Calculate model parameter counts")
     parser.add_argument("--json", action="store_true", help="Output JSON format")
-    parser.add_argument("--markdown", action="store_true", help="Output Markdown format")
+    parser.add_argument(
+        "--markdown", action="store_true", help="Output Markdown format"
+    )
     args = parser.parse_args()
-    
+
     # Suppress model initialization messages
-    import io
     import contextlib
-    
+    import io
+
     with contextlib.redirect_stdout(io.StringIO()):
         results = calculate_all_variants()
-    
+
     if args.json:
         print_json(results)
     elif args.markdown:
@@ -310,4 +327,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -3,7 +3,6 @@ import logging
 import os
 import random
 import sys
-from typing import Optional
 
 import numpy as np
 import torch
@@ -687,9 +686,9 @@ def train(
     print(f"  - Data path: {data_path}")
 
     # Choose dataset type based on multimodal configuration
-    multimodal_dataset: Optional[MultimodalParallaxDataset] = None
+    multimodal_dataset: MultimodalParallaxDataset | None = None
     if USE_PARALLAX:
-        print(f"  - Mode: MULTIMODAL (2.5D parallax augmentation)")
+        print("  - Mode: MULTIMODAL (2.5D parallax augmentation)")
         print(f"  - Parallax root: {PARALLAX_ROOT}")
         print(f"  - Image backend: {IMAGE_BACKEND}")
         multimodal_dataset = MultimodalParallaxDataset(
@@ -703,7 +702,7 @@ def train(
         # (each item = one PNG frame with associated motion/camera/text)
         dataset = multimodal_dataset
     else:
-        print(f"  - Mode: MOTION-ONLY")
+        print("  - Mode: MOTION-ONLY")
         dataset = StickFigureDataset(data_path=data_path)
     print(f"  - Total samples loaded: {len(dataset)}")
 
@@ -786,14 +785,15 @@ def train(
             if USE_PARALLAX and multimodal_dataset is not None:
                 # Multimodal batch: (image, motion_frame, camera_pose, text_prompt, action)
                 # Note: text_prompt is a string, we need to embed it or use cached embeddings
-                image_tensor, motion_frame, camera_pose, text_prompts, actions = batch_data
+                image_tensor, motion_frame, camera_pose, text_prompts, actions = (
+                    batch_data
+                )
 
                 # For multimodal training with parallax frames:
                 # - motion_frame is [batch, 20] single frame
                 # - We create a pseudo-sequence by repeating the frame
                 # - Target is the same as input (reconstruction objective)
                 batch_size_curr = motion_frame.shape[0]
-                motion_dim = motion_frame.shape[1]
 
                 # Create single-frame sequences: [batch, 1, 20]
                 data = motion_frame.unsqueeze(1)  # [batch, 1, dim]
@@ -805,8 +805,11 @@ def train(
                 for i in range(batch_size_curr):
                     # Get sample index from dataset
                     sample_idx = multimodal_dataset.index[
-                        train_dataset.indices[batch_idx * BATCH_SIZE + i]
-                        if hasattr(train_dataset, 'indices') else i
+                        (
+                            train_dataset.indices[batch_idx * BATCH_SIZE + i]
+                            if hasattr(train_dataset, "indices")
+                            else i
+                        )
                     ]["sample_idx"]
                     sample = multimodal_dataset.samples.get(sample_idx, {})
                     emb = sample.get("embedding")

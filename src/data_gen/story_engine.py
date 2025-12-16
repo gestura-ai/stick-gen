@@ -23,16 +23,14 @@ ACTION_EXPRESSIONS = {
     ActionType.RUN: FacialExpression.NEUTRAL,
     ActionType.SPRINT: FacialExpression.EXCITED,
     ActionType.JUMP: FacialExpression.EXCITED,
-
     # Social actions - happy/friendly
     ActionType.WAVE: FacialExpression.HAPPY,
     ActionType.TALK: FacialExpression.NEUTRAL,
-    ActionType.SHOUT: FacialExpression.EXCITED,    # Phase 7: Speech animation
+    ActionType.SHOUT: FacialExpression.EXCITED,  # Phase 7: Speech animation
     ActionType.WHISPER: FacialExpression.NEUTRAL,  # Phase 7: Speech animation
-    ActionType.SING: FacialExpression.HAPPY,       # Phase 7: Speech animation
+    ActionType.SING: FacialExpression.HAPPY,  # Phase 7: Speech animation
     ActionType.POINT: FacialExpression.NEUTRAL,
     ActionType.CLAP: FacialExpression.HAPPY,
-
     # Sports actions - excited/focused
     ActionType.BATTING: FacialExpression.NEUTRAL,
     ActionType.PITCHING: FacialExpression.NEUTRAL,
@@ -43,13 +41,11 @@ ACTION_EXPRESSIONS = {
     ActionType.KICKING: FacialExpression.NEUTRAL,
     ActionType.DRIBBLING: FacialExpression.NEUTRAL,
     ActionType.SHOOTING: FacialExpression.EXCITED,
-
     # Combat actions - angry/intense
     ActionType.FIGHT: FacialExpression.ANGRY,
     ActionType.PUNCH: FacialExpression.ANGRY,
     ActionType.KICK: FacialExpression.ANGRY,
     ActionType.DODGE: FacialExpression.SURPRISED,
-
     # Narrative actions - context-dependent
     ActionType.SIT: FacialExpression.NEUTRAL,
     ActionType.STAND: FacialExpression.NEUTRAL,
@@ -59,14 +55,12 @@ ACTION_EXPRESSIONS = {
     ActionType.DRINKING: FacialExpression.HAPPY,
     ActionType.READING: FacialExpression.NEUTRAL,
     ActionType.TYPING: FacialExpression.NEUTRAL,
-
     # Exploration actions - curious/surprised
     ActionType.LOOKING_AROUND: FacialExpression.SURPRISED,
     ActionType.CLIMBING: FacialExpression.NEUTRAL,
     ActionType.CRAWLING: FacialExpression.NEUTRAL,
     ActionType.SWIMMING: FacialExpression.NEUTRAL,
     ActionType.FLYING: FacialExpression.EXCITED,
-
     # Emotional actions - explicit emotions
     ActionType.CELEBRATE: FacialExpression.EXCITED,
     ActionType.DANCE: FacialExpression.HAPPY,
@@ -82,42 +76,42 @@ EXPRESSION_FEATURES = {
         eye_type="dots",
         eyebrow_angle=0.0,
         mouth_shape=MouthShape.CLOSED,
-        mouth_openness=0.0
+        mouth_openness=0.0,
     ),
     FacialExpression.HAPPY: FaceFeatures(
         expression=FacialExpression.HAPPY,
         eye_type="curves",
         eyebrow_angle=10.0,
         mouth_shape=MouthShape.SMILE,
-        mouth_openness=0.0
+        mouth_openness=0.0,
     ),
     FacialExpression.SAD: FaceFeatures(
         expression=FacialExpression.SAD,
         eye_type="dots",
         eyebrow_angle=-15.0,
         mouth_shape=MouthShape.FROWN,
-        mouth_openness=0.0
+        mouth_openness=0.0,
     ),
     FacialExpression.SURPRISED: FaceFeatures(
         expression=FacialExpression.SURPRISED,
         eye_type="wide",
         eyebrow_angle=20.0,
         mouth_shape=MouthShape.OPEN,
-        mouth_openness=0.5
+        mouth_openness=0.5,
     ),
     FacialExpression.ANGRY: FaceFeatures(
         expression=FacialExpression.ANGRY,
         eye_type="dots",
         eyebrow_angle=-20.0,
         mouth_shape=MouthShape.FROWN,
-        mouth_openness=0.0
+        mouth_openness=0.0,
     ),
     FacialExpression.EXCITED: FaceFeatures(
         expression=FacialExpression.EXCITED,
         eye_type="wide",
         eyebrow_angle=15.0,
         mouth_shape=MouthShape.SMILE,
-        mouth_openness=0.3
+        mouth_openness=0.3,
     ),
 }
 
@@ -125,26 +119,27 @@ EXPRESSION_FEATURES = {
 # Maps speech actions to their animation parameters
 SPEECH_ANIMATION_CONFIG = {
     ActionType.TALK: {
-        'cycle_speed': 8.0,      # 8 Hz - normal talking speed
-        'mouth_shapes': [MouthShape.SMALL_O, MouthShape.OPEN, MouthShape.CLOSED],
-        'openness_range': (0.2, 0.5),  # Moderate mouth opening
+        "cycle_speed": 8.0,  # 8 Hz - normal talking speed
+        "mouth_shapes": [MouthShape.SMALL_O, MouthShape.OPEN, MouthShape.CLOSED],
+        "openness_range": (0.2, 0.5),  # Moderate mouth opening
     },
     ActionType.SHOUT: {
-        'cycle_speed': 6.0,      # 6 Hz - slower, more emphatic
-        'mouth_shapes': [MouthShape.WIDE_OPEN, MouthShape.OPEN],
-        'openness_range': (0.6, 1.0),  # Wide mouth opening
+        "cycle_speed": 6.0,  # 6 Hz - slower, more emphatic
+        "mouth_shapes": [MouthShape.WIDE_OPEN, MouthShape.OPEN],
+        "openness_range": (0.6, 1.0),  # Wide mouth opening
     },
     ActionType.WHISPER: {
-        'cycle_speed': 10.0,     # 10 Hz - faster, subtle movements
-        'mouth_shapes': [MouthShape.SMALL_O, MouthShape.CLOSED],
-        'openness_range': (0.1, 0.3),  # Small mouth opening
+        "cycle_speed": 10.0,  # 10 Hz - faster, subtle movements
+        "mouth_shapes": [MouthShape.SMALL_O, MouthShape.CLOSED],
+        "openness_range": (0.1, 0.3),  # Small mouth opening
     },
     ActionType.SING: {
-        'cycle_speed': 4.0,      # 4 Hz - slower, sustained notes
-        'mouth_shapes': [MouthShape.SINGING, MouthShape.OPEN, MouthShape.SMALL_O],
-        'openness_range': (0.4, 0.8),  # Varied mouth opening
+        "cycle_speed": 4.0,  # 4 Hz - slower, sustained notes
+        "mouth_shapes": [MouthShape.SINGING, MouthShape.OPEN, MouthShape.SMALL_O],
+        "openness_range": (0.4, 0.8),  # Varied mouth opening
     },
 }
+
 
 def create_actor_with_expression(
     actor_id: str,
@@ -152,7 +147,7 @@ def create_actor_with_expression(
     actions: list,
     color: str = "black",
     actor_type: ActorType = ActorType.HUMAN,
-    **kwargs
+    **kwargs,
 ) -> Actor:
     """
     Helper function to create an Actor with appropriate facial expression.
@@ -188,15 +183,24 @@ def create_actor_with_expression(
         actions=actions,
         facial_expression=expression,
         face_features=face_features,
-        **kwargs
+        **kwargs,
     )
+
 
 class StoryGenerator:
     def __init__(self):
         pass
 
     def generate_random_scene(self) -> Scene:
-        themes = ["nature", "city", "sports_baseball", "sports_soccer", "tech", "space", "narrative"]
+        themes = [
+            "nature",
+            "city",
+            "sports_baseball",
+            "sports_soccer",
+            "tech",
+            "space",
+            "narrative",
+        ]
         theme = random.choice(themes)
         return self._generate_scene_for_theme(theme)
 
@@ -217,18 +221,23 @@ class StoryGenerator:
             theme,
             description_override=prompt,
             num_actors=num_actors,
-            narrative_beats=narrative_beats
+            narrative_beats=narrative_beats,
         )
 
     def _detect_theme(self, prompt: str) -> str:
         """Detect theme from prompt"""
-        if any(word in prompt for word in ["baseball", "world series", "playoff", "batting", "pitching"]):
+        if any(
+            word in prompt
+            for word in ["baseball", "world series", "playoff", "batting", "pitching"]
+        ):
             return "sports_baseball"
         elif any(word in prompt for word in ["soccer", "football", "goal", "kick"]):
             return "sports_soccer"
         elif any(word in prompt for word in ["basketball", "dunk", "hoop"]):
             return "sports_basketball"
-        elif any(word in prompt for word in ["space", "alien", "planet", "astronaut", "ufo"]):
+        elif any(
+            word in prompt for word in ["space", "alien", "planet", "astronaut", "ufo"]
+        ):
             return "space"
         elif any(word in prompt for word in ["nature", "tree", "forest", "park"]):
             return "nature"
@@ -236,7 +245,9 @@ class StoryGenerator:
             return "city"
         elif any(word in prompt for word in ["tech", "laptop", "computer", "coding"]):
             return "tech"
-        elif any(word in prompt for word in ["meet", "eat", "talk", "explore", "story"]):
+        elif any(
+            word in prompt for word in ["meet", "eat", "talk", "explore", "story"]
+        ):
             return "narrative"
         else:
             return random.choice(["nature", "city", "sports_baseball", "tech"])
@@ -244,11 +255,21 @@ class StoryGenerator:
     def _detect_actor_count(self, prompt: str, theme: str) -> int:
         """Detect number of actors from prompt"""
         # Check for explicit numbers
-        numbers = re.findall(r'\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b', prompt)
+        numbers = re.findall(
+            r"\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b", prompt
+        )
         if numbers:
             word_to_num = {
-                "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+                "one": 1,
+                "two": 2,
+                "three": 3,
+                "four": 4,
+                "five": 5,
+                "six": 6,
+                "seven": 7,
+                "eight": 8,
+                "nine": 9,
+                "ten": 10,
             }
             for num in numbers:
                 if num.isdigit():
@@ -268,7 +289,19 @@ class StoryGenerator:
             return random.randint(8, 15)
 
         # Check for multi-character indicators
-        if any(word in prompt for word in ["alien", "aliens", "robot", "robots", "meet", "meets", "with them", "together"]):
+        if any(
+            word in prompt
+            for word in [
+                "alien",
+                "aliens",
+                "robot",
+                "robots",
+                "meet",
+                "meets",
+                "with them",
+                "together",
+            ]
+        ):
             return max(2, random.randint(2, 4))  # At least 2 for interactions
 
         # Theme-based defaults
@@ -301,8 +334,13 @@ class StoryGenerator:
 
         return beats
 
-    def _generate_scene_for_theme(self, theme: str, description_override: str = None,
-                                   num_actors: int = None, narrative_beats: list = None) -> Scene:
+    def _generate_scene_for_theme(
+        self,
+        theme: str,
+        description_override: str = None,
+        num_actors: int = None,
+        narrative_beats: list = None,
+    ) -> Scene:
         """Generate scene based on theme with enhanced multi-actor support"""
 
         if num_actors is None:
@@ -320,21 +358,37 @@ class StoryGenerator:
 
         # Generate scene based on theme
         if theme == "sports_baseball":
-            actors, objects, description = self._generate_baseball_scene(num_actors, duration)
+            actors, objects, description = self._generate_baseball_scene(
+                num_actors, duration
+            )
         elif theme == "sports_soccer":
-            actors, objects, description = self._generate_soccer_scene(num_actors, duration)
+            actors, objects, description = self._generate_soccer_scene(
+                num_actors, duration
+            )
         elif theme == "space":
-            actors, objects, description = self._generate_space_scene(num_actors, duration, narrative_beats)
+            actors, objects, description = self._generate_space_scene(
+                num_actors, duration, narrative_beats
+            )
         elif theme == "narrative":
-            actors, objects, description = self._generate_narrative_scene(num_actors, duration, narrative_beats)
+            actors, objects, description = self._generate_narrative_scene(
+                num_actors, duration, narrative_beats
+            )
         elif theme == "nature":
-            actors, objects, description = self._generate_nature_scene(num_actors, duration)
+            actors, objects, description = self._generate_nature_scene(
+                num_actors, duration
+            )
         elif theme == "city":
-            actors, objects, description = self._generate_city_scene(num_actors, duration)
+            actors, objects, description = self._generate_city_scene(
+                num_actors, duration
+            )
         elif theme == "tech":
-            actors, objects, description = self._generate_tech_scene(num_actors, duration)
+            actors, objects, description = self._generate_tech_scene(
+                num_actors, duration
+            )
         else:
-            actors, objects, description = self._generate_generic_scene(num_actors, duration)
+            actors, objects, description = self._generate_generic_scene(
+                num_actors, duration
+            )
 
         if description_override:
             description = description_override
@@ -344,7 +398,7 @@ class StoryGenerator:
             actors=actors,
             objects=objects,
             description=description,
-            theme=theme
+            theme=theme,
         )
 
     def _generate_baseball_scene(self, num_actors: int, duration: float):
@@ -359,23 +413,27 @@ class StoryGenerator:
             i * 90
             x = 2.5 * (1 if i % 2 == 1 else -1) if i > 0 else 0
             y = -2.5 if i == 0 else -2.5 + 2.5 * (i // 2)
-            objects.append(SceneObject(
-                id=f"base_{base_name}",
-                type=ObjectType.BASE,
-                position=Position(x=x, y=y),
-                color="white",
-                scale=0.3
-            ))
+            objects.append(
+                SceneObject(
+                    id=f"base_{base_name}",
+                    type=ObjectType.BASE,
+                    position=Position(x=x, y=y),
+                    color="white",
+                    scale=0.3,
+                )
+            )
 
         # Add baseball
-        objects.append(SceneObject(
-            id="baseball",
-            type=ObjectType.BASEBALL,
-            position=Position(x=0, y=-2.0),
-            color="white",
-            scale=0.2,
-            velocity=(random.uniform(-1, 1), random.uniform(0.5, 2.0))
-        ))
+        objects.append(
+            SceneObject(
+                id="baseball",
+                type=ObjectType.BASEBALL,
+                position=Position(x=0, y=-2.0),
+                color="white",
+                scale=0.2,
+                velocity=(random.uniform(-1, 1), random.uniform(0.5, 2.0)),
+            )
+        )
 
         # Ensure we have enough actors for teams
         num_actors = max(num_actors, 10)
@@ -386,16 +444,20 @@ class StoryGenerator:
             if i == 0:
                 # Batter - runs the bases after hitting
                 pos = Position(x=-0.5, y=-2.5)
-                action_seq = [(0.0, ActionType.IDLE), (1.0, ActionType.BATTING), (2.0, ActionType.RUNNING_BASES)]
+                action_seq = [
+                    (0.0, ActionType.IDLE),
+                    (1.0, ActionType.BATTING),
+                    (2.0, ActionType.RUNNING_BASES),
+                ]
 
                 # Movement path: home → 1st → 2nd → 3rd → home
                 movement_path = [
-                    (0.0, Position(x=-0.5, y=-2.5)),   # Home (start)
-                    (2.0, Position(x=-0.5, y=-2.5)),   # Stay at home during batting
-                    (3.5, Position(x=2.5, y=-2.5)),    # Run to 1st base
-                    (5.0, Position(x=2.5, y=0.0)),     # Run to 2nd base
-                    (6.5, Position(x=-2.5, y=0.0)),    # Run to 3rd base
-                    (8.0, Position(x=-0.5, y=-2.5)),   # Run back to home
+                    (0.0, Position(x=-0.5, y=-2.5)),  # Home (start)
+                    (2.0, Position(x=-0.5, y=-2.5)),  # Stay at home during batting
+                    (3.5, Position(x=2.5, y=-2.5)),  # Run to 1st base
+                    (5.0, Position(x=2.5, y=0.0)),  # Run to 2nd base
+                    (6.5, Position(x=-2.5, y=0.0)),  # Run to 3rd base
+                    (8.0, Position(x=-0.5, y=-2.5)),  # Run back to home
                 ]
             else:
                 # Other batters waiting or on bases
@@ -409,22 +471,28 @@ class StoryGenerator:
                     (duration, Position(x=-3 + i * 0.5, y=-2.5)),
                 ]
 
-            actors.append(Actor(
-                id=f"team1_player_{i}",
-                actor_type=ActorType.HUMAN,
-                color=random.choice(colors_team1),
-                initial_position=pos,
-                actions=action_seq,
-                team="team1",
-                movement_path=movement_path
-            ))
+            actors.append(
+                Actor(
+                    id=f"team1_player_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color=random.choice(colors_team1),
+                    initial_position=pos,
+                    actions=action_seq,
+                    team="team1",
+                    movement_path=movement_path,
+                )
+            )
 
         # Team 2 (fielding team) - positioned in field
         for i in range(team_size):
             if i == 0:
                 # Pitcher
                 pos = Position(x=0, y=-1.0)
-                action_seq = [(0.0, ActionType.IDLE), (0.5, ActionType.PITCHING), (2.5, ActionType.FIELDING)]
+                action_seq = [
+                    (0.0, ActionType.IDLE),
+                    (0.5, ActionType.PITCHING),
+                    (2.5, ActionType.FIELDING),
+                ]
             elif i == 1:
                 # Catcher
                 pos = Position(x=0.5, y=-2.7)
@@ -434,54 +502,67 @@ class StoryGenerator:
                 (i - 2) * 40 - 60
                 distance = random.uniform(3.0, 4.5)
                 pos = Position(
-                    x=distance * (0.5 if i % 2 == 0 else -0.5),
-                    y=-1.0 + distance * 0.3
+                    x=distance * (0.5 if i % 2 == 0 else -0.5), y=-1.0 + distance * 0.3
                 )
-                action_seq = [(0.0, ActionType.IDLE), (2.0 + i * 0.2, ActionType.FIELDING), (3.0, ActionType.THROWING)]
+                action_seq = [
+                    (0.0, ActionType.IDLE),
+                    (2.0 + i * 0.2, ActionType.FIELDING),
+                    (3.0, ActionType.THROWING),
+                ]
 
-            actors.append(Actor(
-                id=f"team2_player_{i}",
-                actor_type=ActorType.HUMAN,
-                color=random.choice(colors_team2),
-                initial_position=pos,
-                actions=action_seq,
-                team="team2"
-            ))
+            actors.append(
+                Actor(
+                    id=f"team2_player_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color=random.choice(colors_team2),
+                    initial_position=pos,
+                    actions=action_seq,
+                    team="team2",
+                )
+            )
 
         description = f"A baseball game with {num_actors} players on two teams"
         return actors, objects, description
 
-    def _generate_space_scene(self, num_actors: int, duration: float, narrative_beats: list = None):
+    def _generate_space_scene(
+        self, num_actors: int, duration: float, narrative_beats: list = None
+    ):
         """Generate space exploration scene"""
         actors = []
         objects = []
 
         # Add space objects
-        objects.append(SceneObject(
-            id="planet",
-            type=ObjectType.PLANET,
-            position=Position(x=3.5, y=2.0),
-            color="purple",
-            scale=1.5
-        ))
+        objects.append(
+            SceneObject(
+                id="planet",
+                type=ObjectType.PLANET,
+                position=Position(x=3.5, y=2.0),
+                color="purple",
+                scale=1.5,
+            )
+        )
 
-        objects.append(SceneObject(
-            id="spaceship",
-            type=ObjectType.SPACESHIP,
-            position=Position(x=-3.0, y=1.0),
-            color="silver",
-            scale=1.0
-        ))
+        objects.append(
+            SceneObject(
+                id="spaceship",
+                type=ObjectType.SPACESHIP,
+                position=Position(x=-3.0, y=1.0),
+                color="silver",
+                scale=1.0,
+            )
+        )
 
         # Add stars
         for i in range(5):
-            objects.append(SceneObject(
-                id=f"star_{i}",
-                type=ObjectType.STAR,
-                position=Position(x=random.uniform(-4, 4), y=random.uniform(0, 4)),
-                color="yellow",
-                scale=0.2
-            ))
+            objects.append(
+                SceneObject(
+                    id=f"star_{i}",
+                    type=ObjectType.STAR,
+                    position=Position(x=random.uniform(-4, 4), y=random.uniform(0, 4)),
+                    color="yellow",
+                    scale=0.2,
+                )
+            )
 
         # Human explorer
         human_actions = [(0.0, ActionType.WALK), (2.0, ActionType.LOOKING_AROUND)]
@@ -496,21 +577,23 @@ class StoryGenerator:
 
         # Movement path: exploring space, walking toward aliens/planet
         human_movement_path = [
-            (0.0, Position(x=-2.0, y=-2.0)),    # Start at spaceship
-            (2.0, Position(x=0.0, y=-1.5)),     # Walk to center
-            (4.0, Position(x=1.5, y=-1.5)),     # Walk toward aliens
+            (0.0, Position(x=-2.0, y=-2.0)),  # Start at spaceship
+            (2.0, Position(x=0.0, y=-1.5)),  # Walk to center
+            (4.0, Position(x=1.5, y=-1.5)),  # Walk toward aliens
         ]
         if narrative_beats and any("eating" in beat[0] for beat in narrative_beats):
             human_movement_path.append((5.0, Position(x=0.0, y=-1.5)))  # Move to table
 
-        actors.append(Actor(
-            id="human_explorer",
-            actor_type=ActorType.HUMAN,
-            color="blue",
-            initial_position=Position(x=-2.0, y=-2.0),
-            actions=human_actions,
-            movement_path=human_movement_path
-        ))
+        actors.append(
+            Actor(
+                id="human_explorer",
+                actor_type=ActorType.HUMAN,
+                color="blue",
+                initial_position=Position(x=-2.0, y=-2.0),
+                actions=human_actions,
+                movement_path=human_movement_path,
+            )
+        )
 
         # Alien(s)
         num_aliens = min(num_actors - 1, 3)
@@ -527,44 +610,54 @@ class StoryGenerator:
 
             # Alien movement: walk toward human
             alien_movement_path = [
-                (0.0, Position(x=1.0 + i * 0.8, y=-2.0)),   # Start position
-                (2.5, Position(x=1.0 + i * 0.8, y=-2.0)),   # Stay idle
-                (4.0, Position(x=0.5 + i * 0.5, y=-1.5)),   # Walk toward human
+                (0.0, Position(x=1.0 + i * 0.8, y=-2.0)),  # Start position
+                (2.5, Position(x=1.0 + i * 0.8, y=-2.0)),  # Stay idle
+                (4.0, Position(x=0.5 + i * 0.5, y=-1.5)),  # Walk toward human
             ]
             if narrative_beats and any("eating" in beat[0] for beat in narrative_beats):
-                alien_movement_path.append((5.0, Position(x=0.3 + i * 0.4, y=-1.5)))  # Move to table
+                alien_movement_path.append(
+                    (5.0, Position(x=0.3 + i * 0.4, y=-1.5))
+                )  # Move to table
 
-            actors.append(Actor(
-                id=f"alien_{i}",
-                actor_type=ActorType.ALIEN,
-                color="green",
-                initial_position=Position(x=1.0 + i * 0.8, y=-2.0),
-                actions=alien_actions,
-                scale=1.2,  # Aliens slightly larger
-                movement_path=alien_movement_path
-            ))
+            actors.append(
+                Actor(
+                    id=f"alien_{i}",
+                    actor_type=ActorType.ALIEN,
+                    color="green",
+                    initial_position=Position(x=1.0 + i * 0.8, y=-2.0),
+                    actions=alien_actions,
+                    scale=1.2,  # Aliens slightly larger
+                    movement_path=alien_movement_path,
+                )
+            )
 
         # Add table and food if eating scene
         if narrative_beats and any("eating" in beat[0] for beat in narrative_beats):
-            objects.append(SceneObject(
-                id="table",
-                type=ObjectType.TABLE,
-                position=Position(x=0, y=-1.5),
-                color="brown",
-                scale=1.0
-            ))
-            objects.append(SceneObject(
-                id="food",
-                type=ObjectType.FOOD,
-                position=Position(x=0, y=-0.8),
-                color="orange",
-                scale=0.5
-            ))
+            objects.append(
+                SceneObject(
+                    id="table",
+                    type=ObjectType.TABLE,
+                    position=Position(x=0, y=-1.5),
+                    color="brown",
+                    scale=1.0,
+                )
+            )
+            objects.append(
+                SceneObject(
+                    id="food",
+                    type=ObjectType.FOOD,
+                    position=Position(x=0, y=-0.8),
+                    color="orange",
+                    scale=0.5,
+                )
+            )
 
         description = f"A space scene with {num_actors} characters"
         return actors, objects, description
 
-    def _generate_narrative_scene(self, num_actors: int, duration: float, narrative_beats: list = None):
+    def _generate_narrative_scene(
+        self, num_actors: int, duration: float, narrative_beats: list = None
+    ):
         """Generate general narrative scene"""
         actors = []
         objects = []
@@ -589,13 +682,15 @@ class StoryGenerator:
                     elif "dancing" in beat_name:
                         actions.append((start, ActionType.DANCE))
 
-            actors.append(Actor(
-                id=f"actor_{i}",
-                actor_type=ActorType.HUMAN,
-                color=random.choice(colors),
-                initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
-                actions=actions
-            ))
+            actors.append(
+                Actor(
+                    id=f"actor_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color=random.choice(colors),
+                    initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
+                    actions=actions,
+                )
+            )
 
         description = f"A narrative scene with {num_actors} characters"
         return actors, objects, description
@@ -606,37 +701,47 @@ class StoryGenerator:
         objects = []
 
         # Add soccer ball
-        objects.append(SceneObject(
-            id="soccer_ball",
-            type=ObjectType.SOCCER_BALL,
-            position=Position(x=0, y=-2.0),
-            color="white",
-            scale=0.3,
-            velocity=(random.uniform(-0.5, 0.5), random.uniform(0, 1.0))
-        ))
+        objects.append(
+            SceneObject(
+                id="soccer_ball",
+                type=ObjectType.SOCCER_BALL,
+                position=Position(x=0, y=-2.0),
+                color="white",
+                scale=0.3,
+                velocity=(random.uniform(-0.5, 0.5), random.uniform(0, 1.0)),
+            )
+        )
 
         num_actors = max(num_actors, 6)
         team_size = num_actors // 2
 
         for i in range(team_size):
-            actors.append(Actor(
-                id=f"team1_player_{i}",
-                actor_type=ActorType.HUMAN,
-                color="red",
-                initial_position=Position(x=-3 + i * 1.5, y=-2.0),
-                actions=[(0.0, ActionType.RUN), (1.5, ActionType.KICKING), (3.0, ActionType.RUN)],
-                team="team1"
-            ))
+            actors.append(
+                Actor(
+                    id=f"team1_player_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color="red",
+                    initial_position=Position(x=-3 + i * 1.5, y=-2.0),
+                    actions=[
+                        (0.0, ActionType.RUN),
+                        (1.5, ActionType.KICKING),
+                        (3.0, ActionType.RUN),
+                    ],
+                    team="team1",
+                )
+            )
 
         for i in range(team_size):
-            actors.append(Actor(
-                id=f"team2_player_{i}",
-                actor_type=ActorType.HUMAN,
-                color="blue",
-                initial_position=Position(x=1 + i * 1.5, y=-2.0),
-                actions=[(0.0, ActionType.RUN), (2.0, ActionType.KICKING)],
-                team="team2"
-            ))
+            actors.append(
+                Actor(
+                    id=f"team2_player_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color="blue",
+                    initial_position=Position(x=1 + i * 1.5, y=-2.0),
+                    actions=[(0.0, ActionType.RUN), (2.0, ActionType.KICKING)],
+                    team="team2",
+                )
+            )
 
         description = f"A soccer game with {num_actors} players"
         return actors, objects, description
@@ -648,23 +753,34 @@ class StoryGenerator:
 
         # Add trees
         for i in range(random.randint(2, 4)):
-            objects.append(SceneObject(
-                id=f"tree_{i}",
-                type=ObjectType.TREE,
-                position=Position(x=random.uniform(-4, 4), y=random.uniform(-1, 0)),
-                scale=random.uniform(0.8, 1.2)
-            ))
+            objects.append(
+                SceneObject(
+                    id=f"tree_{i}",
+                    type=ObjectType.TREE,
+                    position=Position(x=random.uniform(-4, 4), y=random.uniform(-1, 0)),
+                    scale=random.uniform(0.8, 1.2),
+                )
+            )
 
         colors = ["black", "brown", "green"]
         for i in range(num_actors):
-            action = random.choice([ActionType.WALK, ActionType.IDLE, ActionType.WAVE, ActionType.LOOKING_AROUND])
-            actors.append(Actor(
-                id=f"actor_{i}",
-                actor_type=ActorType.HUMAN,
-                color=random.choice(colors),
-                initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
-                actions=[(0.0, action), (2.0, ActionType.WALK)]
-            ))
+            action = random.choice(
+                [
+                    ActionType.WALK,
+                    ActionType.IDLE,
+                    ActionType.WAVE,
+                    ActionType.LOOKING_AROUND,
+                ]
+            )
+            actors.append(
+                Actor(
+                    id=f"actor_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color=random.choice(colors),
+                    initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
+                    actions=[(0.0, action), (2.0, ActionType.WALK)],
+                )
+            )
 
         description = f"A nature scene with trees and {num_actors} people"
         return actors, objects, description
@@ -676,23 +792,29 @@ class StoryGenerator:
 
         # Add buildings
         for i in range(random.randint(1, 3)):
-            objects.append(SceneObject(
-                id=f"building_{i}",
-                type=ObjectType.BUILDING,
-                position=Position(x=random.uniform(-3, 3), y=random.uniform(-1, 0)),
-                scale=random.uniform(0.8, 1.2)
-            ))
+            objects.append(
+                SceneObject(
+                    id=f"building_{i}",
+                    type=ObjectType.BUILDING,
+                    position=Position(x=random.uniform(-3, 3), y=random.uniform(-1, 0)),
+                    scale=random.uniform(0.8, 1.2),
+                )
+            )
 
         colors = ["black", "red", "blue", "gray"]
         for i in range(num_actors):
-            action = random.choice([ActionType.WALK, ActionType.RUN, ActionType.TALK, ActionType.TYPING])
-            actors.append(Actor(
-                id=f"actor_{i}",
-                actor_type=ActorType.HUMAN,
-                color=random.choice(colors),
-                initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
-                actions=[(0.0, ActionType.WALK), (2.0, action)]
-            ))
+            action = random.choice(
+                [ActionType.WALK, ActionType.RUN, ActionType.TALK, ActionType.TYPING]
+            )
+            actors.append(
+                Actor(
+                    id=f"actor_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color=random.choice(colors),
+                    initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
+                    actions=[(0.0, ActionType.WALK), (2.0, action)],
+                )
+            )
 
         description = f"A city scene with {num_actors} people"
         return actors, objects, description
@@ -704,21 +826,29 @@ class StoryGenerator:
 
         # Add laptops
         for i in range(min(num_actors, 3)):
-            objects.append(SceneObject(
-                id=f"laptop_{i}",
-                type=ObjectType.LAPTOP,
-                position=Position(x=-2 + i * 2, y=-1.0),
-                scale=1.0
-            ))
+            objects.append(
+                SceneObject(
+                    id=f"laptop_{i}",
+                    type=ObjectType.LAPTOP,
+                    position=Position(x=-2 + i * 2, y=-1.0),
+                    scale=1.0,
+                )
+            )
 
         for i in range(num_actors):
-            actors.append(Actor(
-                id=f"actor_{i}",
-                actor_type=ActorType.HUMAN,
-                color="black",
-                initial_position=Position(x=-2 + i * 1.5, y=-2.0),
-                actions=[(0.0, ActionType.SIT), (0.5, ActionType.TYPING), (3.0, ActionType.TALK)]
-            ))
+            actors.append(
+                Actor(
+                    id=f"actor_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color="black",
+                    initial_position=Position(x=-2 + i * 1.5, y=-2.0),
+                    actions=[
+                        (0.0, ActionType.SIT),
+                        (0.5, ActionType.TYPING),
+                        (3.0, ActionType.TALK),
+                    ],
+                )
+            )
 
         description = f"A tech scene with {num_actors} people working"
         return actors, objects, description
@@ -731,13 +861,15 @@ class StoryGenerator:
 
         for i in range(num_actors):
             action = random.choice(list(ActionType))
-            actors.append(Actor(
-                id=f"actor_{i}",
-                actor_type=ActorType.HUMAN,
-                color=random.choice(colors),
-                initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
-                actions=[(0.0, action)]
-            ))
+            actors.append(
+                Actor(
+                    id=f"actor_{i}",
+                    actor_type=ActorType.HUMAN,
+                    color=random.choice(colors),
+                    initial_position=Position(x=random.uniform(-3, 3), y=-2.0),
+                    actions=[(0.0, action)],
+                )
+            )
 
         description = f"A scene with {num_actors} stick figures"
         return actors, objects, description

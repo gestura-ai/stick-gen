@@ -104,7 +104,9 @@ def load_100style_txt(style_dir: str, target_frames: int = 250) -> list:
     # Full 100STYLE is ~21GB, we'll sample
     try:
         # Use memory mapping for large files
-        data = np.loadtxt(input_file, dtype=np.float32, max_rows=250*1000)  # Limit to ~1000 sequences
+        data = np.loadtxt(
+            input_file, dtype=np.float32, max_rows=250 * 1000
+        )  # Limit to ~1000 sequences
     except Exception as e:
         print(f"Error loading InputTrain.txt: {e}")
         print("Falling back to partial load...")
@@ -143,21 +145,25 @@ def load_100style_txt(style_dir: str, target_frames: int = 250) -> list:
             else:
                 # Pad if needed
                 motion_padded = np.zeros((target_frames, 20), dtype=np.float32)
-                motion_padded[:, :sequence.shape[1]] = sequence
+                motion_padded[:, : sequence.shape[1]] = sequence
                 motion = torch.from_numpy(motion_padded).float()
 
-            sequences.append({
-                "motion": motion,
-                "style": f"style_{i % 100}",  # Assign style labels
-                "source": "100style_txt",
-                "sequence_idx": i
-            })
+            sequences.append(
+                {
+                    "motion": motion,
+                    "style": f"style_{i % 100}",  # Assign style labels
+                    "source": "100style_txt",
+                    "sequence_idx": i,
+                }
+            )
 
     print(f"Created {len(sequences)} sequences from 100STYLE txt")
     return sequences
 
 
-def load_amass_data(amass_dir: str, smpl_dir: str, target_frames: int = 250, max_samples: int = None) -> list:
+def load_amass_data(
+    amass_dir: str, smpl_dir: str, target_frames: int = 250, max_samples: int = None
+) -> list:
     """Load and process AMASS dataset.
 
     Args:
@@ -193,7 +199,7 @@ def load_amass_data(amass_dir: str, smpl_dir: str, target_frames: int = 250, max
     # Find all .npz files in AMASS directory
     npz_files = glob(os.path.join(amass_dir, "**/*.npz"), recursive=True)
     # Filter out stagei files (we want stageii)
-    npz_files = [f for f in npz_files if 'stagei' not in f or 'stageii' in f]
+    npz_files = [f for f in npz_files if "stagei" not in f or "stageii" in f]
 
     print(f"Found {len(npz_files)} AMASS motion files")
 
@@ -209,9 +215,7 @@ def load_amass_data(amass_dir: str, smpl_dir: str, target_frames: int = 250, max
     for npz_path in tqdm(npz_files, desc="Processing AMASS"):
         try:
             motion = converter.convert_sequence(
-                npz_path,
-                target_fps=25,
-                target_duration=target_frames / 25.0
+                npz_path, target_fps=25, target_duration=target_frames / 25.0
             )
 
             if motion is not None and motion.shape[0] > 0:
@@ -219,13 +223,15 @@ def load_amass_data(amass_dir: str, smpl_dir: str, target_frames: int = 250, max
                 action = infer_action_from_filename(npz_path)
                 description = generate_description_from_action(action)
 
-                sequences.append({
-                    "motion": motion,
-                    "action": action,
-                    "description": description,
-                    "source": "amass",
-                    "file": os.path.basename(npz_path)
-                })
+                sequences.append(
+                    {
+                        "motion": motion,
+                        "action": action,
+                        "description": description,
+                        "source": "amass",
+                        "file": os.path.basename(npz_path),
+                    }
+                )
         except Exception:
             # Skip problematic files
             continue
@@ -246,11 +252,7 @@ def generate_synthetic_data(num_samples: int, target_frames: int = 250) -> list:
         return torch.load(output_path)
 
     print(f"Generating {num_samples} synthetic samples...")
-    generate_dataset(
-        num_samples=num_samples,
-        output_path=output_path,
-        augment=True
-    )
+    generate_dataset(num_samples=num_samples, output_path=output_path, augment=True)
 
     if os.path.exists(output_path):
         return torch.load(output_path)
@@ -282,7 +284,9 @@ def create_100style_descriptions(style_data: list) -> list:
             style_keys = list(style_descriptions.keys())
             style = style_keys[style_num % len(style_keys)]
 
-        description = style_descriptions.get(style, f"A person performing {style} movement")
+        description = style_descriptions.get(
+            style, f"A person performing {style} movement"
+        )
 
         motion = item.get("motion")
         if motion is None:
@@ -295,17 +299,21 @@ def create_100style_descriptions(style_data: list) -> list:
         # Preserve original source (100style or 100style_txt)
         source = item.get("source", "100style")
 
-        processed.append({
-            "description": description,
-            "motion": motion,
-            "source": source,
-            "style": style
-        })
+        processed.append(
+            {
+                "description": description,
+                "motion": motion,
+                "source": source,
+                "style": style,
+            }
+        )
 
     return processed
 
 
-def add_embeddings(data: list, embedder: SentenceTransformer, batch_size: int = 32) -> list:
+def add_embeddings(
+    data: list, embedder: SentenceTransformer, batch_size: int = 32
+) -> list:
     """Add text embeddings to all samples."""
     print(f"Creating embeddings for {len(data)} samples...")
 
@@ -314,7 +322,7 @@ def add_embeddings(data: list, embedder: SentenceTransformer, batch_size: int = 
     # Batch encode
     embeddings = []
     for i in tqdm(range(0, len(descriptions), batch_size), desc="Embedding"):
-        batch = descriptions[i:i + batch_size]
+        batch = descriptions[i : i + batch_size]
         batch_embeddings = embedder.encode(batch, convert_to_tensor=True)
         embeddings.extend(batch_embeddings)
 
@@ -325,7 +333,9 @@ def add_embeddings(data: list, embedder: SentenceTransformer, batch_size: int = 
     return data
 
 
-def pad_or_truncate(tensor: torch.Tensor, target_frames: int, dim: int = 0) -> torch.Tensor:
+def pad_or_truncate(
+    tensor: torch.Tensor, target_frames: int, dim: int = 0
+) -> torch.Tensor:
     """Pad or truncate tensor to target length."""
     current_len = tensor.shape[dim]
 
@@ -343,9 +353,13 @@ def pad_or_truncate(tensor: torch.Tensor, target_frames: int, dim: int = 0) -> t
     return tensor
 
 
-def merge_datasets(style_data: list, synthetic_data: list, target_frames: int = 250) -> list:
+def merge_datasets(
+    style_data: list, synthetic_data: list, target_frames: int = 250
+) -> list:
     """Merge motion capture (100STYLE + AMASS) and synthetic datasets."""
-    print(f"Merging datasets: {len(style_data)} motion capture + {len(synthetic_data)} synthetic")
+    print(
+        f"Merging datasets: {len(style_data)} motion capture + {len(synthetic_data)} synthetic"
+    )
 
     merged = []
 
@@ -362,14 +376,16 @@ def merge_datasets(style_data: list, synthetic_data: list, target_frames: int = 
             actions = torch.tensor(actions, dtype=torch.long)
         actions = pad_or_truncate(actions, target_frames)
 
-        merged.append({
-            "description": item.get("description", "A person performing motion"),
-            "motion": motion,
-            "actions": actions,
-            "physics": torch.zeros(target_frames, 6),  # Will compute later
-            "camera": torch.zeros(target_frames, 3),  # Default static camera
-            "source": item.get("source", "100style")  # Preserve original source
-        })
+        merged.append(
+            {
+                "description": item.get("description", "A person performing motion"),
+                "motion": motion,
+                "actions": actions,
+                "physics": torch.zeros(target_frames, 6),  # Will compute later
+                "camera": torch.zeros(target_frames, 3),  # Default static camera
+                "source": item.get("source", "100style"),  # Preserve original source
+            }
+        )
 
     # Add synthetic data
     # Synthetic data may have multi-actor format [frames, actors, dims]
@@ -404,14 +420,16 @@ def merge_datasets(style_data: list, synthetic_data: list, target_frames: int = 
             camera = camera[:, :3]  # Take first 3 dims
         camera = pad_or_truncate(camera, target_frames)
 
-        merged.append({
-            "description": item["description"],
-            "motion": motion,
-            "actions": actions,
-            "physics": physics,
-            "camera": camera,
-            "source": "synthetic"
-        })
+        merged.append(
+            {
+                "description": item["description"],
+                "motion": motion,
+                "actions": actions,
+                "physics": physics,
+                "camera": camera,
+                "source": "synthetic",
+            }
+        )
 
     print(f"Total merged samples: {len(merged)}")
     return merged
@@ -444,28 +462,63 @@ def compute_physics(data: list) -> list:
 
 def main():
     parser = argparse.ArgumentParser(description="Prepare Stick-Gen training data")
-    parser.add_argument("--100style-dir", type=str, default="data/100Style",
-                        help="Path to 100STYLE dataset directory")
-    parser.add_argument("--amass-dir", type=str, default="data/amass",
-                        help="Path to AMASS dataset directory")
-    parser.add_argument("--smpl-dir", type=str, default="data/smpl_models",
-                        help="Path to SMPL model files directory")
-    parser.add_argument("--synthetic-samples", type=int, default=10000,
-                        help="Number of synthetic samples to generate")
-    parser.add_argument("--max-amass-samples", type=int, default=500,
-                        help="Maximum AMASS samples to process (None for all)")
-    parser.add_argument("--output", type=str, default="data/train_data_final.pt",
-                        help="Output path for final dataset")
-    parser.add_argument("--target-frames", type=int, default=250,
-                        help="Target number of frames per sequence (10s @ 25fps)")
-    parser.add_argument("--skip-100style", action="store_true",
-                        help="Skip 100STYLE processing")
-    parser.add_argument("--skip-amass", action="store_true",
-                        help="Skip AMASS processing")
-    parser.add_argument("--skip-synthetic", action="store_true",
-                        help="Skip synthetic data generation")
-    parser.add_argument("--embedding-model", type=str, default="BAAI/bge-large-en-v1.5",
-                        help="Text embedding model")
+    parser.add_argument(
+        "--100style-dir",
+        type=str,
+        default="data/100Style",
+        help="Path to 100STYLE dataset directory",
+    )
+    parser.add_argument(
+        "--amass-dir",
+        type=str,
+        default="data/amass",
+        help="Path to AMASS dataset directory",
+    )
+    parser.add_argument(
+        "--smpl-dir",
+        type=str,
+        default="data/smpl_models",
+        help="Path to SMPL model files directory",
+    )
+    parser.add_argument(
+        "--synthetic-samples",
+        type=int,
+        default=10000,
+        help="Number of synthetic samples to generate",
+    )
+    parser.add_argument(
+        "--max-amass-samples",
+        type=int,
+        default=500,
+        help="Maximum AMASS samples to process (None for all)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="data/train_data_final.pt",
+        help="Output path for final dataset",
+    )
+    parser.add_argument(
+        "--target-frames",
+        type=int,
+        default=250,
+        help="Target number of frames per sequence (10s @ 25fps)",
+    )
+    parser.add_argument(
+        "--skip-100style", action="store_true", help="Skip 100STYLE processing"
+    )
+    parser.add_argument(
+        "--skip-amass", action="store_true", help="Skip AMASS processing"
+    )
+    parser.add_argument(
+        "--skip-synthetic", action="store_true", help="Skip synthetic data generation"
+    )
+    parser.add_argument(
+        "--embedding-model",
+        type=str,
+        default="BAAI/bge-large-en-v1.5",
+        help="Text embedding model",
+    )
 
     args = parser.parse_args()
 
@@ -492,7 +545,9 @@ def main():
     # Step 1: Process 100STYLE
     if not args.skip_100style and os.path.exists(args.__dict__["100style_dir"]):
         print(f"\n[1/5] Processing 100STYLE from {args.__dict__['100style_dir']}")
-        style_data = load_100style_data(args.__dict__["100style_dir"], args.target_frames)
+        style_data = load_100style_data(
+            args.__dict__["100style_dir"], args.target_frames
+        )
         style_data = create_100style_descriptions(style_data)
         print(f"  Loaded {len(style_data)} 100STYLE sequences")
     else:
@@ -505,7 +560,7 @@ def main():
             amass_dir=args.amass_dir,
             smpl_dir=args.smpl_dir,
             target_frames=args.target_frames,
-            max_samples=args.max_amass_samples
+            max_samples=args.max_amass_samples,
         )
         print(f"  Loaded {len(amass_data)} AMASS sequences")
     else:
@@ -514,7 +569,9 @@ def main():
     # Step 3: Generate synthetic data
     if not args.skip_synthetic:
         print(f"\n[3/5] Generating {args.synthetic_samples} synthetic samples")
-        synthetic_data = generate_synthetic_data(args.synthetic_samples, args.target_frames)
+        synthetic_data = generate_synthetic_data(
+            args.synthetic_samples, args.target_frames
+        )
         print(f"  Generated {len(synthetic_data)} synthetic samples")
     else:
         print("\n[3/5] Skipping synthetic generation (--skip-synthetic)")
@@ -544,9 +601,15 @@ def main():
     print("Data Preparation Complete!")
     print("=" * 60)
     print(f"  Total samples: {len(all_data)}")
-    print(f"  100STYLE samples: {len([d for d in all_data if d.get('source') in ['100style', '100style_txt']])}")
-    print(f"  AMASS samples: {len([d for d in all_data if d.get('source') == 'amass'])}")
-    print(f"  Synthetic samples: {len([d for d in all_data if d.get('source') == 'synthetic'])}")
+    print(
+        f"  100STYLE samples: {len([d for d in all_data if d.get('source') in ['100style', '100style_txt']])}"
+    )
+    print(
+        f"  AMASS samples: {len([d for d in all_data if d.get('source') == 'amass'])}"
+    )
+    print(
+        f"  Synthetic samples: {len([d for d in all_data if d.get('source') == 'synthetic'])}"
+    )
     print(f"  Frames per sample: {args.target_frames}")
     print(f"  Output file: {args.output}")
     print(f"  File size: {os.path.getsize(args.output) / (1024**3):.2f} GB")
@@ -554,4 +617,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

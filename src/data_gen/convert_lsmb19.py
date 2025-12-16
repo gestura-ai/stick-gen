@@ -67,9 +67,9 @@ def _parse_frame_line(line: str) -> np.ndarray:
     return joints
 
 
-def _iter_training_samples(path: str,
-                           protocol: str,
-                           max_samples: int = -1) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
+def _iter_training_samples(
+    path: str, protocol: str, max_samples: int = -1
+) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
     """Yield (meta, joints[T,25,3]) from an LSMB19 `*_training_samples.txt` file."""
     if not os.path.exists(path):
         return
@@ -105,9 +105,9 @@ def _iter_training_samples(path: str,
         yield meta, joints
 
 
-def _build_canonical_sample_from_joints(joints: np.ndarray,
-                                        meta: dict[str, Any],
-                                        fps: int) -> dict[str, Any]:
+def _build_canonical_sample_from_joints(
+    joints: np.ndarray, meta: dict[str, Any], fps: int
+) -> dict[str, Any]:
     """Convert [T,25,3] NTU-style joints to our canonical sample dict."""
     motion_np = joints_to_stick(joints)  # [T, 20]
     motion = torch.from_numpy(motion_np)
@@ -138,10 +138,9 @@ def _build_canonical_sample_from_joints(joints: np.ndarray,
     return sample
 
 
-def convert_lsmb19(data_root: str,
-                   output_path: str,
-                   fps: int = 30,
-                   max_samples: int = -1) -> None:
+def convert_lsmb19(
+    data_root: str, output_path: str, fps: int = 30, max_samples: int = -1
+) -> None:
     """Convert LSMB19 training samples into the canonical schema.
 
     We use the pre-segmented `cs_training_samples.txt` and
@@ -172,7 +171,9 @@ def convert_lsmb19(data_root: str,
             continue
 
         per_proto_max = remaining if remaining is not None else -1
-        for meta, joints in _iter_training_samples(path, protocol, max_samples=per_proto_max):
+        for meta, joints in _iter_training_samples(
+            path, protocol, max_samples=per_proto_max
+        ):
             sample = _build_canonical_sample_from_joints(joints, meta, fps=fps)
             # For LSMB19 we keep only the physics-based filter here to avoid
             # over-penalising projection-induced limb-length variation.
@@ -193,13 +194,19 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Convert LSMB19 to canonical schema")
-    parser.add_argument("--root", type=str, required=True,
-                        help="Root directory of lsmb19-mocap")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
+    parser.add_argument(
+        "--root", type=str, required=True, help="Root directory of lsmb19-mocap"
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--max-samples", type=int, default=-1,
-                        help="Optional global cap on number of samples to convert")
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=-1,
+        help="Optional global cap on number of samples to convert",
+    )
     args = parser.parse_args()
 
     convert_lsmb19(args.root, args.output, fps=args.fps, max_samples=args.max_samples)
@@ -207,4 +214,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

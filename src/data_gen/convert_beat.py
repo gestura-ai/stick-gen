@@ -320,18 +320,29 @@ Examples:
 Prerequisites:
     1. Download BEAT: https://pantomatrix.github.io/BEAT/
     2. Extract to data/beat/
-        """
+        """,
     )
-    parser.add_argument("--root", type=str, required=True,
-                        help="Root directory of BEAT dataset")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
-    parser.add_argument("--fps", type=int, default=30,
-                        help="Target frame rate (default: 30)")
-    parser.add_argument("--max-clips", type=int, default=-1,
-                        help="Maximum clips to process (-1 for all)")
-    parser.add_argument("--physics-threshold", type=float, default=2.0,
-                        help="Physics validation threshold multiplier")
+    parser.add_argument(
+        "--root", type=str, required=True, help="Root directory of BEAT dataset"
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
+    parser.add_argument(
+        "--fps", type=int, default=30, help="Target frame rate (default: 30)"
+    )
+    parser.add_argument(
+        "--max-clips",
+        type=int,
+        default=-1,
+        help="Maximum clips to process (-1 for all)",
+    )
+    parser.add_argument(
+        "--physics-threshold",
+        type=float,
+        default=2.0,
+        help="Physics validation threshold multiplier",
+    )
     args = parser.parse_args()
 
     convert_beat(
@@ -345,4 +356,3 @@ Prerequisites:
 
 if __name__ == "__main__":
     main()
-

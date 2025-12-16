@@ -1,4 +1,3 @@
-
 import matplotlib.animation as animation
 import matplotlib.patches as patches
 import matplotlib.patheffects as path_effects
@@ -25,12 +24,15 @@ class RenderStyle:
     INK = "ink"
     NEON = "neon"
 
+
 class StickFigure:
     def __init__(self, actor: Actor):
         self.id = actor.id
         self.actor_type = actor.actor_type
         self.color = actor.color
-        self.initial_pos = np.array([actor.initial_position.x, actor.initial_position.y])
+        self.initial_pos = np.array(
+            [actor.initial_position.x, actor.initial_position.y]
+        )
         self.pos = self.initial_pos.copy()  # Current position (will be updated)
         self.scale = actor.scale
         self.actions = actor.actions  # List of (time, action) tuples
@@ -38,14 +40,18 @@ class StickFigure:
         self.frame_idx = 0
 
         # Spatial movement support
-        self.velocity = np.array(actor.velocity) if actor.velocity else np.array([0.0, 0.0])
+        self.velocity = (
+            np.array(actor.velocity) if actor.velocity else np.array([0.0, 0.0])
+        )
         self.movement_path = actor.movement_path  # List of (time, Position) waypoints
         self.last_update_time = 0.0
 
         # Facial expression support (Phase 5)
         self.facial_expression = actor.facial_expression
-        self.face_features = actor.face_features if actor.face_features else FaceFeatures(
-            expression=actor.facial_expression
+        self.face_features = (
+            actor.face_features
+            if actor.face_features
+            else FaceFeatures(expression=actor.facial_expression)
         )
 
         # Expression transition support (Phase 5.2)
@@ -90,7 +96,7 @@ class StickFigure:
                 # Apply gravity for jumping actions
                 if current_action == ActionType.JUMP:
                     # Initialize physics velocity if not present
-                    if not hasattr(self, 'physics_velocity'):
+                    if not hasattr(self, "physics_velocity"):
                         self.physics_velocity = np.array([0.0, 0.0])
 
                     # Apply gravity (9.8 m/s^2 downward)
@@ -150,7 +156,7 @@ class StickFigure:
             # Adjust position to keep feet on ground
             self.pos[1] = ground_level + 1.0 * self.scale
             # Zero out downward velocity if present
-            if hasattr(self, 'physics_velocity') and self.physics_velocity[1] < 0:
+            if hasattr(self, "physics_velocity") and self.physics_velocity[1] < 0:
                 self.physics_velocity[1] = 0.0
 
     def _interpolate_path(self, t: float) -> np.ndarray:
@@ -244,26 +250,34 @@ class StickFigure:
 
         # Linear interpolation for eyebrow angle
         eyebrow_angle = (
-            self.previous_features.eyebrow_angle * (1 - progress) +
-            target_features.eyebrow_angle * progress
+            self.previous_features.eyebrow_angle * (1 - progress)
+            + target_features.eyebrow_angle * progress
         )
 
         # Linear interpolation for mouth openness
         mouth_openness = (
-            self.previous_features.mouth_openness * (1 - progress) +
-            target_features.mouth_openness * progress
+            self.previous_features.mouth_openness * (1 - progress)
+            + target_features.mouth_openness * progress
         )
 
         # Transition eye type and mouth shape at 50% progress
-        eye_type = target_features.eye_type if progress > 0.5 else self.previous_features.eye_type
-        mouth_shape = target_features.mouth_shape if progress > 0.5 else self.previous_features.mouth_shape
+        eye_type = (
+            target_features.eye_type
+            if progress > 0.5
+            else self.previous_features.eye_type
+        )
+        mouth_shape = (
+            target_features.mouth_shape
+            if progress > 0.5
+            else self.previous_features.mouth_shape
+        )
 
         return FaceFeatures(
             expression=self.target_expression,
             eye_type=eye_type,
             eyebrow_angle=eyebrow_angle,
             mouth_shape=mouth_shape,
-            mouth_openness=mouth_openness
+            mouth_openness=mouth_openness,
         )
 
     def get_pose(self, t: float, dt: float = 0.04) -> tuple[list, np.ndarray]:
@@ -326,7 +340,9 @@ class StickFigure:
         else:  # IDLE and others
             return self._animate_idle(t, neck, hip, head_center)
 
-    def _animate_idle(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_idle(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Idle animation - slight breathing motion"""
         breathe = np.sin(t * 2) * 0.05
         left_foot = hip + np.array([-0.3, -1.5]) * self.scale
@@ -343,7 +359,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_walk(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_walk(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Walking animation"""
         leg_swing = np.sin(t * 8) * 0.4
         arm_swing = np.sin(t * 8) * 0.3
@@ -362,7 +380,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_run(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_run(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Running animation - faster and more exaggerated"""
         leg_swing = np.sin(t * 15) * 0.7
         arm_swing = np.sin(t * 15) * 0.5
@@ -387,7 +407,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_sprint(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_sprint(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Sprinting animation - even faster and more aggressive than running"""
         # Much faster frequency (20 vs 15 for run)
         leg_swing = np.sin(t * 20) * 0.9  # More exaggerated leg movement
@@ -416,7 +438,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_jump(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_jump(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Jumping animation with realistic physics (3-phase: anticipation → flight → landing)"""
         jump_cycle = 1.0  # 1 second per jump
         jump_progress = (t % jump_cycle) / jump_cycle
@@ -467,13 +491,17 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_wave(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_wave(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Waving animation"""
         wave = np.sin(t * 10) * 0.3
         left_foot = hip + np.array([-0.3, -1.5]) * self.scale
         right_foot = hip + np.array([0.3, -1.5]) * self.scale
         left_hand = neck + np.array([-0.6, -0.8]) * self.scale
-        right_hand = neck + np.array([0.8, 0.5 + wave]) * self.scale  # Right hand waving
+        right_hand = (
+            neck + np.array([0.8, 0.5 + wave]) * self.scale
+        )  # Right hand waving
 
         lines = [
             (neck, hip),
@@ -484,7 +512,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_batting(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_batting(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Batting animation - realistic swing timing (0.4s cycle)"""
         swing_cycle = 0.4  # 400ms total swing (realistic baseball swing)
         swing_progress = (t % swing_cycle) / swing_cycle
@@ -514,8 +544,16 @@ class StickFigure:
         right_foot = hip_adjusted + np.array([0.5, -1.5]) * self.scale
 
         # Bat swing motion with realistic arc
-        left_hand = neck + np.array([-0.3 + np.cos(angle) * 0.8, -0.2 + np.sin(angle) * 0.5]) * self.scale
-        right_hand = neck + np.array([0.3 + np.cos(angle) * 1.0, -0.4 + np.sin(angle) * 0.7]) * self.scale
+        left_hand = (
+            neck
+            + np.array([-0.3 + np.cos(angle) * 0.8, -0.2 + np.sin(angle) * 0.5])
+            * self.scale
+        )
+        right_hand = (
+            neck
+            + np.array([0.3 + np.cos(angle) * 1.0, -0.4 + np.sin(angle) * 0.7])
+            * self.scale
+        )
 
         lines = [
             (neck, hip_adjusted),
@@ -527,7 +565,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_pitching(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_pitching(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Pitching animation"""
         pitch_phase = (t % 2.0) / 2.0
 
@@ -552,7 +592,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_catching(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_catching(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Catching animation"""
         left_foot = hip + np.array([-0.3, -1.5]) * self.scale
         right_foot = hip + np.array([0.3, -1.5]) * self.scale
@@ -570,7 +612,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_fielding(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_fielding(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Fielding animation - crouched position"""
         crouch = 0.3
         hip_adjusted = hip + np.array([0, -crouch])
@@ -591,7 +635,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_throwing(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_throwing(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Throwing animation"""
         throw_phase = (t % 1.5) / 1.5
 
@@ -613,7 +659,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_kicking(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_kicking(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Kicking animation"""
         kick_phase = (t % 1.5) / 1.5
 
@@ -636,7 +684,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_sit(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_sit(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Sitting animation"""
         sit_offset = 0.5
         hip_adjusted = hip + np.array([0, -sit_offset])
@@ -663,7 +713,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_eating(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_eating(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Eating animation - sitting with hand to mouth, includes pauses for chewing"""
         sit_offset = 0.5
         hip_adjusted = hip + np.array([0, -sit_offset])
@@ -710,7 +762,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_talk(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_talk(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Talking animation - gesturing"""
         gesture = np.sin(t * 4) * 0.2
 
@@ -728,7 +782,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_looking_around(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_looking_around(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Looking around animation - head turns"""
         look = np.sin(t * 3) * 0.3
         head_adjusted = head_center + np.array([look, 0])
@@ -747,7 +803,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_fight(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_fight(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Fighting animation - punching"""
         punch_cycle = (t % 1.0) / 1.0
 
@@ -770,7 +828,9 @@ class StickFigure:
         ]
         return lines, head_center
 
-    def _animate_dance(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_dance(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Dancing animation"""
         dance_x = np.sin(t * 5) * 0.3
         dance_y = abs(np.sin(t * 5)) * 0.2
@@ -781,8 +841,12 @@ class StickFigure:
 
         left_foot = hip_adjusted + np.array([-0.4, -1.5]) * self.scale
         right_foot = hip_adjusted + np.array([0.4, -1.5]) * self.scale
-        left_hand = neck_adjusted + np.array([-0.7, 0.3 + np.sin(t * 5) * 0.3]) * self.scale
-        right_hand = neck_adjusted + np.array([0.7, 0.3 - np.sin(t * 5) * 0.3]) * self.scale
+        left_hand = (
+            neck_adjusted + np.array([-0.7, 0.3 + np.sin(t * 5) * 0.3]) * self.scale
+        )
+        right_hand = (
+            neck_adjusted + np.array([0.7, 0.3 - np.sin(t * 5) * 0.3]) * self.scale
+        )
 
         lines = [
             (neck_adjusted, hip_adjusted),
@@ -793,7 +857,9 @@ class StickFigure:
         ]
         return lines, head_adjusted
 
-    def _animate_typing(self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray):
+    def _animate_typing(
+        self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
+    ):
         """Typing animation - sitting with hands down"""
         sit_offset = 0.5
         hip_adjusted = hip + np.array([0, -sit_offset])
@@ -845,7 +911,9 @@ class StickFigure:
         # Draw mouth
         self._draw_mouth(ax, head_pos, head_radius, t, current_features)
 
-    def _draw_eyes(self, ax, head_pos: np.ndarray, head_radius: float, features: FaceFeatures):
+    def _draw_eyes(
+        self, ax, head_pos: np.ndarray, head_radius: float, features: FaceFeatures
+    ):
         """Draw eyes based on expression (Phase 5.2: uses interpolated features)"""
         eye_y_offset = 0.08 * self.scale
         eye_x_offset = 0.12 * self.scale
@@ -858,8 +926,20 @@ class StickFigure:
 
         if eye_type == "dots":
             # Simple dots for neutral/happy
-            ax.plot(left_eye_pos[0], left_eye_pos[1], 'o', color=self.color, markersize=eye_size*20)
-            ax.plot(right_eye_pos[0], right_eye_pos[1], 'o', color=self.color, markersize=eye_size*20)
+            ax.plot(
+                left_eye_pos[0],
+                left_eye_pos[1],
+                "o",
+                color=self.color,
+                markersize=eye_size * 20,
+            )
+            ax.plot(
+                right_eye_pos[0],
+                right_eye_pos[1],
+                "o",
+                color=self.color,
+                markersize=eye_size * 20,
+            )
 
         elif eye_type == "curves":
             # Curved eyes for happy/excited
@@ -877,18 +957,40 @@ class StickFigure:
 
         elif eye_type == "wide":
             # Wide eyes for surprised
-            ax.plot(left_eye_pos[0], left_eye_pos[1], 'o', color=self.color, markersize=eye_size*30)
-            ax.plot(right_eye_pos[0], right_eye_pos[1], 'o', color=self.color, markersize=eye_size*30)
+            ax.plot(
+                left_eye_pos[0],
+                left_eye_pos[1],
+                "o",
+                color=self.color,
+                markersize=eye_size * 30,
+            )
+            ax.plot(
+                right_eye_pos[0],
+                right_eye_pos[1],
+                "o",
+                color=self.color,
+                markersize=eye_size * 30,
+            )
 
         elif eye_type == "closed":
             # Closed eyes (horizontal lines)
             line_width = eye_size * 1.5
-            ax.plot([left_eye_pos[0] - line_width, left_eye_pos[0] + line_width],
-                   [left_eye_pos[1], left_eye_pos[1]], color=self.color, linewidth=1.5)
-            ax.plot([right_eye_pos[0] - line_width, right_eye_pos[0] + line_width],
-                   [right_eye_pos[1], right_eye_pos[1]], color=self.color, linewidth=1.5)
+            ax.plot(
+                [left_eye_pos[0] - line_width, left_eye_pos[0] + line_width],
+                [left_eye_pos[1], left_eye_pos[1]],
+                color=self.color,
+                linewidth=1.5,
+            )
+            ax.plot(
+                [right_eye_pos[0] - line_width, right_eye_pos[0] + line_width],
+                [right_eye_pos[1], right_eye_pos[1]],
+                color=self.color,
+                linewidth=1.5,
+            )
 
-    def _draw_eyebrows(self, ax, head_pos: np.ndarray, head_radius: float, features: FaceFeatures):
+    def _draw_eyebrows(
+        self, ax, head_pos: np.ndarray, head_radius: float, features: FaceFeatures
+    ):
         """Draw eyebrows based on expression (Phase 5.2: uses interpolated features)"""
         eyebrow_y_offset = 0.18 * self.scale
         eyebrow_x_offset = 0.12 * self.scale
@@ -899,19 +1001,42 @@ class StickFigure:
 
         # Left eyebrow
         left_center = head_pos + np.array([-eyebrow_x_offset, eyebrow_y_offset])
-        left_start = left_center + np.array([-eyebrow_width, -eyebrow_width * np.tan(angle_rad)])
-        left_end = left_center + np.array([eyebrow_width, eyebrow_width * np.tan(angle_rad)])
-        ax.plot([left_start[0], left_end[0]], [left_start[1], left_end[1]],
-               color=self.color, linewidth=1.5)
+        left_start = left_center + np.array(
+            [-eyebrow_width, -eyebrow_width * np.tan(angle_rad)]
+        )
+        left_end = left_center + np.array(
+            [eyebrow_width, eyebrow_width * np.tan(angle_rad)]
+        )
+        ax.plot(
+            [left_start[0], left_end[0]],
+            [left_start[1], left_end[1]],
+            color=self.color,
+            linewidth=1.5,
+        )
 
         # Right eyebrow (mirrored)
         right_center = head_pos + np.array([eyebrow_x_offset, eyebrow_y_offset])
-        right_start = right_center + np.array([-eyebrow_width, eyebrow_width * np.tan(angle_rad)])
-        right_end = right_center + np.array([eyebrow_width, -eyebrow_width * np.tan(angle_rad)])
-        ax.plot([right_start[0], right_end[0]], [right_start[1], right_end[1]],
-               color=self.color, linewidth=1.5)
+        right_start = right_center + np.array(
+            [-eyebrow_width, eyebrow_width * np.tan(angle_rad)]
+        )
+        right_end = right_center + np.array(
+            [eyebrow_width, -eyebrow_width * np.tan(angle_rad)]
+        )
+        ax.plot(
+            [right_start[0], right_end[0]],
+            [right_start[1], right_end[1]],
+            color=self.color,
+            linewidth=1.5,
+        )
 
-    def _draw_mouth(self, ax, head_pos: np.ndarray, head_radius: float, t: float, features: FaceFeatures):
+    def _draw_mouth(
+        self,
+        ax,
+        head_pos: np.ndarray,
+        head_radius: float,
+        t: float,
+        features: FaceFeatures,
+    ):
         """
         Draw mouth based on expression and speech animation.
 
@@ -934,44 +1059,71 @@ class StickFigure:
             # Determine mouth openness based on sine wave
             # Creates smooth open-close cycles
             openness_min, openness_max = 0.2, 0.6  # Default range
-            if hasattr(features, 'mouth_openness'):
+            if hasattr(features, "mouth_openness"):
                 # Use custom openness if specified
                 openness_min = max(0.1, features.mouth_openness - 0.2)
                 openness_max = min(1.0, features.mouth_openness + 0.2)
 
             # Sine wave for smooth cycling
-            openness = openness_min + (openness_max - openness_min) * (0.5 + 0.5 * np.sin(2 * np.pi * cycle_phase))
+            openness = openness_min + (openness_max - openness_min) * (
+                0.5 + 0.5 * np.sin(2 * np.pi * cycle_phase)
+            )
 
             # Draw animated mouth based on shape
             if mouth_shape in [MouthShape.SMALL_O, MouthShape.OPEN]:
                 # Circular mouth for talking/whispering
                 circle_radius = mouth_width * openness
-                circle = patches.Circle(mouth_center, circle_radius, fill=False,
-                                       edgecolor=self.color, linewidth=1.5)
+                circle = patches.Circle(
+                    mouth_center,
+                    circle_radius,
+                    fill=False,
+                    edgecolor=self.color,
+                    linewidth=1.5,
+                )
                 ax.add_patch(circle)
             elif mouth_shape == MouthShape.WIDE_OPEN:
                 # Large circular mouth for shouting
                 circle_radius = mouth_width * (0.6 + 0.3 * openness)
-                circle = patches.Circle(mouth_center, circle_radius, fill=False,
-                                       edgecolor=self.color, linewidth=1.5)
+                circle = patches.Circle(
+                    mouth_center,
+                    circle_radius,
+                    fill=False,
+                    edgecolor=self.color,
+                    linewidth=1.5,
+                )
                 ax.add_patch(circle)
             elif mouth_shape == MouthShape.SINGING:
                 # Elliptical mouth for singing
-                ellipse = patches.Ellipse(mouth_center, mouth_width * 1.2, mouth_width * openness,
-                                         fill=False, edgecolor=self.color, linewidth=1.5)
+                ellipse = patches.Ellipse(
+                    mouth_center,
+                    mouth_width * 1.2,
+                    mouth_width * openness,
+                    fill=False,
+                    edgecolor=self.color,
+                    linewidth=1.5,
+                )
                 ax.add_patch(ellipse)
             else:
                 # Fallback to simple animated circle
                 circle_radius = mouth_width * openness
-                circle = patches.Circle(mouth_center, circle_radius, fill=False,
-                                       edgecolor=self.color, linewidth=1.5)
+                circle = patches.Circle(
+                    mouth_center,
+                    circle_radius,
+                    fill=False,
+                    edgecolor=self.color,
+                    linewidth=1.5,
+                )
                 ax.add_patch(circle)
 
         # Non-speaking mouth shapes (static)
         elif mouth_shape == MouthShape.CLOSED:
             # Simple horizontal line
-            ax.plot([mouth_center[0] - mouth_width, mouth_center[0] + mouth_width],
-                   [mouth_center[1], mouth_center[1]], color=self.color, linewidth=1.5)
+            ax.plot(
+                [mouth_center[0] - mouth_width, mouth_center[0] + mouth_width],
+                [mouth_center[1], mouth_center[1]],
+                color=self.color,
+                linewidth=1.5,
+            )
 
         elif mouth_shape == MouthShape.SMILE:
             # Upward curve (smile)
@@ -984,31 +1136,54 @@ class StickFigure:
         elif mouth_shape == MouthShape.OPEN:
             # Small circle (surprised)
             circle_radius = mouth_width * 0.4
-            circle = patches.Circle(mouth_center, circle_radius, fill=False,
-                                   edgecolor=self.color, linewidth=1.5)
+            circle = patches.Circle(
+                mouth_center,
+                circle_radius,
+                fill=False,
+                edgecolor=self.color,
+                linewidth=1.5,
+            )
             ax.add_patch(circle)
 
         elif mouth_shape == MouthShape.WIDE_OPEN:
             # Large circle (shouting - static)
             circle_radius = mouth_width * 0.6
-            circle = patches.Circle(mouth_center, circle_radius, fill=False,
-                                   edgecolor=self.color, linewidth=1.5)
+            circle = patches.Circle(
+                mouth_center,
+                circle_radius,
+                fill=False,
+                edgecolor=self.color,
+                linewidth=1.5,
+            )
             ax.add_patch(circle)
 
         elif mouth_shape == MouthShape.SMALL_O:
             # Small oval (static)
             circle_radius = mouth_width * 0.3
-            circle = patches.Circle(mouth_center, circle_radius, fill=False,
-                                   edgecolor=self.color, linewidth=1.5)
+            circle = patches.Circle(
+                mouth_center,
+                circle_radius,
+                fill=False,
+                edgecolor=self.color,
+                linewidth=1.5,
+            )
             ax.add_patch(circle)
 
         elif mouth_shape == MouthShape.SINGING:
             # Wide oval (static)
-            ellipse = patches.Ellipse(mouth_center, mouth_width * 1.2, mouth_width * 0.5,
-                                     fill=False, edgecolor=self.color, linewidth=1.5)
+            ellipse = patches.Ellipse(
+                mouth_center,
+                mouth_width * 1.2,
+                mouth_width * 0.5,
+                fill=False,
+                edgecolor=self.color,
+                linewidth=1.5,
+            )
             ax.add_patch(ellipse)
 
-    def _draw_curved_mouth(self, ax, mouth_center: np.ndarray, mouth_width: float, curve_direction: int):
+    def _draw_curved_mouth(
+        self, ax, mouth_center: np.ndarray, mouth_width: float, curve_direction: int
+    ):
         """
         Helper to draw curved mouth (smile or frown)
 
@@ -1028,6 +1203,7 @@ class StickFigure:
 
         ax.plot(curve_x, curve_y, color=self.color, linewidth=1.5)
 
+
 class CinematicRenderer(StickFigure):
     """
     Advanced renderer with '2.5D' features:
@@ -1035,12 +1211,13 @@ class CinematicRenderer(StickFigure):
     - Dynamic line width (depth cue)
     - Z-sorting (occlusion)
     """
+
     def project_3d_to_2d(self, x, y, z, camera_zoom=1.0):
         """
         Project 3D point to 2D with perspective.
         Simple weak perspective: x' = x * (f / (f + z))
         """
-        focal_length = 10.0 # Arbitrary focal length
+        focal_length = 10.0  # Arbitrary focal length
         # Avoid division by zero
         depth = max(focal_length + z, 0.1)
         scale = (focal_length / depth) * camera_zoom
@@ -1096,7 +1273,7 @@ class CinematicRenderer(StickFigure):
             cinematic_lines.append((start_proj, end_proj, width, z))
 
         # Project head
-        head_dist = 0.0 - camera_z # Head at Z=0 roughly
+        head_dist = 0.0 - camera_z  # Head at Z=0 roughly
         head_scale = 10.0 / head_dist
         head_proj = head_center * head_scale
 
@@ -1106,49 +1283,66 @@ class CinematicRenderer(StickFigure):
 
         return cinematic_lines, head_proj
 
+
 class Renderer:
     def __init__(self, width=640, height=480, style: str = RenderStyle.NORMAL):
         self.width = width
         self.height = height
         self.style = style
-        self.fig, self.ax = plt.subplots(figsize=(width/100, height/100), dpi=100)
+        self.fig, self.ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
 
         # Initialize Camera
         self.camera = Camera(width=10.0, height=10.0)
 
         self.ax.set_xlim(-5, 5)
         self.ax.set_ylim(-5, 5)
-        self.ax.set_aspect('equal')
-        self.ax.axis('off')
+        self.ax.set_aspect("equal")
+        self.ax.axis("off")
 
         # Set background based on style
         if self.style == RenderStyle.NEON:
-            self.fig.patch.set_facecolor('black')
-            self.ax.set_facecolor('black')
+            self.fig.patch.set_facecolor("black")
+            self.ax.set_facecolor("black")
 
     def _apply_style(self, artist):
         """Apply artistic style to a matplotlib artist"""
         if self.style == RenderStyle.SKETCH:
-            artist.set_path_effects([
-                path_effects.Stroke(linewidth=2, foreground='gray', alpha=0.5),
-                path_effects.Normal()
-            ])
+            artist.set_path_effects(
+                [
+                    path_effects.Stroke(linewidth=2, foreground="gray", alpha=0.5),
+                    path_effects.Normal(),
+                ]
+            )
         elif self.style == RenderStyle.INK:
             artist.set_linewidth(artist.get_linewidth() * 1.5)
-            artist.set_path_effects([
-                path_effects.Stroke(linewidth=artist.get_linewidth()*1.2, foreground=artist.get_color(), alpha=0.8),
-                path_effects.Normal()
-            ])
+            artist.set_path_effects(
+                [
+                    path_effects.Stroke(
+                        linewidth=artist.get_linewidth() * 1.2,
+                        foreground=artist.get_color(),
+                        alpha=0.8,
+                    ),
+                    path_effects.Normal(),
+                ]
+            )
         elif self.style == RenderStyle.NEON:
             # Glow effect
             color = artist.get_color()
-            artist.set_path_effects([
-                path_effects.Stroke(linewidth=5, foreground=color, alpha=0.1),
-                path_effects.Stroke(linewidth=3, foreground=color, alpha=0.3),
-                path_effects.Normal()
-            ])
+            artist.set_path_effects(
+                [
+                    path_effects.Stroke(linewidth=5, foreground=color, alpha=0.1),
+                    path_effects.Stroke(linewidth=3, foreground=color, alpha=0.3),
+                    path_effects.Normal(),
+                ]
+            )
 
-    def render_scene(self, scene: Scene, output_path: str, camera_mode: str = "static", cinematic: bool = False):
+    def render_scene(
+        self,
+        scene: Scene,
+        output_path: str,
+        camera_mode: str = "static",
+        cinematic: bool = False,
+    ):
         if cinematic:
             actors = [CinematicRenderer(a) for a in scene.actors]
         else:
@@ -1165,11 +1359,11 @@ class Renderer:
             # self.camera.add_movement(Zoom((0,0), 0.8, 1.2, 0, scene.duration))
 
         # Set background color based on theme or style
-        bg_color = 'white'
-        if scene.theme and 'space' in scene.theme:
-            bg_color = 'black'
+        bg_color = "white"
+        if scene.theme and "space" in scene.theme:
+            bg_color = "black"
         if self.style == RenderStyle.NEON:
-            bg_color = 'black'
+            bg_color = "black"
 
         def update(frame):
             self.ax.clear()
@@ -1183,7 +1377,7 @@ class Renderer:
 
             self.ax.set_xlim(xmin, xmax)
             self.ax.set_ylim(ymin, ymax)
-            self.ax.axis('off')
+            self.ax.axis("off")
             self.ax.set_facecolor(bg_color)
             self.fig.patch.set_facecolor(bg_color)
 
@@ -1194,8 +1388,10 @@ class Renderer:
             for actor in actors:
                 self._draw_actor(actor, t)
 
-        ani = animation.FuncAnimation(self.fig, update, frames=int(scene.duration * 25), interval=40)
-        ani.save(output_path, writer='ffmpeg', fps=25)
+        ani = animation.FuncAnimation(
+            self.fig, update, frames=int(scene.duration * 25), interval=40
+        )
+        ani.save(output_path, writer="ffmpeg", fps=25)
         plt.close()
 
     def _draw_objects(self, objects: list, t: float):
@@ -1209,48 +1405,127 @@ class Renderer:
                 obj_y += obj.velocity[1] * t
 
             if obj.type == ObjectType.TREE:
-                self.ax.add_patch(patches.Rectangle((obj_x - 0.1*obj.scale, obj_y), 0.2*obj.scale, 1.5*obj.scale, color='brown'))
-                self.ax.add_patch(patches.Circle((obj_x, obj_y + 1.5*obj.scale), 0.8*obj.scale, color='green'))
+                self.ax.add_patch(
+                    patches.Rectangle(
+                        (obj_x - 0.1 * obj.scale, obj_y),
+                        0.2 * obj.scale,
+                        1.5 * obj.scale,
+                        color="brown",
+                    )
+                )
+                self.ax.add_patch(
+                    patches.Circle(
+                        (obj_x, obj_y + 1.5 * obj.scale), 0.8 * obj.scale, color="green"
+                    )
+                )
 
             elif obj.type == ObjectType.BUILDING:
-                self.ax.add_patch(patches.Rectangle((obj_x - 1.0*obj.scale, obj_y), 2.0*obj.scale, 3.0*obj.scale, color='gray'))
+                self.ax.add_patch(
+                    patches.Rectangle(
+                        (obj_x - 1.0 * obj.scale, obj_y),
+                        2.0 * obj.scale,
+                        3.0 * obj.scale,
+                        color="gray",
+                    )
+                )
                 for wx in [-0.6, 0.2]:
                     for wy in [0.5, 1.5, 2.5]:
-                        self.ax.add_patch(patches.Rectangle((obj_x + wx*obj.scale, obj_y + wy*obj.scale), 0.4*obj.scale, 0.4*obj.scale, color='lightblue'))
+                        self.ax.add_patch(
+                            patches.Rectangle(
+                                (obj_x + wx * obj.scale, obj_y + wy * obj.scale),
+                                0.4 * obj.scale,
+                                0.4 * obj.scale,
+                                color="lightblue",
+                            )
+                        )
 
-            elif obj.type in [ObjectType.BALL, ObjectType.BASEBALL, ObjectType.BASKETBALL, ObjectType.SOCCER_BALL]:
-                self.ax.add_patch(patches.Circle((obj_x, obj_y + 0.2*obj.scale), 0.2*obj.scale, color=obj.color))
+            elif obj.type in [
+                ObjectType.BALL,
+                ObjectType.BASEBALL,
+                ObjectType.BASKETBALL,
+                ObjectType.SOCCER_BALL,
+            ]:
+                self.ax.add_patch(
+                    patches.Circle(
+                        (obj_x, obj_y + 0.2 * obj.scale),
+                        0.2 * obj.scale,
+                        color=obj.color,
+                    )
+                )
 
             elif obj.type == ObjectType.BASE:
-                self.ax.add_patch(patches.Rectangle((obj_x - 0.15*obj.scale, obj_y - 0.15*obj.scale), 0.3*obj.scale, 0.3*obj.scale, color=obj.color))
+                self.ax.add_patch(
+                    patches.Rectangle(
+                        (obj_x - 0.15 * obj.scale, obj_y - 0.15 * obj.scale),
+                        0.3 * obj.scale,
+                        0.3 * obj.scale,
+                        color=obj.color,
+                    )
+                )
 
             elif obj.type == ObjectType.LAPTOP:
-                self.ax.add_patch(patches.Rectangle((obj_x - 0.3*obj.scale, obj_y + 0.5), 0.6*obj.scale, 0.05*obj.scale, color='gray'))
-                self.ax.plot([obj_x - 0.3*obj.scale, obj_x - 0.3*obj.scale], [obj_y + 0.5, obj_y + 0.9], color='gray', lw=2)
+                self.ax.add_patch(
+                    patches.Rectangle(
+                        (obj_x - 0.3 * obj.scale, obj_y + 0.5),
+                        0.6 * obj.scale,
+                        0.05 * obj.scale,
+                        color="gray",
+                    )
+                )
+                self.ax.plot(
+                    [obj_x - 0.3 * obj.scale, obj_x - 0.3 * obj.scale],
+                    [obj_y + 0.5, obj_y + 0.9],
+                    color="gray",
+                    lw=2,
+                )
 
             elif obj.type == ObjectType.TABLE:
-                self.ax.add_patch(patches.Rectangle((obj_x - 0.8*obj.scale, obj_y), 1.6*obj.scale, 0.1*obj.scale, color=obj.color))
+                self.ax.add_patch(
+                    patches.Rectangle(
+                        (obj_x - 0.8 * obj.scale, obj_y),
+                        1.6 * obj.scale,
+                        0.1 * obj.scale,
+                        color=obj.color,
+                    )
+                )
                 # Table legs
                 for leg_x in [-0.7, 0.7]:
-                    self.ax.plot([obj_x + leg_x*obj.scale, obj_x + leg_x*obj.scale], [obj_y, obj_y - 0.5], color=obj.color, lw=2)
+                    self.ax.plot(
+                        [obj_x + leg_x * obj.scale, obj_x + leg_x * obj.scale],
+                        [obj_y, obj_y - 0.5],
+                        color=obj.color,
+                        lw=2,
+                    )
 
             elif obj.type == ObjectType.FOOD:
-                self.ax.add_patch(patches.Circle((obj_x, obj_y), 0.15*obj.scale, color=obj.color))
+                self.ax.add_patch(
+                    patches.Circle((obj_x, obj_y), 0.15 * obj.scale, color=obj.color)
+                )
 
             elif obj.type == ObjectType.PLANET:
-                self.ax.add_patch(patches.Circle((obj_x, obj_y), 0.8*obj.scale, color=obj.color, alpha=0.7))
+                self.ax.add_patch(
+                    patches.Circle(
+                        (obj_x, obj_y), 0.8 * obj.scale, color=obj.color, alpha=0.7
+                    )
+                )
 
             elif obj.type == ObjectType.STAR:
                 # Draw star as small bright circle
-                self.ax.add_patch(patches.Circle((obj_x, obj_y), 0.1*obj.scale, color=obj.color, alpha=0.9))
+                self.ax.add_patch(
+                    patches.Circle(
+                        (obj_x, obj_y), 0.1 * obj.scale, color=obj.color, alpha=0.9
+                    )
+                )
 
             elif obj.type == ObjectType.SPACESHIP:
                 # Simple spaceship shape
-                ship_points = np.array([
-                    [obj_x, obj_y + 0.3*obj.scale],
-                    [obj_x - 0.4*obj.scale, obj_y - 0.3*obj.scale],
-                    [obj_x + 0.4*obj.scale, obj_y - 0.3*obj.scale]
-                ])
+                ship_points = np.array(
+                    [
+                        [obj_x, obj_y + 0.3 * obj.scale],
+                        [obj_x - 0.4 * obj.scale, obj_y - 0.3 * obj.scale],
+                        [obj_x + 0.4 * obj.scale, obj_y - 0.3 * obj.scale],
+                    ]
+                )
                 self.ax.add_patch(patches.Polygon(ship_points, color=obj.color))
 
     def _draw_actor(self, actor: StickFigure, t: float):
@@ -1266,7 +1541,9 @@ class Renderer:
         if current_action != actor.current_action:
             # Action changed - trigger expression transition
             actor.current_action = current_action
-            new_expression = ACTION_EXPRESSIONS.get(current_action, FacialExpression.NEUTRAL)
+            new_expression = ACTION_EXPRESSIONS.get(
+                current_action, FacialExpression.NEUTRAL
+            )
             actor.update_expression(t, new_expression)
 
             # Phase 7: Update speech animation parameters
@@ -1274,15 +1551,15 @@ class Renderer:
                 # Enable speech animation
                 speech_config = SPEECH_ANIMATION_CONFIG[current_action]
                 actor.face_features.is_speaking = True
-                actor.face_features.speech_cycle_speed = speech_config['cycle_speed']
+                actor.face_features.speech_cycle_speed = speech_config["cycle_speed"]
 
                 # Update mouth shape based on speech type
                 # Use the first mouth shape in the cycle as the base
-                if speech_config['mouth_shapes']:
-                    actor.face_features.mouth_shape = speech_config['mouth_shapes'][0]
+                if speech_config["mouth_shapes"]:
+                    actor.face_features.mouth_shape = speech_config["mouth_shapes"][0]
 
                 # Set mouth openness range
-                openness_min, openness_max = speech_config['openness_range']
+                openness_min, openness_max = speech_config["openness_range"]
                 actor.face_features.mouth_openness = (openness_min + openness_max) / 2
             else:
                 # Disable speech animation for non-speech actions
@@ -1295,43 +1572,70 @@ class Renderer:
             if len(line_data) == 4:
                 # Cinematic line: (start, end, width, z)
                 start, end, width, z = line_data
-                line, = self.ax.plot([start[0], end[0]], [start[1], end[1]], color=actor.color, lw=width)
+                (line,) = self.ax.plot(
+                    [start[0], end[0]], [start[1], end[1]], color=actor.color, lw=width
+                )
             else:
                 # Standard line: (start, end)
                 start, end = line_data
-                line, = self.ax.plot([start[0], end[0]], [start[1], end[1]], color=actor.color, lw=2)
+                (line,) = self.ax.plot(
+                    [start[0], end[0]], [start[1], end[1]], color=actor.color, lw=2
+                )
 
             self._apply_style(line)
 
         # Draw head - different shapes for different actor types
         if actor.actor_type == ActorType.ALIEN:
             # Alien head - larger and oval
-            ellipse = patches.Ellipse((head[0], head[1]), 0.5 * actor.scale, 0.4 * actor.scale,
-                                     color=actor.color, fill=False, lw=2)
+            ellipse = patches.Ellipse(
+                (head[0], head[1]),
+                0.5 * actor.scale,
+                0.4 * actor.scale,
+                color=actor.color,
+                fill=False,
+                lw=2,
+            )
             self.ax.add_patch(ellipse)
             # Alien eyes
-            self.ax.plot([head[0] - 0.1, head[0] + 0.1], [head[1], head[1]], 'o', color=actor.color, markersize=3)
+            self.ax.plot(
+                [head[0] - 0.1, head[0] + 0.1],
+                [head[1], head[1]],
+                "o",
+                color=actor.color,
+                markersize=3,
+            )
         else:
             # Human head - circle
-            circle = plt.Circle((head[0], head[1]), 0.3 * actor.scale, color=actor.color, fill=False, lw=2)
+            circle = plt.Circle(
+                (head[0], head[1]),
+                0.3 * actor.scale,
+                color=actor.color,
+                fill=False,
+                lw=2,
+            )
             self.ax.add_patch(circle)
 
             # Draw facial features (Phase 5)
             actor._draw_face(self.ax, head, t)
 
-    def render_raw_frames(self, frames_data: list[list[float]], output_path: str, scene_context: Scene = None):
+    def render_raw_frames(
+        self,
+        frames_data: list[list[float]],
+        output_path: str,
+        scene_context: Scene = None,
+    ):
         # frames_data: List of [x1, y1, x2, y2, ...] (20 floats per frame)
 
         # Set background color based on theme
-        bg_color = 'white'
-        if scene_context and scene_context.theme and 'space' in scene_context.theme:
-            bg_color = 'black'
+        bg_color = "white"
+        if scene_context and scene_context.theme and "space" in scene_context.theme:
+            bg_color = "black"
 
         def update(frame_idx):
             self.ax.clear()
             self.ax.set_xlim(-5, 5)
             self.ax.set_ylim(-5, 5)
-            self.ax.axis('off')
+            self.ax.axis("off")
             self.ax.set_facecolor(bg_color)
 
             t = frame_idx * 0.04
@@ -1343,9 +1647,11 @@ class Renderer:
             frame = frames_data[frame_idx]
             # 20 floats -> 5 lines * 4 coords
             for i in range(0, len(frame), 4):
-                x1, y1, x2, y2 = frame[i:i+4]
-                self.ax.plot([x1, x2], [y1, y2], color='black', lw=2)
+                x1, y1, x2, y2 = frame[i : i + 4]
+                self.ax.plot([x1, x2], [y1, y2], color="black", lw=2)
 
-        ani = animation.FuncAnimation(self.fig, update, frames=len(frames_data), interval=40)
-        ani.save(output_path, writer='ffmpeg', fps=25)
+        ani = animation.FuncAnimation(
+            self.fig, update, frames=len(frames_data), interval=40
+        )
+        ani.save(output_path, writer="ffmpeg", fps=25)
         plt.close()

@@ -127,12 +127,12 @@ def _read_skeleton_file(path: str) -> np.ndarray:
 # Mapping from NTU joints (0-24) to a coarse stick figure.
 # We approximate torso/head and limb endpoints.
 NTU_TO_STICK = {
-    "head": 3,          # Head
-    "torso": 1,         # SpineBase
-    "left_hand": 7,     # HandLeft
-    "right_hand": 11,   # HandRight
-    "left_foot": 19,    # FootLeft
-    "right_foot": 23,   # FootRight
+    "head": 3,  # Head
+    "torso": 1,  # SpineBase
+    "left_hand": 7,  # HandLeft
+    "right_hand": 11,  # HandRight
+    "left_foot": 19,  # FootLeft
+    "right_foot": 23,  # FootRight
 }
 
 
@@ -169,9 +169,9 @@ def _action_to_enum(action_id: int) -> ActionType:
     return ActionType.IDLE
 
 
-def _build_canonical_sample(joints: np.ndarray,
-                            meta: dict[str, Any],
-                            fps: int = 30) -> dict[str, Any]:
+def _build_canonical_sample(
+    joints: np.ndarray, meta: dict[str, Any], fps: int = 30
+) -> dict[str, Any]:
     motion_np = joints_to_stick(joints)  # [T, 20]
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
@@ -196,10 +196,9 @@ def _build_canonical_sample(joints: np.ndarray,
     return sample
 
 
-def convert_ntu_rgbd(root_dir: str,
-                     output_path: str,
-                     fps: int = 30,
-                     max_files: int = -1) -> None:
+def convert_ntu_rgbd(
+    root_dir: str, output_path: str, fps: int = 30, max_files: int = -1
+) -> None:
     pattern = os.path.join(root_dir, "nturgb+d_skeletons", "S*.skeleton")
     paths = sorted(glob.glob(pattern))
     if max_files > 0:
@@ -235,11 +234,18 @@ def convert_ntu_rgbd(root_dir: str,
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Convert NTU RGB+D to canonical schema")
-    parser.add_argument("--ntu-root", type=str, required=True,
-                        help="Root of NTU_RGB_D (directory containing ntu-rgbd/ or nturgb+d_skeletons)")
-    parser.add_argument("--output", type=str, required=True,
-                        help="Output .pt file path")
+    parser = argparse.ArgumentParser(
+        description="Convert NTU RGB+D to canonical schema"
+    )
+    parser.add_argument(
+        "--ntu-root",
+        type=str,
+        required=True,
+        help="Root of NTU_RGB_D (directory containing ntu-rgbd/ or nturgb+d_skeletons)",
+    )
+    parser.add_argument(
+        "--output", type=str, required=True, help="Output .pt file path"
+    )
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--max-files", type=int, default=-1)
     args = parser.parse_args()
@@ -255,4 +261,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -18,8 +18,11 @@ def load_config(config_path: str = "configs/base.yaml") -> dict:
         return yaml.safe_load(f)
 
 
-def preprocess_dataset(config_path: str = "configs/base.yaml",
-                       input_path: str = None, output_path: str = None):
+def preprocess_dataset(
+    config_path: str = "configs/base.yaml",
+    input_path: str = None,
+    output_path: str = None,
+):
     """
     Add text embeddings to the training dataset.
 
@@ -59,10 +62,16 @@ def preprocess_dataset(config_path: str = "configs/base.yaml",
     batch_size = 16  # Can use larger batches with bge-large on CPU
 
     for i in tqdm(range(0, len(descriptions), batch_size), desc="Embedding batches"):
-        batch_texts = descriptions[i:i+batch_size]
+        batch_texts = descriptions[i : i + batch_size]
 
         # Tokenize
-        inputs = tokenizer(batch_texts, max_length=512, padding=True, truncation=True, return_tensors="pt")
+        inputs = tokenizer(
+            batch_texts,
+            max_length=512,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        )
 
         with torch.no_grad():
             outputs = model(**inputs)
@@ -94,30 +103,21 @@ def preprocess_dataset(config_path: str = "configs/base.yaml",
     torch.save(new_data, output_path)
     print("Done! Embeddings upgraded to state-of-the-art quality.")
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate text embeddings for training dataset")
+    parser = argparse.ArgumentParser(
+        description="Generate text embeddings for training dataset"
+    )
     parser.add_argument(
         "--config",
         type=str,
         default="configs/base.yaml",
-        help="Path to YAML configuration file (default: configs/base.yaml)"
+        help="Path to YAML configuration file (default: configs/base.yaml)",
     )
-    parser.add_argument(
-        "--input",
-        type=str,
-        default=None,
-        help="Override input path"
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=None,
-        help="Override output path"
-    )
+    parser.add_argument("--input", type=str, default=None, help="Override input path")
+    parser.add_argument("--output", type=str, default=None, help="Override output path")
     args = parser.parse_args()
 
     preprocess_dataset(
-        config_path=args.config,
-        input_path=args.input,
-        output_path=args.output
+        config_path=args.config, input_path=args.input, output_path=args.output
     )

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -330,12 +328,12 @@ class StickFigureTransformer(nn.Module):
         self.embedding_dim = embedding_dim
 
         # Image encoder and fusion (optional multimodal support)
-        self.image_encoder: Optional[nn.Module] = None
-        self.fusion_module: Optional[nn.Module] = None
+        self.image_encoder: nn.Module | None = None
+        self.fusion_module: nn.Module | None = None
 
         if enable_image_conditioning:
-            from src.model.image_encoder import create_image_encoder
             from src.model.fusion import create_fusion_module
+            from src.model.image_encoder import create_image_encoder
 
             # Build kwargs for image encoder based on architecture
             encoder_kwargs: dict = {}

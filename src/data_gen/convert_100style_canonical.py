@@ -53,9 +53,7 @@ def _load_100style_txt(
         max_rows = target_frames * max_sequences
         data = np.loadtxt(input_file, dtype=np.float32, max_rows=max_rows)
     except Exception as e:  # pragma: no cover - defensive path
-        raise RuntimeError(
-            f"Failed to load 100STYLE InputTrain.txt: {e}"
-        ) from e
+        raise RuntimeError(f"Failed to load 100STYLE InputTrain.txt: {e}") from e
 
     if data.ndim != 2 or data.shape[0] < target_frames:
         raise ValueError(f"Unexpected 100STYLE data shape: {data.shape}")
@@ -225,4 +223,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -33,4 +33,3 @@ def test_eval_dataset_quality_smoke(tmp_path: Path) -> None:
     # Also check that the results dict is JSON-serialisable
     out_path = tmp_path / "report.json"
     out_path.write_text(json.dumps(results))
-

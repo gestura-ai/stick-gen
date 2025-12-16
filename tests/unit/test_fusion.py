@@ -10,12 +10,12 @@ import pytest
 import torch
 
 from src.model.fusion import (
-    ConcatFusion,
-    GatedFusion,
-    FiLMFusion,
-    CrossAttentionFusion,
-    create_fusion_module,
     FUSION_REGISTRY,
+    ConcatFusion,
+    CrossAttentionFusion,
+    FiLMFusion,
+    GatedFusion,
+    create_fusion_module,
 )
 
 
@@ -24,7 +24,9 @@ class TestConcatFusion:
 
     def test_output_shape(self) -> None:
         """Test that output has correct shape."""
-        fusion = ConcatFusion(text_dim=1024, image_dim=1024, camera_dim=7, output_dim=1024)
+        fusion = ConcatFusion(
+            text_dim=1024, image_dim=1024, camera_dim=7, output_dim=1024
+        )
         text = torch.randn(2, 1024)
         image = torch.randn(2, 1024)
         camera = torch.randn(2, 7)
@@ -63,14 +65,14 @@ class TestGatedFusion:
         """Test that gates modulate the output."""
         fusion = GatedFusion(output_dim=512)
         text = torch.randn(2, 1024)
-        
+
         # With image
         image = torch.randn(2, 1024)
         out_with_image = fusion(text, image, None)
-        
+
         # Without image (different code path)
         out_without_image = fusion(text, None, None)
-        
+
         # Outputs should be different
         assert not torch.allclose(out_with_image, out_without_image)
 
@@ -80,11 +82,11 @@ class TestGatedFusion:
         text = torch.randn(2, 1024, requires_grad=True)
         image = torch.randn(2, 1024, requires_grad=True)
         camera = torch.randn(2, 7, requires_grad=True)
-        
+
         out = fusion(text, image, camera)
         loss = out.sum()
         loss.backward()
-        
+
         assert text.grad is not None
         assert image.grad is not None
         assert camera.grad is not None
@@ -106,11 +108,11 @@ class TestFiLMFusion:
         """Test that FiLM is initialized close to identity transform."""
         fusion = FiLMFusion(output_dim=512)
         text = torch.randn(2, 1024)
-        
+
         # With zero image features, should be close to projected text
         image = torch.zeros(2, 1024)
         out = fusion(text, image, None)
-        
+
         # Output should be finite
         assert not torch.isnan(out).any()
         assert not torch.isinf(out).any()
@@ -136,10 +138,10 @@ class TestCrossAttentionFusion:
         text = torch.randn(2, 1024)
         image = torch.randn(2, 1024)
         camera = torch.randn(2, 7)
-        
+
         out_all = fusion(text, image, camera)
         out_text_only = fusion(text, None, None)
-        
+
         # Different inputs should give different outputs
         assert not torch.allclose(out_all, out_text_only)
 
@@ -161,4 +163,3 @@ class TestCreateFusionModule:
         """Test error handling for invalid strategy."""
         with pytest.raises(ValueError, match="Unknown fusion strategy"):
             create_fusion_module("invalid_strategy", output_dim=512)
-

@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -131,4 +130,3 @@ def test_view_id_fallback_to_view_index(tmp_path: Path) -> None:
     )
 
     assert ds.index[0]["view_id"] == 7
-

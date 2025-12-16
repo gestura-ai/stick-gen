@@ -36,4 +36,3 @@ def test_generate_data_parallax_args_parsed_and_forwarded(tmp_path: Path) -> Non
     assert kwargs["output_dir"] == str(tmp_path / "out")
     assert kwargs["views_per_motion"] == 10
     assert kwargs["frames_per_view"] == 3
-

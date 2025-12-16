@@ -17,7 +17,11 @@ from pathlib import Path
 
 import torch
 
-from src.data_gen.curation import CurationConfig, curate_samples, load_canonical_datasets
+from src.data_gen.curation import (
+    CurationConfig,
+    curate_samples,
+    load_canonical_datasets,
+)
 
 
 def run_curation(input_paths: list[str], output_dir: str, cfg: CurationConfig) -> None:
@@ -34,12 +38,16 @@ def run_curation(input_paths: list[str], output_dir: str, cfg: CurationConfig) -
     with open(stats_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2, sort_keys=True)
 
-    print(f"Curation complete. Pretrain: {len(pretrain)} samples, SFT: {len(sft)} samples")
+    print(
+        f"Curation complete. Pretrain: {len(pretrain)} samples, SFT: {len(sft)} samples"
+    )
     print(f"Stats written to {stats_path}")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Prepare curated pretraining and SFT datasets")
+    parser = argparse.ArgumentParser(
+        description="Prepare curated pretraining and SFT datasets"
+    )
     parser.add_argument(
         "--inputs",
         type=str,
@@ -107,4 +115,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

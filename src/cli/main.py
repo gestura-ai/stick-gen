@@ -5,9 +5,9 @@ import sys
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 
-from src.inference.generator import InferenceGenerator
 from src.data_gen.dataset_generator import generate_dataset
 from src.data_gen.parallax_augmentation import generate_parallax_for_dataset
+from src.inference.generator import InferenceGenerator
 
 
 def main_generate_animation(argv=None):

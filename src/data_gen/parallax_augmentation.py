@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-from typing import Optional
 
 import torch
 
@@ -66,7 +65,7 @@ def generate_parallax_for_dataset(
     output_dir: str,
     views_per_motion: int = 1000,
     node_script: str = "src/data_gen/renderers/threejs_parallax_renderer.js",
-    max_samples: Optional[int] = None,
+    max_samples: int | None = None,
     fps: int = 25,
     frames_per_view: int = 1,
 ) -> None:
@@ -109,7 +108,9 @@ def generate_parallax_for_dataset(
         return
 
     if not _has_node_runtime():
-        print("[parallax] Node.js runtime not found in PATH, skipping Three.js augmentation.")
+        print(
+            "[parallax] Node.js runtime not found in PATH, skipping Three.js augmentation."
+        )
         return
 
     os.makedirs(output_dir, exist_ok=True)
@@ -118,7 +119,9 @@ def generate_parallax_for_dataset(
 
     print(f"[parallax] Loading dataset from {dataset_path} ...")
     samples = torch.load(dataset_path)
-    print(f"[parallax] Loaded {len(samples)} samples. Generating parallax frames into {output_dir}")
+    print(
+        f"[parallax] Loaded {len(samples)} samples. Generating parallax frames into {output_dir}"
+    )
 
     for sample_idx, sample in enumerate(samples):
         if max_samples is not None and sample_idx >= max_samples:
@@ -159,10 +162,11 @@ def generate_parallax_for_dataset(
                 "--actor-id",
                 str(actor_idx),
             ]
-            print(f"[parallax] Rendering {os.path.basename(motion_path)} -> {actor_output}")
+            print(
+                f"[parallax] Rendering {os.path.basename(motion_path)} -> {actor_output}"
+            )
             try:
                 subprocess.run(cmd, check=True)
             except subprocess.CalledProcessError as exc:
                 print(f"[parallax] Node renderer failed for {motion_path}: {exc}")
                 continue
-

@@ -11,7 +11,6 @@ from typing import Literal
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class ConvBlock(nn.Module):
@@ -105,9 +104,7 @@ class ResidualBlock(nn.Module):
 
     def __init__(self, in_channels: int, out_channels: int, stride: int = 1) -> None:
         super().__init__()
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels, 3, stride, 1, bias=False
-        )
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.conv2 = nn.Conv2d(out_channels, out_channels, 3, 1, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(out_channels)
@@ -160,8 +157,8 @@ class ResNetEncoder(nn.Module):
         )
 
         # Residual stages
-        self.stage1 = self._make_stage(c, c, 2, stride=1)      # 64 -> 64
-        self.stage2 = self._make_stage(c, c * 2, 2, stride=2)   # 64 -> 32
+        self.stage1 = self._make_stage(c, c, 2, stride=1)  # 64 -> 64
+        self.stage2 = self._make_stage(c, c * 2, 2, stride=2)  # 64 -> 32
         self.stage3 = self._make_stage(c * 2, c * 4, 2, stride=2)  # 32 -> 16
         self.stage4 = self._make_stage(c * 4, c * 8, 2, stride=2)  # 16 -> 8
 
@@ -347,4 +344,3 @@ def create_image_encoder(
 
     encoder_cls = ENCODER_REGISTRY[architecture]
     return encoder_cls(output_dim=output_dim, **kwargs)
-

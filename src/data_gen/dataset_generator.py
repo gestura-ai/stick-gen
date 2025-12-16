@@ -28,10 +28,12 @@ def load_config(config_path: str = "configs/base.yaml") -> dict:
     with open(config_path) as f:
         return yaml.safe_load(f)
 
+
 # Mapping for Face Features
 EXPRESSION_TO_IDX = {e: i for i, e in enumerate(FacialExpression)}
 MOUTH_SHAPE_TO_IDX = {s: i for i, s in enumerate(MouthShape)}
 EYE_TYPE_TO_IDX = {"dots": 0, "curves": 1, "wide": 2, "closed": 3}
+
 
 def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
     """
@@ -56,7 +58,9 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
                 idx_ceil = min(int(idx.ceil()), num_frames - 1)
                 alpha = idx - idx_floor
                 # Interpolate for all actors and lines
-                frame = (1 - alpha) * motion_tensor[idx_floor] + alpha * motion_tensor[idx_ceil]
+                frame = (1 - alpha) * motion_tensor[idx_floor] + alpha * motion_tensor[
+                    idx_ceil
+                ]
                 augmented.append(frame)
             return torch.stack(augmented)
         else:
@@ -75,10 +79,10 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
         frames, actors, _ = augmented.shape
         reshaped = augmented.view(frames, actors, 5, 4)
 
-        reshaped[:, :, :, 0] += jitter_x # x1
-        reshaped[:, :, :, 1] += jitter_y # y1
-        reshaped[:, :, :, 2] += jitter_x # x2
-        reshaped[:, :, :, 3] += jitter_y # y2
+        reshaped[:, :, :, 0] += jitter_x  # x1
+        reshaped[:, :, :, 1] += jitter_y  # y1
+        reshaped[:, :, :, 2] += jitter_x  # x2
+        reshaped[:, :, :, 3] += jitter_y  # y2
 
         return augmented
 
@@ -93,16 +97,21 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
         frames, actors, _ = augmented.shape
         reshaped = augmented.view(frames, actors, 5, 4)
 
-        reshaped[:, :, :, 0] *= -1 # x1
-        reshaped[:, :, :, 2] *= -1 # x2
+        reshaped[:, :, :, 0] *= -1  # x1
+        reshaped[:, :, :, 2] *= -1  # x2
 
         return augmented
 
     else:
         return motion_tensor
 
-def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = None,
-                     output_path: str = None, augment: bool = None):
+
+def generate_dataset(
+    config_path: str = "configs/base.yaml",
+    num_samples: int = None,
+    output_path: str = None,
+    augment: bool = None,
+):
     """
     Generate enhanced training dataset with new features.
 
@@ -146,7 +155,9 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
     print(f"Generating {num_samples} base samples with enhanced diversity...")
     print(f"Config: {config_path}")
     if augment:
-        print(f"With {aug_multiplier}x augmentation, total effective samples: {num_samples * (aug_multiplier + 1)}")
+        print(
+            f"With {aug_multiplier}x augmentation, total effective samples: {num_samples * (aug_multiplier + 1)}"
+        )
 
     story_engine = StoryGenerator()
 
@@ -155,7 +166,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
     llm_story_engine = LLMStoryGenerator(
         provider=llm_provider,
         fallback_to_mock=True,  # Always allow fallback for robustness
-        verbose=True  # Enable logging to see what's happening
+        verbose=True,  # Enable logging to see what's happening
     )
 
     validator = DataValidator()
@@ -169,6 +180,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
         print(f"  Use Mock: {use_mock_llm}")
         if not use_mock_llm:
             import os
+
             api_key = os.getenv("GROK_API_KEY")
             if api_key:
                 print(f"  GROK_API_KEY: {api_key[:10]}...{api_key[-4:]}")
@@ -182,7 +194,9 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
     # Pre-calculate time indices for manual interpolation
     frame_indices = torch.arange(target_frames, dtype=torch.float32)
 
-    print(f"Sequence: {sequence_duration}s ({target_frames} frames), Max Actors: {max_actors}")
+    print(
+        f"Sequence: {sequence_duration}s ({target_frames} frames), Max Actors: {max_actors}"
+    )
 
     rejections = 0
     generated_count = 0
@@ -201,7 +215,13 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             # Mix procedural and LLM based on config ratio
             use_llm = random.random() < llm_ratio
             if use_llm:
-                prompts = ["heist", "dance battle", "adventure", "sports", "conversation"]
+                prompts = [
+                    "heist",
+                    "dance battle",
+                    "adventure",
+                    "sports",
+                    "conversation",
+                ]
                 prompt = random.choice(prompts)
                 try:
                     if use_mock_llm:
@@ -209,7 +229,11 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                     else:
                         script = llm_story_engine.generate_script(prompt)
                         scenes = llm_story_engine.script_to_scenes(script)
-                        scene = scenes[0] if scenes else story_engine.generate_random_scene()
+                        scene = (
+                            scenes[0]
+                            if scenes
+                            else story_engine.generate_random_scene()
+                        )
                 except Exception:
                     scene = story_engine.generate_random_scene()
             else:
@@ -217,11 +241,15 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
 
             # Initialize tensors
             # Motion: [frames, actors, 20]
-            motion_tensor = torch.zeros((target_frames, max_actors, 20), dtype=torch.float32)
+            motion_tensor = torch.zeros(
+                (target_frames, max_actors, 20), dtype=torch.float32
+            )
             # Actions: [frames, actors]
             action_tensor = torch.zeros((target_frames, max_actors), dtype=torch.long)
             # Face: [frames, actors, 7] -> [exp_idx, eye_idx, eyebrow, mouth_idx, openness, speak, speed]
-            face_tensor = torch.zeros((target_frames, max_actors, 7), dtype=torch.float32)
+            face_tensor = torch.zeros(
+                (target_frames, max_actors, 7), dtype=torch.float32
+            )
 
             actors = [StickFigure(a) for a in scene.actors]
             num_generated_frames = int(scene.duration * 25)
@@ -261,7 +289,7 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                             float(MOUTH_SHAPE_TO_IDX.get(face_feats.mouth_shape, 0)),
                             face_feats.mouth_openness,
                             1.0 if face_feats.is_speaking else 0.0,
-                            face_feats.speech_cycle_speed
+                            face_feats.speech_cycle_speed,
                         ]
                         face_tensor[f, actor_idx] = torch.tensor(face_vector)
 
@@ -270,14 +298,14 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                 # Replicate last valid frame content
                 if num_generated_frames > 0:
                     last_f = num_generated_frames - 1
-                    motion_tensor[last_f+1:] = motion_tensor[last_f]
-                    action_tensor[last_f+1:] = action_tensor[last_f]
-                    face_tensor[last_f+1:] = face_tensor[last_f]
+                    motion_tensor[last_f + 1 :] = motion_tensor[last_f]
+                    action_tensor[last_f + 1 :] = action_tensor[last_f]
+                    face_tensor[last_f + 1 :] = face_tensor[last_f]
 
             # 4. Compute Physics (Vectorized)
             # [frames, actors, 6] -> [vx, vy, ax, ay, px, py]
             # Use head position (lines 0, 0-1 indices) as proxy for actor position
-            head_pos = motion_tensor[:, :, 0:2] # [frames, actors, 2]
+            head_pos = motion_tensor[:, :, 0:2]  # [frames, actors, 2]
 
             dt = 0.04
             velocity = torch.zeros_like(head_pos)
@@ -288,23 +316,27 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             acceleration[:-1] = (velocity[1:] - velocity[:-1]) / dt
             acceleration[-1] = acceleration[-2]
 
-            momentum = velocity.clone() # Unit mass
+            momentum = velocity.clone()  # Unit mass
 
-            physics_tensor = torch.cat([velocity, acceleration, momentum], dim=2) # [frames, actors, 6]
+            physics_tensor = torch.cat(
+                [velocity, acceleration, momentum], dim=2
+            )  # [frames, actors, 6]
 
             # 5. Camera (Interpolation)
-            camera_tensor = torch.zeros((target_frames, 3)) # [x, y, zoom]
-            camera_tensor[:, 2] = 1.0 # default zoom
+            camera_tensor = torch.zeros((target_frames, 3))  # [x, y, zoom]
+            camera_tensor[:, 2] = 1.0  # default zoom
 
             if scene.camera_keyframes:
                 keyframes = sorted(scene.camera_keyframes, key=lambda k: k.frame)
-                k_times = np.array([min(k.frame, target_frames-1) for k in keyframes])
+                k_times = np.array([min(k.frame, target_frames - 1) for k in keyframes])
                 k_x = np.array([k.x for k in keyframes])
                 k_y = np.array([k.y for k in keyframes])
                 k_zoom = np.array([k.zoom for k in keyframes])
 
                 if len(keyframes) == 1:
-                    camera_tensor[:] = torch.tensor([k_x[0], k_y[0], k_zoom[0]], dtype=torch.float32)
+                    camera_tensor[:] = torch.tensor(
+                        [k_x[0], k_y[0], k_zoom[0]], dtype=torch.float32
+                    )
                 else:
                     # Interpolate using numpy
                     t_np = frame_indices.numpy()
@@ -319,11 +351,11 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
             # Store Base Sample Candidate
             candidate_sample = {
                 "description": scene.description,
-                "motion": motion_tensor,   # [250, 3, 20]
+                "motion": motion_tensor,  # [250, 3, 20]
                 "actions": action_tensor,  # [250, 3]
-                "physics": physics_tensor, # [250, 3, 6]
-                "face": face_tensor,       # [250, 3, 7]
-                "camera": camera_tensor,   # [250, 3]
+                "physics": physics_tensor,  # [250, 3, 6]
+                "face": face_tensor,  # [250, 3, 7]
+                "camera": camera_tensor,  # [250, 3]
                 "augmented": False,
             }
 
@@ -348,7 +380,9 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                         if curr_len > target_frames:
                             aug_motion = aug_motion[:target_frames]
                         elif curr_len < target_frames:
-                            padding = aug_motion[-1:].repeat(target_frames - curr_len, 1, 1)
+                            padding = aug_motion[-1:].repeat(
+                                target_frames - curr_len, 1, 1
+                            )
                             aug_motion = torch.cat([aug_motion, padding], dim=0)
 
                         # Recompute physics for augmented motion
@@ -406,30 +440,24 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
     # discover where the dataset was written without re-parsing configs.
     return output_path
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate synthetic training dataset")
     parser.add_argument(
         "--config",
         type=str,
         default="configs/base.yaml",
-        help="Path to YAML configuration file (default: configs/base.yaml)"
+        help="Path to YAML configuration file (default: configs/base.yaml)",
     )
     parser.add_argument(
         "--num-samples",
         type=int,
         default=None,
-        help="Override number of samples to generate"
+        help="Override number of samples to generate",
     )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=None,
-        help="Override output path"
-    )
+    parser.add_argument("--output", type=str, default=None, help="Override output path")
     args = parser.parse_args()
 
     generate_dataset(
-        config_path=args.config,
-        num_samples=args.num_samples,
-        output_path=args.output
+        config_path=args.config, num_samples=args.num_samples, output_path=args.output
     )

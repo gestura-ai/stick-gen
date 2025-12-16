@@ -10,6 +10,7 @@ from .schema import ActionType, Actor, ActorType, CameraKeyframe, Position, Scen
 
 class ScriptSchema(BaseModel):
     """Schema for LLM-generated scripts"""
+
     title: str
     description: str
     duration: float
@@ -18,20 +19,23 @@ class ScriptSchema(BaseModel):
     actions: list[dict] = []
     camera: list[dict] = []
 
+
 # Try importing LLM clients
 try:
     import ollama
     from dotenv import load_dotenv
     from openai import OpenAI
+
     load_dotenv()
     LLM_AVAILABLE = True
 except ImportError as e:
     print(f"LLM Import Error: {e}")
     LLM_AVAILABLE = False
 
+
 class LLMBackend(Protocol):
-    def generate_story(self, prompt: str) -> ScriptSchema:
-        ...
+    def generate_story(self, prompt: str) -> ScriptSchema: ...
+
 
 class MockBackend:
     def generate_story(self, prompt: str) -> ScriptSchema:
@@ -50,15 +54,22 @@ class MockBackend:
             duration=10.0,
             characters=[
                 {"name": "Ninja", "role": "The Infiltrator"},
-                {"name": "Guard", "role": "The Obstacle"}
+                {"name": "Guard", "role": "The Obstacle"},
             ],
             scenes=[
-                {"description": "Ninja sneaks past guard", "action_sequence": "sneak, look_around"},
-                {"description": "Guard hears noise", "action_sequence": "look_around, walk"},
+                {
+                    "description": "Ninja sneaks past guard",
+                    "action_sequence": "sneak, look_around",
+                },
+                {
+                    "description": "Guard hears noise",
+                    "action_sequence": "look_around, walk",
+                },
                 {"description": "Ninja attacks", "action_sequence": "jump, kick"},
-                {"description": "Escape", "action_sequence": "run, jump"}
+                {"description": "Escape", "action_sequence": "run, jump"},
             ],
-            actions=[], camera=[]
+            actions=[],
+            camera=[],
         )
 
     def _generate_dance_battle_script(self):
@@ -68,14 +79,15 @@ class MockBackend:
             duration=8.0,
             characters=[
                 {"name": "Dancer1", "role": "Challenger"},
-                {"name": "Dancer2", "role": "Defender"}
+                {"name": "Dancer2", "role": "Defender"},
             ],
             scenes=[
                 {"description": "Dancer1 starts", "action_sequence": "dance, wave"},
                 {"description": "Dancer2 responds", "action_sequence": "dance, jump"},
-                {"description": "Finale", "action_sequence": "dance, bow"}
+                {"description": "Finale", "action_sequence": "dance, bow"},
             ],
-            actions=[], camera=[]
+            actions=[],
+            camera=[],
         )
 
     def _generate_generic_script(self):
@@ -87,10 +99,12 @@ class MockBackend:
             scenes=[
                 {"description": "Hero enters", "action_sequence": "walk, wave"},
                 {"description": "Hero acts", "action_sequence": "jump, run"},
-                {"description": "Hero leaves", "action_sequence": "walk"}
+                {"description": "Hero leaves", "action_sequence": "walk"},
             ],
-            actions=[], camera=[]
+            actions=[],
+            camera=[],
         )
+
 
 class GrokBackend:
     def __init__(self, model="grok-4-1-fast", fallback_to_mock=True, verbose=True):
@@ -103,8 +117,7 @@ class GrokBackend:
             verbose: If True, prints detailed logging (default: True)
         """
         self.client = OpenAI(
-            api_key=os.getenv("GROK_API_KEY"),
-            base_url="https://api.x.ai/v1"
+            api_key=os.getenv("GROK_API_KEY"), base_url="https://api.x.ai/v1"
         )
         self.model = model
         self.fallback_to_mock = fallback_to_mock
@@ -141,9 +154,9 @@ class GrokBackend:
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Write a script for: {prompt}"}
+                    {"role": "user", "content": f"Write a script for: {prompt}"},
                 ],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
             content = response.choices[0].message.content
             data = json.loads(content)
@@ -170,7 +183,9 @@ class GrokBackend:
                     print(f"[Grok] ❌ ERROR: Model '{self.model}' is deprecated")
                     print("[Grok] Suggestion: Use 'grok-3' or 'grok-4-1-fast' instead")
                 elif "does not exist" in error_msg.lower():
-                    print(f"[Grok] ❌ ERROR: Model '{self.model}' not found or no access")
+                    print(
+                        f"[Grok] ❌ ERROR: Model '{self.model}' not found or no access"
+                    )
                     print("[Grok] Suggestion: Check your API key permissions")
                 else:
                     print(f"[Grok] ❌ ERROR 404: {error_msg}")
@@ -187,6 +202,7 @@ class GrokBackend:
                 return MockBackend().generate_story(prompt)
             else:
                 raise
+
 
 class OllamaBackend:
     def __init__(self, model="llama3"):
@@ -208,11 +224,14 @@ class OllamaBackend:
         """
 
         try:
-            response = ollama.chat(model=self.model, messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': f"Write a script for: {prompt}"},
-            ])
-            content = response['message']['content']
+            response = ollama.chat(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Write a script for: {prompt}"},
+                ],
+            )
+            content = response["message"]["content"]
             # Clean potential markdown
             content = content.replace("```json", "").replace("```", "").strip()
             data = json.loads(content)
@@ -226,8 +245,11 @@ class OllamaBackend:
             print(f"Ollama generation failed: {e}")
             return MockBackend().generate_story(prompt)
 
+
 class LLMStoryGenerator:
-    def __init__(self, provider="mock", model=None, fallback_to_mock=True, verbose=True):
+    def __init__(
+        self, provider="mock", model=None, fallback_to_mock=True, verbose=True
+    ):
         """
         Initialize LLM Story Generator with configurable backend.
 
@@ -246,7 +268,7 @@ class LLMStoryGenerator:
             self.backend = GrokBackend(
                 model=model or "grok-4-1-fast",
                 fallback_to_mock=fallback_to_mock,
-                verbose=verbose
+                verbose=verbose,
             )
         elif provider == "ollama" and LLM_AVAILABLE:
             if verbose:
@@ -254,7 +276,9 @@ class LLMStoryGenerator:
             self.backend = OllamaBackend(model or "llama3")
         else:
             if provider != "mock" and verbose:
-                print(f"[LLMStoryGenerator] Warning: Provider '{provider}' not available. Using mock.")
+                print(
+                    f"[LLMStoryGenerator] Warning: Provider '{provider}' not available. Using mock."
+                )
             self.backend = MockBackend()
 
     def generate_script(self, prompt: str) -> ScriptSchema:
@@ -276,14 +300,14 @@ class LLMStoryGenerator:
                 actor_type=ActorType.HUMAN,
                 initial_position=pos,
                 color=color,
-                actions=[]
+                actions=[],
             )
-            actors_map[char['name']] = actor
+            actors_map[char["name"]] = actor
 
         # Process scenes
         current_time = 0.0
         for scene_data in script.scenes:
-            actions = [a.strip() for a in scene_data['action_sequence'].split(",")]
+            actions = [a.strip() for a in scene_data["action_sequence"].split(",")]
 
             # Assign actions to actors (simplified: all actors do the sequence for now)
             # In a real engine, we'd parse who does what
@@ -292,22 +316,27 @@ class LLMStoryGenerator:
                     action_type = self._map_action(action_name)
                     if action_type:
                         actor.actions.append((current_time, action_type))
-                        current_time += 2.0 # Assume 2 seconds per action
+                        current_time += 2.0  # Assume 2 seconds per action
 
             # Add camera keyframes (cinematic touch)
             camera_keyframes = [
                 # Start of scene
-                CameraKeyframe(frame=int((current_time - len(actions)*2.0)*10), x=0, y=0, zoom=1.0),
+                CameraKeyframe(
+                    frame=int((current_time - len(actions) * 2.0) * 10),
+                    x=0,
+                    y=0,
+                    zoom=1.0,
+                ),
                 # End of scene
-                CameraKeyframe(frame=int(current_time*10), x=0, y=0, zoom=1.2)
+                CameraKeyframe(frame=int(current_time * 10), x=0, y=0, zoom=1.2),
             ]
 
             scene = Scene(
-                description=scene_data['description'],
+                description=scene_data["description"],
                 actors=list(actors_map.values()),
                 duration=current_time,
                 theme="default",
-                camera_keyframes=camera_keyframes
+                camera_keyframes=camera_keyframes,
             )
             scenes.append(scene)
 
@@ -324,7 +353,7 @@ class LLMStoryGenerator:
             "punch": ActionType.FIGHT,
             "kick": ActionType.KICKING,
             "dance": ActionType.DANCE,
-            "sneak": ActionType.WALK, # Fallback
-            "look_around": ActionType.LOOKING_AROUND
+            "sneak": ActionType.WALK,  # Fallback
+            "look_around": ActionType.LOOKING_AROUND,
         }
         return mapping.get(action_name.lower().strip())

@@ -25,7 +25,7 @@ def test_export_actor_motion_to_file_writes_expected_motion(tmp_path: Path) -> N
     _export_actor_motion_to_file(sample, actor_idx=0, out_path=str(out_path), fps=25)
 
     assert out_path.exists()
-    with open(out_path, "r", encoding="utf-8") as f:
+    with open(out_path, encoding="utf-8") as f:
         data = json.load(f)
 
     assert data["meta"]["description"] == "sample desc"
@@ -73,4 +73,3 @@ def test_generate_parallax_for_dataset_passes_expected_args(
     assert cmd[cmd.index("--frames-per-view") + 1] == "4"
     assert cmd[cmd.index("--sample-id") + 1] == "sample_000000"
     assert cmd[cmd.index("--actor-id") + 1] == "0"
-

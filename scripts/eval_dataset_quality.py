@@ -53,10 +53,18 @@ def evaluate_dataset(data_path: str, max_samples: int | None = None) -> dict:
 
     if motion_metrics:
         results["motion"] = {
-            "smoothness_score_mean": float(np.mean([m["smoothness_score"] for m in motion_metrics])),
-            "smoothness_score_std": float(np.std([m["smoothness_score"] for m in motion_metrics])),
-            "mean_velocity_mean": float(np.mean([m["mean_velocity"] for m in motion_metrics])),
-            "mean_acceleration_mean": float(np.mean([m["mean_acceleration"] for m in motion_metrics])),
+            "smoothness_score_mean": float(
+                np.mean([m["smoothness_score"] for m in motion_metrics])
+            ),
+            "smoothness_score_std": float(
+                np.std([m["smoothness_score"] for m in motion_metrics])
+            ),
+            "mean_velocity_mean": float(
+                np.mean([m["mean_velocity"] for m in motion_metrics])
+            ),
+            "mean_acceleration_mean": float(
+                np.mean([m["mean_acceleration"] for m in motion_metrics])
+            ),
             "mean_jerk_mean": float(np.mean([m["mean_jerk"] for m in motion_metrics])),
         }
 
@@ -68,29 +76,52 @@ def evaluate_dataset(data_path: str, max_samples: int | None = None) -> dict:
         total = max(len(camera_metrics), 1)
 
         results["camera"] = {
-            "mean_stability_score": float(np.mean([m["stability_score"] for m in camera_metrics])),
-            "mean_zoom_range": float(np.mean([m["zoom_range"] for m in camera_metrics])),
+            "mean_stability_score": float(
+                np.mean([m["stability_score"] for m in camera_metrics])
+            ),
+            "mean_zoom_range": float(
+                np.mean([m["zoom_range"] for m in camera_metrics])
+            ),
             "shot_type_distribution": {k: v / total for k, v in shot_counts.items()},
-            "motion_type_distribution": {k: v / total for k, v in motion_counts.items()},
+            "motion_type_distribution": {
+                k: v / total for k, v in motion_counts.items()
+            },
         }
 
     if physics_metrics:
         valid_flags = [1.0 if m["is_valid"] else 0.0 for m in physics_metrics]
         results["physics"] = {
-            "validator_score_mean": float(np.mean([m["validator_score"] for m in physics_metrics])),
+            "validator_score_mean": float(
+                np.mean([m["validator_score"] for m in physics_metrics])
+            ),
             "validator_valid_fraction": float(np.mean(valid_flags)),
-            "mean_velocity_mean": float(np.mean([m["mean_velocity"] for m in physics_metrics])),
-            "mean_acceleration_mean": float(np.mean([m["mean_acceleration"] for m in physics_metrics])),
+            "mean_velocity_mean": float(
+                np.mean([m["mean_velocity"] for m in physics_metrics])
+            ),
+            "mean_acceleration_mean": float(
+                np.mean([m["mean_acceleration"] for m in physics_metrics])
+            ),
         }
 
     return results
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate dataset-level motion/camera/physics quality")
-    parser.add_argument("--data", type=str, required=True, help="Path to canonical .pt dataset")
-    parser.add_argument("--output", type=str, default="dataset_quality.json", help="Output JSON path")
-    parser.add_argument("--max-samples", type=int, default=None, help="Optional cap on number of samples")
+    parser = argparse.ArgumentParser(
+        description="Evaluate dataset-level motion/camera/physics quality"
+    )
+    parser.add_argument(
+        "--data", type=str, required=True, help="Path to canonical .pt dataset"
+    )
+    parser.add_argument(
+        "--output", type=str, default="dataset_quality.json", help="Output JSON path"
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Optional cap on number of samples",
+    )
 
     args = parser.parse_args()
 
@@ -102,9 +133,18 @@ def main() -> None:
     results = evaluate_dataset(args.data, max_samples=args.max_samples)
     results["metadata"] = {"data": args.data, "max_samples": args.max_samples}
 
-    print("\nMotion smoothness (mean):", results.get("motion", {}).get("smoothness_score_mean", "n/a"))
-    print("Physics validator score (mean):", results.get("physics", {}).get("validator_score_mean", "n/a"))
-    print("Camera stability (mean):", results.get("camera", {}).get("mean_stability_score", "n/a"))
+    print(
+        "\nMotion smoothness (mean):",
+        results.get("motion", {}).get("smoothness_score_mean", "n/a"),
+    )
+    print(
+        "Physics validator score (mean):",
+        results.get("physics", {}).get("validator_score_mean", "n/a"),
+    )
+    print(
+        "Camera stability (mean):",
+        results.get("camera", {}).get("mean_stability_score", "n/a"),
+    )
 
     print(f"\nSaving report to: {args.output}")
     with open(args.output, "w", encoding="utf-8") as f:
@@ -113,4 +153,3 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover - exercised via CLI
     main()
-

@@ -10,6 +10,7 @@ Enhanced curation features:
 - Multi-source dataset balancing
 - Quality tier classification
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,18 +61,20 @@ class CurationConfig:
     max_frames: int = 500  # Maximum sequence length (20 seconds)
 
     # Source weights for quality combination
-    source_weights: dict[str, float] = field(default_factory=lambda: {
-        "humanml3d": 1.0,
-        "kit_ml": 1.0,
-        "amass": 0.95,
-        "aist_plusplus": 0.9,
-        "interhuman": 0.85,
-        "ntu_rgbd": 0.8,
-        "100style": 0.75,
-        "babel": 1.0,
-        "beat": 0.9,
-        "synthetic": 0.6,
-    })
+    source_weights: dict[str, float] = field(
+        default_factory=lambda: {
+            "humanml3d": 1.0,
+            "kit_ml": 1.0,
+            "amass": 0.95,
+            "aist_plusplus": 0.9,
+            "interhuman": 0.85,
+            "ntu_rgbd": 0.8,
+            "100style": 0.75,
+            "babel": 1.0,
+            "beat": 0.9,
+            "synthetic": 0.6,
+        }
+    )
 
 
 def load_canonical_datasets(paths: Sequence[str]) -> list[dict[str, Any]]:
@@ -157,7 +160,7 @@ def _get_sequence_length(sample: dict[str, Any]) -> int:
     if motion is None:
         return 0
     try:
-        if hasattr(motion, 'shape'):
+        if hasattr(motion, "shape"):
             return motion.shape[0]
         return len(motion)
     except Exception:
@@ -217,9 +220,7 @@ def _compute_combined_quality(
 
     # Combine scores
     combined = (
-        0.5 * base_q +
-        0.3 * realism * source_weight +
-        0.2 * (1.0 - min(artifact, 1.0))
+        0.5 * base_q + 0.3 * realism * source_weight + 0.2 * (1.0 - min(artifact, 1.0))
     )
 
     return max(0.0, min(1.0, combined))
@@ -331,7 +332,9 @@ def curate_samples(
     if use_enhanced_filtering:
         # 1. Filter by length
         working_samples, dropped_length = filter_by_length(working_samples, cfg)
-        logger.info(f"Length filter: kept {len(working_samples)}, dropped {dropped_length}")
+        logger.info(
+            f"Length filter: kept {len(working_samples)}, dropped {dropped_length}"
+        )
 
         # 2. Filter by artifacts (expensive, do sampling for large datasets)
         if len(working_samples) > 10000:
@@ -342,10 +345,16 @@ def curate_samples(
             _, artifact_ratio = filter_by_artifacts(artifact_samples, cfg)
             # Estimate and log
             est_artifacts = int(artifact_ratio / sample_size * len(working_samples))
-            logger.info(f"Estimated artifact samples: ~{est_artifacts} (sampled {sample_size})")
+            logger.info(
+                f"Estimated artifact samples: ~{est_artifacts} (sampled {sample_size})"
+            )
         else:
-            working_samples, dropped_artifacts = filter_by_artifacts(working_samples, cfg)
-            logger.info(f"Artifact filter: kept {len(working_samples)}, dropped {dropped_artifacts}")
+            working_samples, dropped_artifacts = filter_by_artifacts(
+                working_samples, cfg
+            )
+            logger.info(
+                f"Artifact filter: kept {len(working_samples)}, dropped {dropped_artifacts}"
+            )
 
     pretrain: list[dict[str, Any]] = []
     sft_candidates: list[tuple[dict[str, Any], str, float]] = []
@@ -458,4 +467,3 @@ def curate_samples(
     }
 
     return pretrain, sft, stats
-

@@ -10,11 +10,11 @@ import pytest
 import torch
 
 from src.model.image_encoder import (
-    LightweightCNN,
-    ResNetEncoder,
-    MiniViT,
-    create_image_encoder,
     ENCODER_REGISTRY,
+    LightweightCNN,
+    MiniViT,
+    ResNetEncoder,
+    create_image_encoder,
 )
 
 
@@ -140,4 +140,3 @@ class TestCreateImageEncoder:
             x = torch.randn(1, 3, 256, 256)
             out = encoder(x)
             assert out.shape == (1, 512)
-

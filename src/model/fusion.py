@@ -7,7 +7,7 @@ conditioning signal for the motion transformer.
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -46,8 +46,8 @@ class ConcatFusion(nn.Module):
     def forward(
         self,
         text_features: torch.Tensor,
-        image_features: Optional[torch.Tensor] = None,
-        camera_pose: Optional[torch.Tensor] = None,
+        image_features: torch.Tensor | None = None,
+        camera_pose: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Fuse multimodal features.
 
@@ -65,8 +65,10 @@ class ConcatFusion(nn.Module):
         # Handle missing modalities with zeros
         if image_features is None:
             image_features = torch.zeros(
-                batch_size, self.projection[0].in_features - 1024 - 7,
-                device=device, dtype=text_features.dtype
+                batch_size,
+                self.projection[0].in_features - 1024 - 7,
+                device=device,
+                dtype=text_features.dtype,
             )
 
         if camera_pose is None:
@@ -126,8 +128,8 @@ class GatedFusion(nn.Module):
     def forward(
         self,
         text_features: torch.Tensor,
-        image_features: Optional[torch.Tensor] = None,
-        camera_pose: Optional[torch.Tensor] = None,
+        image_features: torch.Tensor | None = None,
+        camera_pose: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Fuse multimodal features with gating.
 
@@ -139,10 +141,6 @@ class GatedFusion(nn.Module):
         Returns:
             Fused features [batch, output_dim]
         """
-        batch_size = text_features.shape[0]
-        device = text_features.device
-        dtype = text_features.dtype
-
         # Project and gate text (always present)
         text_proj = self.text_proj(text_features)
         text_gate = self.text_gate(text_features)
@@ -208,7 +206,7 @@ class FiLMFusion(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         # Initialize FiLM parameters to identity transform
-        nn.init.ones_(self.image_gamma.weight.data[:, :min(image_dim, output_dim)])
+        nn.init.ones_(self.image_gamma.weight.data[:, : min(image_dim, output_dim)])
         nn.init.zeros_(self.image_gamma.bias.data)
         nn.init.zeros_(self.image_beta.weight.data)
         nn.init.zeros_(self.image_beta.bias.data)
@@ -216,8 +214,8 @@ class FiLMFusion(nn.Module):
     def forward(
         self,
         text_features: torch.Tensor,
-        image_features: Optional[torch.Tensor] = None,
-        camera_pose: Optional[torch.Tensor] = None,
+        image_features: torch.Tensor | None = None,
+        camera_pose: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Apply FiLM conditioning.
 
@@ -297,8 +295,8 @@ class CrossAttentionFusion(nn.Module):
     def forward(
         self,
         text_features: torch.Tensor,
-        image_features: Optional[torch.Tensor] = None,
-        camera_pose: Optional[torch.Tensor] = None,
+        image_features: torch.Tensor | None = None,
+        camera_pose: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Apply cross-attention fusion.
 
@@ -310,9 +308,6 @@ class CrossAttentionFusion(nn.Module):
         Returns:
             Fused features [batch, output_dim]
         """
-        batch_size = text_features.shape[0]
-        device = text_features.device
-
         # Project text to query
         text_proj = self.text_proj(text_features).unsqueeze(1)  # [batch, 1, output_dim]
 
@@ -387,4 +382,3 @@ def create_fusion_module(
         output_dim=output_dim,
         **kwargs,
     )
-

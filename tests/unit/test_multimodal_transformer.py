@@ -196,4 +196,3 @@ class TestMultimodalTransformer:
 
             out = model(motion, text_emb, image_tensor=image)
             assert out.shape == (5, 1, 20), f"Failed for architecture: {arch}"
-

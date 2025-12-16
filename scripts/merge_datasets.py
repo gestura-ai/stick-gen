@@ -131,13 +131,17 @@ def merge_datasets(
 
     # Apply length filter
     filtered, dropped_length = filter_by_length(all_samples, cfg)
-    logger.info(f"After length filter: {len(filtered)} samples ({dropped_length} dropped)")
+    logger.info(
+        f"After length filter: {len(filtered)} samples ({dropped_length} dropped)"
+    )
 
     # Apply artifact filter if enabled
     dropped_artifacts = 0
     if filter_artifacts_enabled:
         filtered, dropped_artifacts = filter_by_artifacts(filtered, cfg)
-        logger.info(f"After artifact filter: {len(filtered)} samples ({dropped_artifacts} dropped)")
+        logger.info(
+            f"After artifact filter: {len(filtered)} samples ({dropped_artifacts} dropped)"
+        )
 
     # Apply source balancing if enabled
     if balance_sources:
@@ -167,7 +171,9 @@ def merge_datasets(
         if motions:
             diversity_stats = compute_motion_diversity(motions)
             compute_dataset_fid_statistics(motions)
-            logger.info(f"Diversity score: {diversity_stats.get('diversity_score', 0):.4f}")
+            logger.info(
+                f"Diversity score: {diversity_stats.get('diversity_score', 0):.4f}"
+            )
 
     # Save merged dataset
     output_dir = Path(output_path).parent
@@ -313,4 +319,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
