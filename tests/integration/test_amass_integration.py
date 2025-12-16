@@ -14,7 +14,6 @@ import sys
 sys.path.insert(0, "/Users/bc/gestura/stick-gen")
 
 
-
 def test_amass_converter():
     """Test AMASS to stick figure converter"""
     # TODO: Implement after convert_amass.py is created

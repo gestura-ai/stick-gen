@@ -164,4 +164,6 @@ def test_missing_checkpoint_raises(tmp_path):
         # Expected path
         return
 
-    raise AssertionError("Expected FileNotFoundError when resuming from missing checkpoint")
+    raise AssertionError(
+        "Expected FileNotFoundError when resuming from missing checkpoint"
+    )
