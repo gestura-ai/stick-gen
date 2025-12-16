@@ -110,7 +110,6 @@ def export_to_onnx(model_path: str, output_dir: Path) -> None:
     """Export model to ONNX format"""
     try:
         import onnx
-        import onnxruntime
     except ImportError:
         print("❌ onnx/onnxruntime not installed. Run: pip install onnx onnxruntime")
         sys.exit(1)

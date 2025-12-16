@@ -101,12 +101,12 @@ class DataValidator:
             if not active_mask[a]:
                 continue
 
-            for l in range(5):
+            for limb_idx in range(5):
                 # Get lengths for this limb over time
-                l_lengths = lengths[:, a, l]
-                mean_l = mean_lengths[a, l]
+                l_lengths = lengths[:, a, limb_idx]
+                mean_l = mean_lengths[a, limb_idx]
 
-                if mean_l < 0.001: # Zero length limb? (e.g. head point?)
+                if mean_l < 0.001:  # Zero length limb? (e.g. head point?)
                     continue
 
                 # Calculate max deviation
@@ -114,7 +114,7 @@ class DataValidator:
                 max_dev = deviations.max().item()
 
                 if max_dev > self.limb_length_tolerance:
-                    return False, 0.0, f"Skeleton inconsistency: Actor {a} Limb {l} varies by {max_dev*100:.1f}%"
+                    return False, 0.0, f"Skeleton inconsistency: Actor {a} Limb {limb_idx} varies by {max_dev*100:.1f}%"
 
         return True, 1.0, "Skeleton OK"
 

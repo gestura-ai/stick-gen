@@ -147,12 +147,12 @@ def main():
     sampled_sequences = []
 
     # Sample from each dataset
-    for dataset, seqs in sequences_by_dataset.items():
+    for _dataset, seqs in sequences_by_dataset.items():
         if len(seqs) > 0:
             sampled_sequences.append(random.choice(seqs))
 
     # Sample from different actions
-    for action, seqs in sequences_by_action.items():
+    for _action, seqs in sequences_by_action.items():
         if len(seqs) > 0 and len(sampled_sequences) < args.samples:
             seq = random.choice(seqs)
             if seq not in sampled_sequences:

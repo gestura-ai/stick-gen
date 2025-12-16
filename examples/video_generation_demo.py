@@ -11,7 +11,6 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 # Mock imports for demo if model not available locally
 try:
     from src.inference.generator import InferenceGenerator
-    from src.model.transformer import StickFigureTransformer
 
     GENERATOR_AVAILABLE = True
 except ImportError:

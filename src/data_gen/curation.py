@@ -289,7 +289,7 @@ def balance_by_source(
     max_per_source = int(cfg.max_source_fraction * total)
 
     balanced = []
-    for source, bucket in buckets.items():
+    for _source, bucket in buckets.items():
         rng.shuffle(bucket)
         take = min(len(bucket), max_per_source)
         balanced.extend(bucket[:take])
@@ -407,7 +407,7 @@ def curate_samples(
     total_sft_candidates = len(sft_candidates)
     if total_sft_candidates:
         max_per_action = max(1, int(cfg.balance_max_fraction * total_sft_candidates))
-        for label, bucket in buckets.items():
+        for _label, bucket in buckets.items():
             rng.shuffle(bucket)
             take = min(len(bucket), max_per_action)
             sft.extend(bucket[:take])

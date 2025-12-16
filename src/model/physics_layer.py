@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 # Try to import Brax, but handle failure gracefully if not installed
 try:
     import jax
-    import jax.numpy as jnp
 
     from src.physics.brax_env import StickFigureEnv
 

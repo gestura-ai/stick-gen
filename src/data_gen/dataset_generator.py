@@ -205,12 +205,12 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                 prompt = random.choice(prompts)
                 try:
                     if use_mock_llm:
-                         scene = story_engine.generate_random_scene()
+                        scene = story_engine.generate_random_scene()
                     else:
                         script = llm_story_engine.generate_script(prompt)
                         scenes = llm_story_engine.script_to_scenes(script)
                         scene = scenes[0] if scenes else story_engine.generate_random_scene()
-                except:
+                except Exception:
                     scene = story_engine.generate_random_scene()
             else:
                 scene = story_engine.generate_random_scene()
@@ -239,7 +239,8 @@ def generate_dataset(config_path: str = "configs/base.yaml", num_samples: int = 
                     # Flatten lines (5 lines * 4 coords)
                     actor_flat = []
                     for li, (start, end) in enumerate(lines):
-                        if li >= 5: break
+                        if li >= 5:
+                            break
                         actor_flat.extend([start[0], start[1], end[0], end[1]])
                     while len(actor_flat) < 20:
                         actor_flat.extend([0.0, 0.0, 0.0, 0.0])

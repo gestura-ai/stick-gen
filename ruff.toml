@@ -23,20 +23,22 @@ line-length = 100
 [lint]
 # Enable specific rule sets
 select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "W",   # pycodestyle warnings
-    "I",   # isort
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
+	"E",   # pycodestyle errors
+	"F",   # pyflakes
+	"W",   # pycodestyle warnings
+	"I",   # isort
+	"N",   # pep8-naming
+	"UP",  # pyupgrade
+	"B",   # flake8-bugbear
 ]
 
 # Ignore specific rules
 ignore = [
-    "E501",  # Line too long (handled by formatter)
-    "B008",  # Do not perform function call in argument defaults
-    "B905",  # zip() without an explicit strict= parameter
+	"E501",  # Line too long (handled by formatter)
+	"B008",  # Do not perform function call in argument defaults
+	"B905",  # zip() without an explicit strict= parameter
+	"N803",  # Allow non-lowercase function arguments (e.g., T, D for dimensions)
+	"N806",  # Allow non-lowercase variables in functions (e.g., T, D, A)
 ]
 
 [lint.per-file-ignores]
@@ -46,4 +48,12 @@ ignore = [
 "scripts/*.py" = ["T201"]
 # Allow assert statements in tests
 "tests/**/*.py" = ["S101"]
+# Allow conventional aliases for functional modules and rotations
+"scripts/validation/validate_phase1_templates.py" = ["N812"]
+"src/data_gen/preprocess_embeddings.py" = ["N812"]
+"src/eval/metrics.py" = ["N812"]
+"src/model/diffusion.py" = ["N812"]
+"src/model/lora.py" = ["N812"]
+"src/model/transformer.py" = ["N812"]
+"src/data_gen/convert_100style.py" = ["N817"]
 

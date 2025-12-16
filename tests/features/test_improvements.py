@@ -3,6 +3,7 @@
 Test script to verify all improvements work before full 100k training
 Generates test videos with improved spatial movement
 """
+from src.inference.generator import InferenceGenerator
 
 print("=" * 60)
 print("TESTING IMPROVED SPATIAL MOVEMENT SYSTEM")
@@ -11,7 +12,6 @@ print()
 
 # Test 1: Generate test videos with procedural animations
 print("Test 1: Generating test videos with spatial movement...")
-from src.inference.generator import InferenceGenerator
 
 gen = InferenceGenerator("model_checkpoint.pth")
 

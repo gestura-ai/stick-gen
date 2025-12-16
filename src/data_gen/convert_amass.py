@@ -131,12 +131,12 @@ class AMASSConverter:
             else:
                 raise ValueError(f"Unsupported model type: {model_type}")
 
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "smplx library not installed. Run: pip install smplx"
-            )
+            ) from exc
         except Exception as e:
-            raise RuntimeError(f"Failed to load SMPL model: {e}")
+            raise RuntimeError(f"Failed to load SMPL model: {e}") from e
 
     def load_amass_sequence(self, npz_path: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, str]:
         """

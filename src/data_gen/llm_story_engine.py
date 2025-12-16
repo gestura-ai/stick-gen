@@ -149,8 +149,10 @@ class GrokBackend:
             data = json.loads(content)
 
             # Ensure required fields
-            if "actions" not in data: data["actions"] = []
-            if "camera" not in data: data["camera"] = []
+            if "actions" not in data:
+                data["actions"] = []
+            if "camera" not in data:
+                data["camera"] = []
 
             script = ScriptSchema(**data)
 
@@ -215,8 +217,10 @@ class OllamaBackend:
             content = content.replace("```json", "").replace("```", "").strip()
             data = json.loads(content)
             # Ensure required fields
-            if "actions" not in data: data["actions"] = []
-            if "camera" not in data: data["camera"] = []
+            if "actions" not in data:
+                data["actions"] = []
+            if "camera" not in data:
+                data["camera"] = []
             return ScriptSchema(**data)
         except Exception as e:
             print(f"Ollama generation failed: {e}")

@@ -97,7 +97,7 @@ def load_100style_txt(style_dir: str, target_frames: int = 250) -> list:
                     try:
                         start, end = int(parts[0]), int(parts[1])
                         frame_ranges.append((start, end))
-                    except:
+                    except ValueError:
                         pass
 
     # Load motion data - sample every Nth sequence to limit data size

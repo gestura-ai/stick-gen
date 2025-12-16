@@ -331,9 +331,9 @@ def upload_to_hub_with_retry(
                 time.sleep(delay)
             else:
                 print(f"  ❌ Upload failed after {max_retries} attempts: {e}")
-                raise Exception(
+                raise RuntimeError(
                     f"Failed to upload model after {max_retries} attempts: {last_error}"
-                )
+                ) from last_error
 
 
 def upload_to_hub(

@@ -29,7 +29,6 @@ sys.path.append(str(project_root))
 try:
     from src.eval.metrics import (
         compute_motion_diversity,
-        compute_motion_features,
         compute_motion_realism_score,
         compute_motion_temporal_metrics,
         compute_physics_consistency_metrics,
