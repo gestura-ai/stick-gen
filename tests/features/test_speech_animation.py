@@ -30,8 +30,8 @@ def test_talk_animation():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_speech_talk.mp4")
-    print("✓ TALK animation test complete: test_speech_talk.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_speech_talk.mp4")
+    print("✓ TALK animation test complete: tests/outputs/test_speech_talk.mp4")
 
 
 def test_shout_animation():
@@ -54,8 +54,8 @@ def test_shout_animation():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_speech_shout.mp4")
-    print("✓ SHOUT animation test complete: test_speech_shout.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_speech_shout.mp4")
+    print("✓ SHOUT animation test complete: tests/outputs/test_speech_shout.mp4")
 
 
 def test_whisper_animation():
@@ -78,8 +78,8 @@ def test_whisper_animation():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_speech_whisper.mp4")
-    print("✓ WHISPER animation test complete: test_speech_whisper.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_speech_whisper.mp4")
+    print("✓ WHISPER animation test complete: tests/outputs/test_speech_whisper.mp4")
 
 
 def test_sing_animation():
@@ -102,8 +102,8 @@ def test_sing_animation():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_speech_sing.mp4")
-    print("✓ SING animation test complete: test_speech_sing.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_speech_sing.mp4")
+    print("✓ SING animation test complete: tests/outputs/test_speech_sing.mp4")
 
 
 def test_speech_transitions():
@@ -131,8 +131,8 @@ def test_speech_transitions():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_speech_transitions.mp4")
-    print("✓ Speech transitions test complete: test_speech_transitions.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_speech_transitions.mp4")
+    print("✓ Speech transitions test complete: tests/outputs/test_speech_transitions.mp4")
 
 
 if __name__ == "__main__":

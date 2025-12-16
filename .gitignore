@@ -29,6 +29,10 @@ htmlcov/
 *.png
 *.gif
 
+# Test outputs directory (allow directory, ignore contents)
+tests/outputs/*
+!tests/outputs/.gitkeep
+
 # Model checkpoints
 checkpoints/
 *.pth

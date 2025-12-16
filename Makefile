@@ -49,6 +49,7 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	rm -f output.mp4 output.motion
+	rm -f tests/outputs/*.mp4 tests/outputs/*.json
 
 # -------------------------------------------------------------------------
 # Testing

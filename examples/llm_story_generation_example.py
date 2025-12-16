@@ -133,7 +133,7 @@ def main():
         "--model",
         type=str,
         default=None,
-        help="Model name (e.g., grok-4-latest, llama3)",
+        help="Model name (e.g., grok-4-1-fast, llama3)",
     )
     parser.add_argument(
         "--demo",

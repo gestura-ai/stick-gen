@@ -45,8 +45,8 @@ def test_expression_transition():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_expression_transition.mp4")
-    print("✓ Saved to test_expression_transition.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_expression_transition.mp4")
+    print("✓ Saved to tests/outputs/test_expression_transition.mp4")
 
 
 def test_multiple_actors_transitions():
@@ -87,8 +87,8 @@ def test_multiple_actors_transitions():
     )
 
     renderer = Renderer(width=800, height=480)
-    renderer.render_scene(scene, "test_multiple_transitions.mp4")
-    print("✓ Saved to test_multiple_transitions.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_multiple_transitions.mp4")
+    print("✓ Saved to tests/outputs/test_multiple_transitions.mp4")
 
 
 def test_rapid_transitions():
@@ -119,8 +119,8 @@ def test_rapid_transitions():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_rapid_transitions.mp4")
-    print("✓ Saved to test_rapid_transitions.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_rapid_transitions.mp4")
+    print("✓ Saved to tests/outputs/test_rapid_transitions.mp4")
 
 
 if __name__ == "__main__":
@@ -138,6 +138,6 @@ if __name__ == "__main__":
     print("All transition tests complete!")
     print("=" * 60)
     print("\nGenerated videos:")
-    print("  - test_expression_transition.mp4")
-    print("  - test_multiple_transitions.mp4")
-    print("  - test_rapid_transitions.mp4")
+    print("  - tests/outputs/test_expression_transition.mp4")
+    print("  - tests/outputs/test_multiple_transitions.mp4")
+    print("  - tests/outputs/test_rapid_transitions.mp4")

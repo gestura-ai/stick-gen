@@ -71,8 +71,8 @@ def test_multi_actor_scene_with_expressions():
     )
 
     renderer = Renderer(width=960, height=480)
-    renderer.render_scene(scene, "test_integration_multi_actor.mp4")
-    print("✓ Multi-actor integration test complete: test_integration_multi_actor.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_integration_multi_actor.mp4")
+    print("✓ Multi-actor integration test complete: tests/outputs/test_integration_multi_actor.mp4")
 
 
 def test_all_speech_types_in_sequence():
@@ -101,8 +101,8 @@ def test_all_speech_types_in_sequence():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_integration_all_speech.mp4")
-    print("✓ All speech types test complete: test_integration_all_speech.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_integration_all_speech.mp4")
+    print("✓ All speech types test complete: tests/outputs/test_integration_all_speech.mp4")
 
 
 def test_expression_variety():
@@ -132,8 +132,8 @@ def test_expression_variety():
     )
 
     renderer = Renderer(width=640, height=480)
-    renderer.render_scene(scene, "test_integration_expressions.mp4")
-    print("✓ Expression variety test complete: test_integration_expressions.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_integration_expressions.mp4")
+    print("✓ Expression variety test complete: tests/outputs/test_integration_expressions.mp4")
 
 
 def test_complex_interaction():
@@ -177,8 +177,8 @@ def test_complex_interaction():
     )
 
     renderer = Renderer(width=960, height=480)
-    renderer.render_scene(scene, "test_integration_interaction.mp4")
-    print("✓ Complex interaction test complete: test_integration_interaction.mp4")
+    renderer.render_scene(scene, "tests/outputs/test_integration_interaction.mp4")
+    print("✓ Complex interaction test complete: tests/outputs/test_integration_interaction.mp4")
 
 
 if __name__ == "__main__":
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     print("All integration tests complete!")
     print("=" * 70)
     print("\nGenerated test videos:")
-    print("  - test_integration_multi_actor.mp4")
-    print("  - test_integration_all_speech.mp4")
-    print("  - test_integration_expressions.mp4")
-    print("  - test_integration_interaction.mp4")
+    print("  - tests/outputs/test_integration_multi_actor.mp4")
+    print("  - tests/outputs/test_integration_all_speech.mp4")
+    print("  - tests/outputs/test_integration_expressions.mp4")
+    print("  - tests/outputs/test_integration_interaction.mp4")

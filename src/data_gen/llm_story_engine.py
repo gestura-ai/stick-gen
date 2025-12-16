@@ -93,12 +93,12 @@ class MockBackend:
         )
 
 class GrokBackend:
-    def __init__(self, model="grok-4-latest", fallback_to_mock=True, verbose=True):
+    def __init__(self, model="grok-4-1-fast", fallback_to_mock=True, verbose=True):
         """
         Initialize Grok (X.AI) backend for LLM story generation.
 
         Args:
-            model: Grok model name. Recommended: "grok-4-latest", "grok-3", or "grok-4"
+            model: Grok model name. Recommended: "grok-4-1-fast", "grok-3", or "grok-4"
             fallback_to_mock: If True, falls back to MockBackend on API errors (default: True)
             verbose: If True, prints detailed logging (default: True)
         """
@@ -168,7 +168,7 @@ class GrokBackend:
             if "404" in error_msg:
                 if "deprecated" in error_msg.lower():
                     print(f"[Grok] ❌ ERROR: Model '{self.model}' is deprecated")
-                    print("[Grok] Suggestion: Use 'grok-3' or 'grok-4-latest' instead")
+                    print("[Grok] Suggestion: Use 'grok-3' or 'grok-4-1-fast' instead")
                 elif "does not exist" in error_msg.lower():
                     print(f"[Grok] ❌ ERROR: Model '{self.model}' not found or no access")
                     print("[Grok] Suggestion: Check your API key permissions")
@@ -244,7 +244,7 @@ class LLMStoryGenerator:
             if verbose:
                 print("[LLMStoryGenerator] Using Grok backend")
             self.backend = GrokBackend(
-                model=model or "grok-4-latest",
+                model=model or "grok-4-1-fast",
                 fallback_to_mock=fallback_to_mock,
                 verbose=verbose
             )

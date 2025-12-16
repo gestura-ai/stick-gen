@@ -15,7 +15,7 @@ The LLM Story Engine (`src/data_gen/llm_story_engine.py`) generates structured a
 
 ### 2. Grok Backend (X.AI)
 - **Provider**: X.AI (formerly Twitter AI)
-- **Model**: `grok-4-latest` (default)
+- **Model**: `grok-4-1-fast` (default)
 - **API Endpoint**: `https://api.x.ai/v1`
 - **Requirements**: `openai>=1.0.0`, `python-dotenv>=1.0.0`
 
@@ -35,7 +35,7 @@ Create a `.env` file in the project root:
 GROK_API_KEY=your_grok_api_key_here
 
 # Optional: Custom model overrides
-GROK_MODEL=grok-4-latest
+GROK_MODEL=grok-4-1-fast
 OLLAMA_MODEL=llama3
 ```
 
@@ -143,7 +143,7 @@ print(f"Characters: {len(script.characters)}")
 
 ```python
 # Grok with specific model
-generator = LLMStoryGenerator(provider="grok", model="grok-4-latest")
+generator = LLMStoryGenerator(provider="grok", model="grok-4-1-fast")
 
 # Ollama with custom model
 generator = LLMStoryGenerator(provider="ollama", model="mistral")
