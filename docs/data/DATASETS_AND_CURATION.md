@@ -12,7 +12,13 @@ All real motion datasets are first converted into the **canonical format**
 ### 1.1 AMASS
 - **Type:** Large MoCap collection of everyday and locomotion motions.
 - **Canonicalization:** Converted to single-actor sequences with physics and camera
-  features added or inferred.
+  features added or inferred. The converter (`src/data_gen/convert_amass.py`) handles:
+  - **SMPL+H format** (156 params) - most common
+  - **SMPL-X format** (162/165 params) - including Stage II files
+  - **Explicit pose component detection** - uses `root_orient`, `pose_body`, `pose_hand`
+    fields when available for reliable extraction from Stage II files (CNRS, MoSh, etc.)
+  - **Automatic file filtering** - skips `shape.npz` (body shape only) and `*_stagei.npz`
+    (calibration data) files that don't contain motion sequences
 - **Role:** Backbone of **pretraining**: diverse, physically plausible human motion.
 
 ### 1.2 NTU RGB+D

@@ -27,6 +27,7 @@ containing a **list of Python dicts**. Each dict is a *scene-level sample* with 
   - For datasets without cameras, use zeros.
 - `"source"` (str): Short dataset identifier, e.g. `"amass"`, `"lsmb19"`, `"humanml3d"`.
 - `"meta"` (dict, optional): Dataset-specific metadata (subject id, view id, clip id, split, etc.).
+- `"enhanced_meta"` (dict, optional): Enhanced metadata for improved generation quality. See Section 5.
 
 All tensors are **single-precision** (`torch.float32` for motion/physics/camera, `torch.int64` for actions).
 
@@ -98,4 +99,271 @@ Together, these pieces define a consistent path:
 
 Raw dataset  →  `convert_<dataset>.py`  →  `canonical.pt`  →
 `build_dataset_for_training.py`  →  `<dataset>/train_data.pt`  →  training.
+
+## 5. Enhanced Sample Metadata
+
+The `"enhanced_meta"` field provides optional metadata that enriches samples with
+additional information for improved motion generation quality. All fields are
+**optional** to maintain backward compatibility with existing samples.
+
+Defined in `src/data_gen/schema.py` as Pydantic models, serialized as dicts:
+
+### 5.1 Motion Style (`motion_style`)
+
+Computed characteristics of the motion pattern:
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `tempo` | float | 0.0-1.0 | Motion speed/rhythm (0=slow, 1=fast) |
+| `energy_level` | float | 0.0-1.0 | Motion intensity (0=idle, 1=intense) |
+| `smoothness` | float | 0.0-1.0 | Motion fluidity (0=jerky, 1=fluid) |
+
+### 5.2 Subject Demographics (`subject`)
+
+Performer characteristics (from SMPL betas or annotations):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `height_cm` | float | Estimated height in centimeters |
+| `gender` | str | "male", "female", or "unknown" |
+| `age_group` | str | "child", "adult", "elderly", or "unknown" |
+
+### 5.3 Music Metadata (`music`)
+
+Music/rhythm information (primarily AIST++):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bpm` | float | Beats per minute |
+| `beat_frames` | list[int] | Frame indices where beats occur |
+| `genre` | str | Music genre (e.g., "break", "pop") |
+
+### 5.4 Interaction Metadata (`interaction`)
+
+Multi-actor relationship information (primarily InterHuman):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `contact_frames` | list[int] | Frames where actors are in contact |
+| `interaction_role` | str | "leader", "follower", or "symmetric" |
+| `interaction_type` | str | Type of interaction (e.g., "handshake") |
+
+### 5.5 Temporal Metadata (`temporal`)
+
+Original timing before resampling:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `original_fps` | int | Source frame rate |
+| `original_duration_sec` | float | Original duration in seconds |
+| `original_num_frames` | int | Original frame count |
+
+### 5.6 Quality Metadata (`quality`)
+
+Data quality metrics for training weights:
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `reconstruction_confidence` | float | 0.0-1.0 | MoCap reconstruction quality |
+| `marker_quality` | float | 0.0-1.0 | Joint noise level (higher=cleaner) |
+| `physics_score` | float | ≥0.0 | Physics validation score |
+
+### 5.7 Emotion Metadata (`emotion`)
+
+Emotional characteristics (inferred from text or motion):
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `emotion_label` | str | - | Primary emotion (from FacialExpression) |
+| `valence` | float | -1.0 to 1.0 | Pleasantness (-1=negative, 1=positive) |
+| `arousal` | float | 0.0-1.0 | Intensity (0=calm, 1=excited) |
+
+### Example Usage
+
+```python
+from src.data_gen.schema import (
+    EnhancedSampleMetadata,
+    MotionStyleMetadata,
+    TemporalMetadata,
+)
+
+# Build enhanced metadata
+enhanced = EnhancedSampleMetadata(
+    motion_style=MotionStyleMetadata(
+        tempo=0.6,
+        energy_level=0.8,
+        smoothness=0.7,
+    ),
+    temporal=TemporalMetadata(
+        original_fps=120,
+        original_duration_sec=5.2,
+        original_num_frames=624,
+    ),
+)
+
+# Add to canonical sample
+sample = {
+    "description": "A person running quickly",
+    "motion": motion_tensor,
+    "physics": physics_tensor,
+    "actions": actions_tensor,
+    "camera": camera_tensor,
+    "source": "amass",
+    "meta": {"file": "CMU/01/01_01.npz"},
+    "enhanced_meta": enhanced.model_dump(),  # Serialize to dict
+}
+```
+
+### Dataset Coverage
+
+| Dataset | motion_style | temporal | quality | subject | emotion | music | interaction |
+|---------|:------------:|:--------:|:-------:|:-------:|:-------:|:-----:|:-----------:|
+| AMASS | ✓ | ✓ | ✓ | ✓ | ✓ | - | - |
+| HumanML3D | ✓ | ✓ | ✓ | ○ | ✓ | - | - |
+| BABEL | ✓ | ✓ | - | - | ✓ | - | - |
+| AIST++ | ✓ | ✓ | - | - | ✓ | ✓ | - |
+| InterHuman | ✓ | ✓ | - | - | ✓ | - | ✓ |
+| KIT-ML | ✓ | ✓ | - | - | ✓ | - | - |
+| NTU RGB+D | ✓ | ✓ | - | - | ✓ | - | - |
+
+Legend: ✓ = Supported, ○ = Partial, - = Not applicable
+
+### Using Enhanced Metadata in Training
+
+The enhanced metadata enables several training strategies for improved motion generation:
+
+#### 1. Conditional Generation
+
+Use metadata as additional conditioning signals:
+
+```python
+# In training dataloader
+def collate_with_metadata(samples):
+    batch = default_collate(samples)
+
+    # Extract motion style for conditioning
+    energy_levels = [s["enhanced_meta"]["motion_style"]["energy_level"]
+                     for s in samples if s.get("enhanced_meta")]
+    batch["energy_condition"] = torch.tensor(energy_levels)
+    return batch
+```
+
+#### 2. Sample Weighting
+
+Weight samples by quality during training:
+
+```python
+# Higher quality samples get more weight
+def get_sample_weight(sample):
+    meta = sample.get("enhanced_meta", {})
+    quality = meta.get("quality", {})
+    marker_quality = quality.get("marker_quality", 1.0) or 1.0
+    return marker_quality  # 0-1 scale
+```
+
+#### 3. Style-Aware Augmentation
+
+Use motion style to apply appropriate augmentations:
+
+```python
+# More aggressive augmentation for high-energy motion
+def augment_motion(motion, enhanced_meta):
+    energy = enhanced_meta["motion_style"]["energy_level"]
+    noise_scale = 0.01 * (1 + energy)  # More noise for athletic motion
+    return motion + torch.randn_like(motion) * noise_scale
+```
+
+#### 4. Emotion-Guided Generation
+
+Condition generation on inferred emotion:
+
+```python
+# Map emotion to style tokens
+EMOTION_TOKENS = {
+    "happy": "<HAPPY>",
+    "sad": "<SAD>",
+    "neutral": "<NEUTRAL>",
+    "excited": "<EXCITED>",
+}
+
+def add_emotion_prompt(description, enhanced_meta):
+    emotion = enhanced_meta.get("emotion", {}).get("emotion_label", "neutral")
+    return f"{EMOTION_TOKENS.get(emotion, '')} {description}"
+```
+
+#### 5. Backward Compatibility
+
+All enhanced metadata is optional. Training code should handle missing fields:
+
+```python
+def safe_get_energy(sample):
+    meta = sample.get("enhanced_meta") or {}
+    style = meta.get("motion_style") or {}
+    return style.get("energy_level", 0.5)  # Default to medium energy
+```
+
+#### 6. Diffusion Layer Conditioning
+
+The diffusion refinement module (`src/model/diffusion.py`) supports style-conditioned
+generation using enhanced metadata. Key components:
+
+**StyleCondition**: Container for style signals
+
+```python
+from src.model.diffusion import StyleCondition
+
+# Create from enhanced_meta
+condition = StyleCondition.from_enhanced_meta(sample["enhanced_meta"])
+
+# Or create directly
+condition = StyleCondition(
+    tempo=0.8,          # Motion speed (0-1)
+    energy_level=0.6,   # Motion intensity (0-1)
+    smoothness=0.9,     # Jerk-based smoothness (0-1)
+    valence=0.2,        # Emotional positivity (-1 to 1)
+    arousal=0.7,        # Emotional activation (0-1)
+)
+```
+
+**Conditioned Refinement with Classifier-Free Guidance**:
+
+```python
+from src.model.diffusion import (
+    PoseRefinementUNet,
+    DiffusionRefinementModule,
+    DDPMScheduler,
+    extract_style_conditions_from_batch,
+)
+
+# Create conditioned UNet
+unet = PoseRefinementUNet(
+    pose_dim=20,
+    use_style_conditioning=True,  # Enable style conditioning
+    style_emb_dim=128,
+)
+
+# Create refinement module
+scheduler = DDPMScheduler(num_train_timesteps=1000)
+module = DiffusionRefinementModule(unet, scheduler, device="cuda")
+
+# Refine with classifier-free guidance
+style_conditions = extract_style_conditions_from_batch(batch)
+refined = module.refine_poses(
+    transformer_output,
+    style_conditions=style_conditions,
+    guidance_scale=2.5,  # > 1.0 for stronger style adherence
+    num_inference_steps=50,
+)
+```
+
+**Training with CFG Dropout**:
+
+```python
+# Training automatically applies CFG dropout (10% by default)
+result = module.train_step(
+    clean_poses,
+    optimizer,
+    style_conditions=style_conditions,
+)
+```
 

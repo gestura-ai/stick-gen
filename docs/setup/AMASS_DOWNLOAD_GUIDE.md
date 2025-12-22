@@ -96,9 +96,10 @@ AMASS provides multiple formats. **Select SMPL+H (preferred) or SMPL-X (compatib
 
 **✅ SMPL-X Format (COMPATIBLE)**
 - **54 joints** (22 body + 30 hand + 2 jaw joints)
-- **162 parameters** (54 joints × 3 + 10 facial expression params)
+- **162 or 165 parameters** (depends on variant)
 - **Use when SMPL+H is not available**
 - **Compatible with `convert_amass.py`** ← Automatically detected and handled
+- **Stage II files supported** (CNRS, MoSh, etc. with explicit pose fields)
 - **Facial expressions ignored** (not used for stick figures)
 
 **⚠️ SMPL Format (FALLBACK ONLY)**
@@ -367,6 +368,22 @@ print(f"Pose shape: {data['poses'].shape}")
 **Cause**: Downloaded SMPL format instead of SMPL+H
 
 **Solution**: See "Wrong Format Downloaded" above
+
+### Errors about shape.npz files
+
+**Problem**: Log shows errors like `'poses is not a file in the archive'` for shape.npz files
+
+**Cause**: `shape.npz` files contain body shape parameters (betas) only, not motion data
+
+**Solution**: These are automatically filtered out by the converter. No action needed - motion data is still processed correctly.
+
+### Stage II tensor mismatch errors
+
+**Problem**: `Sizes of tensors must match except in dimension 1. Expected size 64 but got size 1`
+
+**Cause**: Stage II SMPL-X files (from CNRS, MoSh, etc.) have different pose array layouts
+
+**Solution**: The converter now automatically detects and uses explicit pose component fields (`root_orient`, `pose_body`, `pose_hand`) when available. This is handled automatically - no manual intervention required.
 
 ---
 
