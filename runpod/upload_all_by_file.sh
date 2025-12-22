@@ -38,6 +38,31 @@ if [ -z "$VOLUME_ID" ]; then
     exit 1
 fi
 
+# Check for RUNPOD_API_KEY to query volume datacenter
+if [ -z "${RUNPOD_API_KEY:-}" ]; then
+    echo "Warning: RUNPOD_API_KEY not set - using datacenter: ${RUNPOD_DATACENTER}"
+else
+    # Query the volume's datacenter from API
+    echo "Querying volume datacenter from API..."
+    VOLUME_DATACENTER=$(curl -s -X POST "https://api.runpod.io/graphql" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+        -d '{"query": "query { myself { networkVolumes { id dataCenterId } } }"}' \
+        | grep -o "\"id\":\"${VOLUME_ID}\"[^}]*\"dataCenterId\":\"[^\"]*\"" \
+        | grep -o '"dataCenterId":"[^"]*"' \
+        | cut -d'"' -f4)
+
+    if [ -n "$VOLUME_DATACENTER" ]; then
+        if [ "$VOLUME_DATACENTER" != "$RUNPOD_DATACENTER" ]; then
+            echo "  Volume is in ${VOLUME_DATACENTER}, updating datacenter setting"
+        fi
+        RUNPOD_DATACENTER="$VOLUME_DATACENTER"
+    else
+        echo "  Could not detect volume datacenter, using: ${RUNPOD_DATACENTER}"
+    fi
+fi
+
+echo ""
 echo "========================================="
 echo "  RunPod Data Upload (File-by-File)"
 echo "========================================="
@@ -59,7 +84,6 @@ SUBDIRS=(
     "NTU_RGB_D"
     "aist_plusplus"
     "lsmb19-mocap"
-    "motions_processed"
 )
 
 # Convert skip list to array

@@ -127,6 +127,16 @@ training:
     DEVICE: "cuda"
     WANDB_MODE: "online"  # Set to "disabled" if not using W&B
 
+  # Diffusion refinement settings (Phase 3)
+  # The diffusion module now supports style conditioning from enhanced metadata
+  # (tempo, energy_level, smoothness, valence, arousal) for metadata-aware refinement.
+  diffusion:
+    use_diffusion: true               # Enable diffusion refinement
+    use_style_conditioning: true      # Enable style/emotion conditioning
+    cfg_dropout_prob: 0.1             # Classifier-free guidance dropout during training
+    guidance_scale: 2.0               # CFG scale for inference (>1 = stronger style adherence)
+    diffusion_loss_weight: 0.1        # Weight for diffusion loss in total loss
+
 # Network Settings
 network:
   port: 8000

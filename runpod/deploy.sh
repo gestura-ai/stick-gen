@@ -40,9 +40,10 @@
 #                                   Examples: --models small,medium  --models large  --models all
 #   --version VERSION             - Image version tag (default: latest)
 #   --volume-id ID                - Network Volume ID (for upload-data, create-pod, create-endpoint)
-#   --volume-size GB              - Network Volume size in GB (default: 200)
-#   --datacenter ID               - RunPod data center ID (default: EU-CZ-1)
-#                                   Options: US-TX-3, US-CA-1, EU-NL-1, EU-CZ-1, etc.
+#   --volume-size GB              - Network Volume size in GB (default: 300)
+#   --datacenter ID               - RunPod data center ID (default: auto)
+#                                   Use "auto" to find best datacenter by availability/price
+#                                   Options: auto, US-TX-3, US-CA-1, EU-NL-1, EU-CZ-1, etc.
 #                                   NOTE: Pods MUST be in same datacenter as Network Volume!
 #   --gpu GPU_TYPE                - GPU type for training/inference (default: NVIDIA RTX A4000)
 #   --pod-id ID                   - Pod ID (for SSH connection info)
@@ -50,6 +51,9 @@
 #   --workers-min N               - Minimum workers for serverless (default: 0)
 #   --workers-max N               - Maximum workers for serverless (default: 3)
 #   --curated                     - Use curated data prep pipeline (USE_CURATED_DATA=true)
+#   --secure-cloud                - Use RunPod Secure Cloud instead of Community Cloud
+#                                   Secure Cloud: T4 compliance, dedicated hardware, higher cost
+#                                   Community Cloud: Shared hardware, lower cost (default)
 #
 # GitHub Container Registry (ghcr.io) Authentication:
 #   1. Create a Personal Access Token (PAT) at: https://github.com/settings/tokens
@@ -76,11 +80,12 @@ IMAGE_NAME="stick-gen"
 VERSION="${VERSION:-latest}"
 MODEL_VARIANT="${MODEL_VARIANT:-base}"
 USE_CURATED_DATA="${USE_CURATED_DATA:-false}"
+FORCE_REGENERATE="${FORCE_REGENERATE:-false}"
 
 # RunPod Configuration
 RUNPOD_API_URL="https://api.runpod.io/graphql"
 VOLUME_NAME="${VOLUME_NAME:-stick-gen-training-data}"
-VOLUME_SIZE="${VOLUME_SIZE:-200}"  # GB (200GB recommended for full pipeline)
+VOLUME_SIZE="${VOLUME_SIZE:-300}"  # GB (300GB recommended for full pipeline)
 # Model selection: comma-separated list of variants to train
 # Options: small, medium (or base), large, all
 # Default: all (trains small, medium, large)
@@ -89,12 +94,18 @@ TRAIN_MODELS="${TRAIN_MODELS:-all}"
 # IMPORTANT: Network Volumes are region-locked - Pods MUST be in the same datacenter as the volume
 # Common US options: US-TX-3, US-CA-1, US-GA-1, US-OR-1
 # Common EU options: EU-NL-1, EU-SE-1, EU-RO-1, EU-CZ-1
-# Default: EU-CZ-1 (good GPU availability)
-RUNPOD_DATACENTER="${RUNPOD_DATACENTER:-EU-CZ-1}"
+# Default: "auto" - automatically find best datacenter based on availability and price
+# Set to specific datacenter ID to override (e.g., EU-CZ-1)
+RUNPOD_DATACENTER="${RUNPOD_DATACENTER:-auto}"
+DATACENTER_SPECIFIED=false  # Track if user explicitly set datacenter
 GPU_TYPE="${GPU_TYPE:-NVIDIA RTX A4000}"
 DATA_DIR="${DATA_DIR:-./data}"
 # Volume mount path inside the container (REQUIRED when using networkVolumeId)
 VOLUME_MOUNT_PATH="${VOLUME_MOUNT_PATH:-/runpod-volume}"
+# Cloud type: COMMUNITY (default) or SECURE
+# COMMUNITY: Shared hardware, lower cost, better availability
+# SECURE: Dedicated hardware, T4 compliance, higher cost
+CLOUD_TYPE="${CLOUD_TYPE:-COMMUNITY}"
 
 # S3-compatible API configuration for RunPod Network Volumes
 # IMPORTANT: RunPod S3 API requires SEPARATE credentials from the API key!
@@ -140,6 +151,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --region|--datacenter)
             RUNPOD_DATACENTER="$2"
+            DATACENTER_SPECIFIED=true
             shift 2
             ;;
         --gpu)
@@ -170,9 +182,21 @@ while [[ $# -gt 0 ]]; do
 	            USE_CURATED_DATA="true"
 	            shift
 	            ;;
+        --secure-cloud)
+            CLOUD_TYPE="SECURE"
+            shift
+            ;;
+        --community-cloud)
+            CLOUD_TYPE="COMMUNITY"
+            shift
+            ;;
         --models)
             TRAIN_MODELS="$2"
             shift 2
+            ;;
+        --force-regenerate|--force)
+            FORCE_REGENERATE="true"
+            shift
             ;;
         --help|-h)
             ACTION="help"
@@ -279,6 +303,21 @@ create_network_volume() {
     check_runpod_api_key
     print_header
 
+    # Auto-select best datacenter if not specified
+    if [ "$RUNPOD_DATACENTER" == "auto" ]; then
+        echo -e "${CYAN}No datacenter specified - searching for best option...${NC}"
+        echo ""
+        if find_best_datacenter; then
+            RUNPOD_DATACENTER="$BEST_DATACENTER"
+            echo -e "${GREEN}Selected datacenter: ${RUNPOD_DATACENTER}${NC}"
+            echo ""
+        else
+            echo -e "${RED}ERROR: Could not find any available datacenter${NC}"
+            echo "  Try specifying a datacenter manually with --datacenter"
+            exit 1
+        fi
+    fi
+
     echo -e "${GREEN}Creating Network Volume...${NC}"
     echo "  Name: ${VOLUME_NAME}"
     echo "  Size: ${VOLUME_SIZE}GB"
@@ -313,6 +352,201 @@ create_network_volume() {
         echo -e "${RED}Failed to create Network Volume${NC}"
         echo "Response: $response"
         exit 1
+    fi
+}
+
+# Validate that a volume exists and get its datacenter
+# Returns: 0 if valid, 1 if not found
+# Sets: VOLUME_DATACENTER variable
+validate_volume() {
+    local volume_id="$1"
+    if [ -z "$volume_id" ]; then
+        echo -e "${RED}ERROR: No volume ID provided${NC}"
+        return 1
+    fi
+
+    local query="query { myself { networkVolumes { id name size dataCenterId } } }"
+    local response
+    response=$(runpod_graphql "$query")
+
+    if check_jq; then
+        local volume_info
+        volume_info=$(echo "$response" | jq -r ".data.myself.networkVolumes[] | select(.id == \"${volume_id}\")")
+
+        if [ -z "$volume_info" ] || [ "$volume_info" = "null" ]; then
+            echo -e "${RED}ERROR: Volume '${volume_id}' not found in your account${NC}"
+            echo ""
+            echo "Available volumes:"
+            echo "$response" | jq -r '.data.myself.networkVolumes[] | "  - \(.id) (\(.name)) in \(.dataCenterId)"'
+            return 1
+        fi
+
+        VOLUME_DATACENTER=$(echo "$volume_info" | jq -r '.dataCenterId')
+        local volume_name=$(echo "$volume_info" | jq -r '.name')
+        local volume_size=$(echo "$volume_info" | jq -r '.size')
+
+        echo -e "${GREEN}  ✓ Volume found: ${volume_id}${NC}"
+        echo "    Name: ${volume_name}"
+        echo "    Size: ${volume_size}GB"
+        echo "    Datacenter: ${VOLUME_DATACENTER}"
+
+        return 0
+    else
+        # Without jq, do basic check
+        if echo "$response" | grep -q "\"id\":\"${volume_id}\""; then
+            echo -e "${GREEN}  ✓ Volume found: ${volume_id}${NC}"
+            return 0
+        else
+            echo -e "${RED}ERROR: Volume '${volume_id}' not found${NC}"
+            return 1
+        fi
+    fi
+}
+
+# Check GPU availability in a datacenter
+check_gpu_availability() {
+    local datacenter="$1"
+    echo -e "${CYAN}Checking GPU availability in ${datacenter}...${NC}"
+
+    local query="query { gpuTypes { id displayName memoryInGb secureCloud communityCloud } }"
+    local response
+    response=$(runpod_graphql "$query")
+
+    if check_jq; then
+        echo ""
+        echo "Available Community Cloud GPUs:"
+        echo "$response" | jq -r '.data.gpuTypes[] | select(.communityCloud == true) | "  - \(.displayName) (\(.memoryInGb)GB)"' | head -20
+    fi
+}
+
+# Find the best datacenter based on GPU availability and price
+# Sets: BEST_DATACENTER, BEST_GPU_ID, BEST_GPU_PRICE variables
+# Returns: 0 if found, 1 if no availability
+find_best_datacenter() {
+    echo -e "${CYAN}🔍 Searching for best datacenter based on availability and price...${NC}"
+
+    if ! check_jq; then
+        echo -e "${RED}Error: jq is required for datacenter search${NC}"
+        return 1
+    fi
+
+    # List of datacenters WITH S3 API support (required for data upload)
+    # S3 API is NOT available in all datacenters - only these have confirmed support:
+    # - EU-CZ-1, EU-RO-1, US-KS-2: Confirmed working S3 endpoints
+    # Note: CA-MTL-1, EU-NL-1, EU-SE-1, US-TX-3, US-GA-1, US-OR-1 do NOT have S3 API
+    local datacenters=("EU-CZ-1" "EU-RO-1" "US-KS-2")
+
+    # Our preferred GPU list (ordered by price, cheapest first)
+    local preferred_gpus=(
+        "NVIDIA RTX A4000"
+        "NVIDIA RTX A5000"
+        "NVIDIA GeForce RTX 3090"
+        "NVIDIA GeForce RTX 4090"
+        "NVIDIA GeForce RTX 5090"
+        "NVIDIA RTX A6000"
+        "NVIDIA L40"
+        "NVIDIA L40S"
+    )
+
+    BEST_DATACENTER=""
+    BEST_GPU_ID=""
+    BEST_GPU_PRICE=""
+    local best_stock_level=0  # 0=none, 1=Low, 2=Medium, 3=High
+
+    for dc in "${datacenters[@]}"; do
+        echo -ne "  Checking ${dc}... "
+
+        # Query GPU availability for this datacenter
+        local query='{"query":"query { gpuTypes { id communityCloud lowestPrice(input: {gpuCount: 1, dataCenterId: \"'"${dc}"'\"}) { stockStatus uninterruptablePrice } } }"}'
+        local response
+        response=$(curl -s -X POST "https://api.runpod.io/graphql" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+            -d "${query}" 2>/dev/null)
+
+        if [ -z "$response" ]; then
+            echo "no response"
+            continue
+        fi
+
+        # Find best available GPU in this datacenter
+        for gpu in "${preferred_gpus[@]}"; do
+            local gpu_info
+            gpu_info=$(echo "$response" | jq -r --arg gpu "$gpu" '.data.gpuTypes[] | select(.id == $gpu and .communityCloud == true) | {stock: .lowestPrice.stockStatus, price: .lowestPrice.uninterruptablePrice}' 2>/dev/null)
+
+            if [ -z "$gpu_info" ] || [ "$gpu_info" == "null" ]; then
+                continue
+            fi
+
+            local stock
+            stock=$(echo "$gpu_info" | jq -r '.stock // empty')
+            local price
+            price=$(echo "$gpu_info" | jq -r '.price // empty')
+
+            if [ -z "$stock" ] || [ "$stock" == "null" ]; then
+                continue
+            fi
+
+            # Convert stock to numeric level
+            local stock_level=0
+            case "$stock" in
+                "High") stock_level=3 ;;
+                "Medium") stock_level=2 ;;
+                "Low") stock_level=1 ;;
+            esac
+
+            # Check if this is better than what we have
+            # Priority: Higher stock > Lower price
+            if [ $stock_level -gt $best_stock_level ]; then
+                best_stock_level=$stock_level
+                BEST_DATACENTER="$dc"
+                BEST_GPU_ID="$gpu"
+                BEST_GPU_PRICE="$price"
+                echo -e "${GREEN}found ${gpu} (${stock}, \$${price}/hr)${NC}"
+                # If we found High stock, this is optimal - but keep checking for better price
+                if [ $stock_level -eq 3 ]; then
+                    break
+                fi
+            elif [ $stock_level -eq $best_stock_level ] && [ $stock_level -gt 0 ]; then
+                # Same stock level, compare price
+                if [ -n "$price" ] && [ -n "$BEST_GPU_PRICE" ]; then
+                    local is_cheaper
+                    is_cheaper=$(echo "$price < $BEST_GPU_PRICE" | bc -l 2>/dev/null || echo "0")
+                    if [ "$is_cheaper" == "1" ]; then
+                        BEST_DATACENTER="$dc"
+                        BEST_GPU_ID="$gpu"
+                        BEST_GPU_PRICE="$price"
+                        echo -e "${GREEN}found ${gpu} (${stock}, \$${price}/hr - cheaper!)${NC}"
+                    fi
+                fi
+            fi
+        done
+
+        # If we didn't find anything good in this DC
+        if [ -z "$BEST_DATACENTER" ] || [ "$BEST_DATACENTER" != "$dc" ]; then
+            echo "no suitable GPUs"
+        fi
+    done
+
+    echo ""
+
+    if [ -n "$BEST_DATACENTER" ]; then
+        local stock_name="Low"
+        [ $best_stock_level -eq 2 ] && stock_name="Medium"
+        [ $best_stock_level -eq 3 ] && stock_name="High"
+
+        echo -e "${GREEN}✓ Best option found:${NC}"
+        echo "    Datacenter: ${BEST_DATACENTER}"
+        echo "    GPU: ${BEST_GPU_ID}"
+        echo "    Price: \$${BEST_GPU_PRICE}/hr"
+        echo "    Availability: ${stock_name}"
+        echo ""
+        return 0
+    else
+        echo -e "${RED}✗ No GPUs available in any datacenter${NC}"
+        echo "  All checked datacenters: ${datacenters[*]}"
+        echo "  Try again later or check https://www.runpod.io/console/gpu-cloud"
+        return 1
     fi
 }
 
@@ -363,19 +597,19 @@ upload_data_to_volume() {
     # Step 1: Create a temporary Pod with the volume attached
     echo -e "${CYAN}Step 1/3: Creating temporary transfer Pod...${NC}"
 
-    # Use gpuTypeIdList with cloudType: COMMUNITY for best availability
-    # This approach uses Community Cloud which has better availability than Secure Cloud
-    local gpu_list='[\"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 3080\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA RTX A4000\", \"NVIDIA GeForce RTX 4070 Ti\", \"NVIDIA GeForce RTX 3080 Ti\", \"NVIDIA L4\"]'
+    # Use gpuTypeIdList with cloudType based on CLOUD_TYPE setting
+    local gpu_list='[\"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 3080\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA RTX A4000\", \"NVIDIA GeForce RTX 4070 Ti\", \"NVIDIA GeForce RTX 3080 Ti\", \"NVIDIA L4\", \"NVIDIA GeForce RTX 5090\"]'
     local transfer_pod_id=""
     local pod_response=""
+    local fallback_cloud_type="COMMUNITY"
+    [ "$CLOUD_TYPE" == "COMMUNITY" ] && fallback_cloud_type="SECURE"
 
-    # Try Community Cloud On-Demand with multiple GPU options (best availability)
+    # Try selected cloud type first with multiple GPU options
     # CRITICAL: volumeMountPath is REQUIRED when using networkVolumeId
     # CRITICAL: ports: "22/tcp" is REQUIRED to expose SSH for direct TCP access (SCP/SFTP support)
-    # Use our pre-built Docker image for consistency
-    echo -e "${CYAN}  Creating transfer Pod (Community Cloud, multiple GPU options)...${NC}"
+    echo -e "${CYAN}  Creating transfer Pod (${CLOUD_TYPE} Cloud, multiple GPU options)...${NC}"
     echo -e "${CYAN}  Using Docker image: ${FULL_IMAGE}${NC}"
-    local pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-transfer\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: COMMUNITY, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 20, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true }) { id machine { podHostId gpuDisplayName } } }"
+    local pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-transfer\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: ${CLOUD_TYPE}, dataCenterId: \\\"${VOLUME_DATACENTER}\\\", gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 20, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true }) { id machine { podHostId gpuDisplayName } } }"
 
     pod_response=$(runpod_graphql "$pod_query")
     echo "  API Response: $pod_response"
@@ -389,15 +623,15 @@ upload_data_to_volume() {
     fi
 
     if [ -n "$transfer_pod_id" ] && [ "$transfer_pod_id" != "null" ]; then
-        echo -e "${GREEN}  ✓ Got Pod with GPU: ${gpu_used}${NC}"
+        echo -e "${GREEN}  ✓ Got ${CLOUD_TYPE} Cloud Pod with GPU: ${gpu_used}${NC}"
     fi
 
-    # If Community Cloud failed, try Secure Cloud
+    # If selected cloud type failed, try the fallback cloud type
     if [ -z "$transfer_pod_id" ] || [ "$transfer_pod_id" == "null" ]; then
-        echo -e "${CYAN}  Community Cloud unavailable, trying Secure Cloud...${NC}"
-        local secure_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-transfer\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: SECURE, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 20, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true }) { id machine { podHostId gpuDisplayName } } }"
+        echo -e "${CYAN}  ${CLOUD_TYPE} Cloud unavailable, trying ${fallback_cloud_type} Cloud...${NC}"
+        local fallback_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-transfer\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: ${fallback_cloud_type}, dataCenterId: \\\"${VOLUME_DATACENTER}\\\", gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 20, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true }) { id machine { podHostId gpuDisplayName } } }"
 
-        pod_response=$(runpod_graphql "$secure_query")
+        pod_response=$(runpod_graphql "$fallback_query")
         echo "  API Response: $pod_response"
 
         if check_jq; then
@@ -408,14 +642,14 @@ upload_data_to_volume() {
         fi
 
         if [ -n "$transfer_pod_id" ] && [ "$transfer_pod_id" != "null" ]; then
-            echo -e "${GREEN}  ✓ Got Secure Cloud Pod with GPU: ${gpu_used}${NC}"
+            echo -e "${GREEN}  ✓ Got ${fallback_cloud_type} Cloud Pod with GPU: ${gpu_used}${NC}"
         fi
     fi
 
     # If both failed, try ALL cloud types
     if [ -z "$transfer_pod_id" ] || [ "$transfer_pod_id" == "null" ]; then
         echo -e "${CYAN}  Trying ALL cloud types...${NC}"
-        local all_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-transfer\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: ALL, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 20, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true }) { id machine { podHostId gpuDisplayName } } }"
+        local all_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-transfer\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: ALL, dataCenterId: \\\"${VOLUME_DATACENTER}\\\", gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 20, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true }) { id machine { podHostId gpuDisplayName } } }"
 
         pod_response=$(runpod_graphql "$all_query")
         echo "  API Response: $pod_response"
@@ -569,16 +803,17 @@ create_training_pod() {
     local gpu_list
     if [ "$GPU_TYPE" == "NVIDIA RTX A4000" ]; then
         # Default - try multiple GPUs for better availability
-        gpu_list='[\"NVIDIA RTX A4000\", \"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA GeForce RTX 3080\"]'
+        gpu_list='[\"NVIDIA RTX A4000\", \"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA GeForce RTX 3080\", \"NVIDIA GeForce RTX 5090\"]'
     else
         # Specific GPU requested - still include fallbacks
-        gpu_list="[\\\"${GPU_TYPE}\\\", \\\"NVIDIA GeForce RTX 3090\\\", \\\"NVIDIA RTX A4000\\\", \\\"NVIDIA GeForce RTX 4090\\\"]"
+        gpu_list="[\\\"${GPU_TYPE}\\\", \\\"NVIDIA GeForce RTX 3090\\\", \\\"NVIDIA RTX A4000\\\", \\\"NVIDIA GeForce RTX 4090\\\", \\\"NVIDIA GeForce RTX 5090\\\"]"
     fi
 
-    # Use cloudType: COMMUNITY with gpuTypeIdList for best availability
+    # Use cloudType based on CLOUD_TYPE setting with gpuTypeIdList for best availability
     # CRITICAL: volumeMountPath is REQUIRED when using networkVolumeId
     # CRITICAL: ports: "22/tcp" is REQUIRED to expose SSH for direct TCP access (SCP/SFTP support)
-    local query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-training\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: COMMUNITY, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 20, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, env: [ { key: \\\"MODEL_VARIANT\\\", value: \\\"${MODEL_VARIANT}\\\" }, { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"DEVICE\\\", value: \\\"cuda\\\" } ] }) { id machine { podHostId gpuDisplayName } runtime { ports { ip isIpPublic privatePort publicPort type } } } }"
+    echo -e "${CYAN}Using ${CLOUD_TYPE} Cloud...${NC}"
+    local query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-training\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: ${CLOUD_TYPE}, dataCenterId: \\\"${VOLUME_DATACENTER}\\\", gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 20, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, env: [ { key: \\\"MODEL_VARIANT\\\", value: \\\"${MODEL_VARIANT}\\\" }, { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"DEVICE\\\", value: \\\"cuda\\\" } ] }) { id machine { podHostId gpuDisplayName } runtime { ports { ip isIpPublic privatePort publicPort type } } } }"
 
     local response
     response=$(runpod_graphql "$query")
@@ -730,6 +965,15 @@ upload_data_s3() {
         exit 1
     fi
 
+    # Validate volume and get its datacenter
+    echo -e "${YELLOW}Validating Network Volume...${NC}"
+    if ! validate_volume "$VOLUME_ID"; then
+        exit 1
+    fi
+    # Use the volume's datacenter (VOLUME_DATACENTER is set by validate_volume)
+    RUNPOD_DATACENTER="${VOLUME_DATACENTER}"
+    echo ""
+
     if ! command -v aws &> /dev/null; then
         echo -e "${RED}Error: AWS CLI not found${NC}"
         echo ""
@@ -781,74 +1025,61 @@ upload_data_s3() {
     export AWS_ACCESS_KEY_ID="${RUNPOD_S3_ACCESS_KEY}"
     export AWS_SECRET_ACCESS_KEY="${RUNPOD_S3_SECRET_KEY}"
 
-    echo -e "${CYAN}Starting S3 upload...${NC}"
+    echo -e "${CYAN}Starting S3 upload (file-by-file mode)...${NC}"
+    echo ""
+    echo "  This method uploads files individually to avoid S3 LIST API pagination issues"
+    echo "  with large directories. Already-uploaded files will be skipped."
     echo ""
 
-    # Configure AWS CLI for RunPod S3 compatibility
-    # - Reduce multipart threshold to avoid "InvalidPart" errors
-    # - Use smaller chunk sizes for more reliable uploads
-    # - Increase retries for network resilience
-    echo "  Configuring S3 transfer settings for RunPod compatibility..."
-    aws configure set default.s3.multipart_threshold 64MB
-    aws configure set default.s3.multipart_chunksize 16MB
-    aws configure set default.s3.max_concurrent_requests 4
-    aws configure set default.s3.max_queue_size 100
+    # Use the file-by-file upload script to avoid S3 LIST pagination bugs
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Set retry configuration
-    export AWS_RETRY_MODE=adaptive
-    export AWS_MAX_ATTEMPTS=5
-
-    # Use aws s3 sync for better reliability (skips existing files on retry)
-    # Add timeouts and disable unnecessary signature checks
-    echo "  Starting upload with optimized settings..."
-    echo ""
-
-    local retry_count=0
-    local max_retries=3
-    local exit_code=1
-
-    while [ $retry_count -lt $max_retries ] && [ $exit_code -ne 0 ]; do
-        if [ $retry_count -gt 0 ]; then
+    if [ -x "${script_dir}/upload_all_by_file.sh" ]; then
+        # Use the dedicated file-by-file upload script
+        if "${script_dir}/upload_all_by_file.sh" \
+            --volume-id "${VOLUME_ID}" \
+            --datacenter "${RUNPOD_DATACENTER}"; then
             echo ""
-            echo -e "${YELLOW}  Retry attempt ${retry_count}/${max_retries}...${NC}"
-            sleep 5
+            echo -e "${GREEN}✓ Data upload complete!${NC}"
+            echo ""
+            echo "Your data is now available at /data/ on Network Volume ${VOLUME_ID}"
+        else
+            echo ""
+            echo -e "${YELLOW}S3 upload encountered issues${NC}"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Re-run this command - already uploaded files will be skipped"
+            echo "  2. Check your network connection stability"
+            echo "  3. Try uploading specific directories:"
+            echo "     ./runpod/upload_by_file.sh --volume-id ${VOLUME_ID} --dir amass"
+            echo ""
+            echo "Alternative methods:"
+            echo "  1. Use SSH/SCP with an existing Pod:"
+            echo "     ./runpod/deploy.sh upload-data --volume-id ${VOLUME_ID}"
+            echo ""
+            echo "  2. Use runpodctl peer-to-peer transfer:"
+            echo "     ./runpod/deploy.sh send-data"
         fi
+    else
+        echo -e "${RED}ERROR: upload_all_by_file.sh not found at ${script_dir}${NC}"
+        echo "  Falling back to aws s3 sync (may fail with many files)"
+        echo ""
 
-        aws s3 sync "${DATA_DIR}" "s3://${VOLUME_ID}/data/" \
+        # Fallback to aws s3 sync
+        aws configure set default.s3.multipart_threshold 64MB
+        aws configure set default.s3.multipart_chunksize 16MB
+        aws configure set default.s3.max_concurrent_requests 4
+
+        if aws s3 sync "${DATA_DIR}" "s3://${VOLUME_ID}/data/" \
             --endpoint-url "${s3_endpoint}" \
             --region "${datacenter_lower}" \
             --cli-read-timeout 300 \
-            --cli-connect-timeout 60 \
-            --no-progress 2>&1 | while read -r line; do
-                echo "  $line"
-            done
-
-        exit_code=${PIPESTATUS[0]}
-        retry_count=$((retry_count + 1))
-    done
-
-    if [ $exit_code -eq 0 ]; then
-        echo ""
-        echo -e "${GREEN}✓ Data upload complete!${NC}"
-        echo ""
-        echo "Your data is now available at /data/ on Network Volume ${VOLUME_ID}"
-    else
-        echo ""
-        echo -e "${YELLOW}S3 upload encountered issues after ${max_retries} attempts (exit code: ${exit_code})${NC}"
-        echo ""
-        echo "Troubleshooting:"
-        echo "  1. The upload uses 'sync' - re-run this command to resume from where it left off"
-        echo "  2. Check your network connection stability"
-        echo "  3. Try reducing chunk size further:"
-        echo "     aws configure set default.s3.multipart_chunksize 8MB"
-        echo "     ./runpod/deploy.sh upload-s3 --volume-id ${VOLUME_ID}"
-        echo ""
-        echo "Alternative methods:"
-        echo "  1. Use SSH/SCP with an existing Pod:"
-        echo "     ./runpod/deploy.sh upload-data --volume-id ${VOLUME_ID}"
-        echo ""
-        echo "  2. Use runpodctl peer-to-peer transfer:"
-        echo "     ./runpod/deploy.sh send-data"
+            --cli-connect-timeout 60; then
+            echo -e "${GREEN}✓ Data upload complete!${NC}"
+        else
+            echo -e "${RED}Upload failed. Try using ./runpod/upload_all_by_file.sh directly.${NC}"
+        fi
     fi
 }
 
@@ -1004,7 +1235,7 @@ train_model() {
     echo -e "${CYAN}Step 3/4: Creating training Pod...${NC}"
 
     # Prioritize RTX 3090 for cost-effectiveness, then other good training GPUs
-    local gpu_list='[\"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA RTX A4000\", \"NVIDIA GeForce RTX 3080 Ti\", \"NVIDIA GeForce RTX 3080\", \"NVIDIA L4\", \"NVIDIA GeForce RTX 4070 Ti\"]'
+    local gpu_list='[\"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA RTX A4000\", \"NVIDIA GeForce RTX 3080 Ti\", \"NVIDIA GeForce RTX 3080\", \"NVIDIA L4\", \"NVIDIA GeForce RTX 4070 Ti\", \"NVIDIA GeForce RTX 5090\"]'
 
     # Use our pre-built Docker image from GitHub Container Registry
     # This has all dependencies pre-installed and code baked in at /workspace
@@ -1029,7 +1260,8 @@ train_model() {
         echo -e "${GREEN}  GROK_API_KEY detected - LLM dataset enhancement enabled${NC}"
     fi
 
-    local pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-train-${model_variant}\\\", imageName: \\\"${training_image}\\\", cloudType: COMMUNITY, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, env: [ { key: \\\"MODEL_VARIANT\\\", value: \\\"${model_variant}\\\" }, { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"CHECKPOINT_DIR\\\", value: \\\"${VOLUME_MOUNT_PATH}/checkpoints\\\" }, { key: \\\"DEVICE\\\", value: \\\"cuda\\\" }, { key: \\\"PYTHONPATH\\\", value: \\\"/workspace\\\" }, { key: \\\"AUTO_PUSH\\\", value: \\\"true\\\" }, { key: \\\"AUTO_CLEANUP\\\", value: \\\"true\\\" }, { key: \\\"VERSION\\\", value: \\\"${VERSION:-1.0.0}\\\" }${hf_token_env}${grok_api_key_env} ] }) { id machine { podHostId gpuDisplayName } runtime { ports { ip isIpPublic privatePort publicPort type } } } }"
+    echo -e "${CYAN}Using ${CLOUD_TYPE} Cloud...${NC}"
+    local pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-train-${model_variant}\\\", imageName: \\\"${training_image}\\\", cloudType: ${CLOUD_TYPE}, dataCenterId: \\\"${VOLUME_DATACENTER}\\\", gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, env: [ { key: \\\"MODEL_VARIANT\\\", value: \\\"${model_variant}\\\" }, { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"CHECKPOINT_DIR\\\", value: \\\"${VOLUME_MOUNT_PATH}/checkpoints\\\" }, { key: \\\"DEVICE\\\", value: \\\"cuda\\\" }, { key: \\\"PYTHONPATH\\\", value: \\\"/workspace\\\" }, { key: \\\"AUTO_PUSH\\\", value: \\\"true\\\" }, { key: \\\"AUTO_CLEANUP\\\", value: \\\"true\\\" }, { key: \\\"VERSION\\\", value: \\\"${VERSION:-1.0.0}\\\" }${hf_token_env}${grok_api_key_env} ] }) { id machine { podHostId gpuDisplayName } runtime { ports { ip isIpPublic privatePort publicPort type } } } }"
 
     local pod_response
     pod_response=$(runpod_graphql "$pod_query")
@@ -1241,16 +1473,83 @@ create_data_prep_pod() {
         exit 1
     fi
 
-	    # Use Secure Cloud with full GPU type IDs for better availability
-	    # Priority: RTX A4000 ($0.25), RTX A4500 ($0.25), RTX 4000 Ada ($0.26), RTX A5000 ($0.27), L4 ($0.39)
-	    local gpu_list='[\"NVIDIA RTX A4000\", \"NVIDIA RTX A4500\", \"NVIDIA RTX 4000 Ada Generation\", \"NVIDIA RTX A5000\", \"NVIDIA L4\", \"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\"]'
-	    local pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-data-prep\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: SECURE, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, dockerArgs: \\\"/workspace/runpod/data_prep_entrypoint.sh\\\", env: [ { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"OUTPUT_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data/train_data_final.pt\\\" }, { key: \\\"USE_CURATED_DATA\\\", value: \\\"${USE_CURATED_DATA}\\\" }, { key: \\\"SYNTHETIC_SAMPLES\\\", value: \\\"${SYNTHETIC_SAMPLES:-50000}\\\" }, { key: \\\"HF_PUSH_DATASET\\\", value: \\\"${HF_PUSH_DATASET:-false}\\\" }, { key: \\\"HF_DATASET_REPO\\\", value: \\\"${HF_DATASET_REPO:-GesturaAI/stick-gen-dataset}\\\" }, { key: \\\"HF_TOKEN\\\", value: \\\"${HF_TOKEN:-}\\\" }, { key: \\\"GROK_API_KEY\\\", value: \\\"${GROK_API_KEY:-}\\\" } ] }) { id machine { podHostId gpuDisplayName } runtime { ports { ip isIpPublic privatePort publicPort type } } } }"
+    # Validate volume exists and get its datacenter
+    echo ""
+    if ! validate_volume "$VOLUME_ID"; then
+        exit 1
+    fi
+    echo ""
 
+    echo "  Image: ${FULL_IMAGE}"
+    echo "  Volume: ${VOLUME_ID}"
+    echo "  Mount: ${VOLUME_MOUNT_PATH}"
+    if [ "${FORCE_REGENERATE}" = "true" ]; then
+        echo -e "  ${YELLOW}Force Regenerate: ENABLED (will overwrite existing data)${NC}"
+    fi
+    echo ""
+
+    # Use Community Cloud with full GPU type IDs for better availability
+    # Priority: RTX A4000 ($0.25), RTX A4500 ($0.25), RTX 4000 Ada ($0.26), RTX A5000 ($0.27), L4 ($0.39)
+    local gpu_list='["NVIDIA RTX A4000", "NVIDIA RTX A4500", "NVIDIA RTX 4000 Ada Generation", "NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 5090"]'
+
+    # Build the mutation as a proper JSON payload (avoid escaping issues)
+    local mutation_json
+    mutation_json=$(cat <<EOF
+{
+  "query": "mutation CreateDataPrepPod(\$input: PodFindAndDeployOnDemandInput!) { podFindAndDeployOnDemand(input: \$input) { id machine { podHostId gpuDisplayName } runtime { ports { ip isIpPublic privatePort publicPort type } } } }",
+  "variables": {
+    "input": {
+      "name": "stick-gen-data-prep",
+      "imageName": "${FULL_IMAGE}",
+      "cloudType": "${CLOUD_TYPE}",
+      "dataCenterId": "${VOLUME_DATACENTER}",
+      "gpuTypeIdList": ${gpu_list},
+      "gpuCount": 1,
+      "volumeInGb": 0,
+      "containerDiskInGb": 50,
+      "networkVolumeId": "${VOLUME_ID}",
+      "volumeMountPath": "${VOLUME_MOUNT_PATH}",
+      "ports": "22/tcp",
+      "startSsh": true,
+      "dockerArgs": "/workspace/runpod/data_prep_entrypoint.sh",
+      "env": [
+        { "key": "DATA_PATH", "value": "${VOLUME_MOUNT_PATH}/data" },
+        { "key": "OUTPUT_PATH", "value": "${VOLUME_MOUNT_PATH}/data/train_data_final.pt" },
+        { "key": "USE_CURATED_DATA", "value": "${USE_CURATED_DATA:-false}" },
+        { "key": "SYNTHETIC_SAMPLES", "value": "${SYNTHETIC_SAMPLES:-50000}" },
+        { "key": "FORCE_REGENERATE", "value": "${FORCE_REGENERATE:-false}" },
+        { "key": "HF_PUSH_DATASET", "value": "${HF_PUSH_DATASET:-false}" },
+        { "key": "HF_DATASET_REPO", "value": "${HF_DATASET_REPO:-GesturaAI/stick-gen-dataset}" },
+        { "key": "HF_TOKEN", "value": "${HF_TOKEN:-}" },
+        { "key": "GROK_API_KEY", "value": "${GROK_API_KEY:-}" }
+      ]
+    }
+  }
+}
+EOF
+)
+
+    # Make the GraphQL request with proper JSON
     local response
-    response=$(runpod_graphql "$pod_query")
+    response=$(curl -s -X POST "${RUNPOD_API_URL}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+        -d "${mutation_json}")
 
     local pod_id
     if check_jq; then
+        # Check for errors first
+        local error_msg
+        error_msg=$(echo "$response" | jq -r '.errors[0].message // empty')
+        if [ -n "$error_msg" ] && [ "$error_msg" != "null" ]; then
+            echo -e "${RED}ERROR: API returned error: ${error_msg}${NC}"
+            local error_code
+            error_code=$(echo "$response" | jq -r '.errors[0].extensions.code // empty')
+            if [ -n "$error_code" ]; then
+                echo "  Error code: ${error_code}"
+            fi
+        fi
+
         echo "$response" | jq .
         pod_id=$(echo "$response" | jq -r '.data.podFindAndDeployOnDemand.id // empty')
     else
@@ -1258,7 +1557,7 @@ create_data_prep_pod() {
         pod_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
     fi
 
-    if [ -n "$pod_id" ]; then
+    if [ -n "$pod_id" ] && [ "$pod_id" != "null" ]; then
         echo ""
         echo -e "${GREEN}✓ Data preparation Pod created: ${pod_id}${NC}"
         echo ""
@@ -1270,7 +1569,14 @@ create_data_prep_pod() {
         echo "Monitor progress with:"
         echo "  ./runpod/deploy.sh list-pods"
     else
+        echo ""
         echo -e "${RED}ERROR: Failed to create data preparation Pod${NC}"
+        echo ""
+        echo -e "${YELLOW}Troubleshooting:${NC}"
+        echo "  1. Check if the Docker image is accessible: ${FULL_IMAGE}"
+        echo "  2. Verify GPUs are available in the volume's datacenter"
+        echo "  3. Try running: ./runpod/deploy.sh list-volumes"
+        echo "  4. Check RunPod status: https://status.runpod.io/"
         exit 1
     fi
 }
@@ -1310,6 +1616,20 @@ auto_train_all() {
         exit 1
     fi
 
+    # Validate volume exists and get its datacenter
+    echo -e "${YELLOW}Validating Network Volume...${NC}"
+    if ! validate_volume "$VOLUME_ID"; then
+        exit 1
+    fi
+    echo ""
+
+    # Warn if volume datacenter doesn't match requested datacenter
+    if [ -n "$VOLUME_DATACENTER" ] && [ "$VOLUME_DATACENTER" != "$RUNPOD_DATACENTER" ]; then
+        echo -e "${YELLOW}⚠ WARNING: Volume is in ${VOLUME_DATACENTER}, but --datacenter is ${RUNPOD_DATACENTER}${NC}"
+        echo "  Pods will be created in ${VOLUME_DATACENTER} (same datacenter as volume)"
+        echo ""
+    fi
+
     echo -e "${YELLOW}Press Enter to start the automated pipeline, or Ctrl+C to cancel...${NC}"
     read -r
 
@@ -1327,19 +1647,74 @@ auto_train_all() {
     echo ""
 
     echo -e "${YELLOW}[1/8] Creating data preparation Pod...${NC}"
+    echo "  Image: ${FULL_IMAGE}"
+    echo "  Volume: ${VOLUME_ID}"
+    echo "  Mount: ${VOLUME_MOUNT_PATH}"
+    echo ""
 
-    # Use Secure Cloud with full GPU type IDs for better availability
-    # Priority: RTX A4000 ($0.25), RTX A4500 ($0.25), RTX 4000 Ada ($0.26), RTX A5000 ($0.27), L4 ($0.39)
-    local gpu_list='[\"NVIDIA RTX A4000\", \"NVIDIA RTX A4500\", \"NVIDIA RTX 4000 Ada Generation\", \"NVIDIA RTX A5000\", \"NVIDIA L4\", \"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\"]'
+    # Use Community Cloud with comprehensive GPU type IDs for maximum availability
+    # Ordered by price (cheapest first) based on RunPod community pricing
+    # Note: L4 has communityCloud=false so excluded
+    local gpu_list='["NVIDIA RTX A4000", "NVIDIA RTX A4500", "NVIDIA RTX 4000 Ada Generation", "NVIDIA RTX A5000", "NVIDIA RTX A6000", "NVIDIA GeForce RTX 3070", "NVIDIA GeForce RTX 3080", "NVIDIA GeForce RTX 3080 Ti", "NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 3090 Ti", "NVIDIA GeForce RTX 4070 Ti", "NVIDIA GeForce RTX 4080", "NVIDIA GeForce RTX 4080 SUPER", "NVIDIA GeForce RTX 4090", "NVIDIA RTX 4000 SFF Ada Generation", "NVIDIA RTX 5000 Ada Generation", "NVIDIA RTX 6000 Ada Generation", "NVIDIA L40", "NVIDIA L40S", "NVIDIA RTX A2000", "NVIDIA GeForce RTX 5090"]'
     local data_prep_image="${FULL_IMAGE}"
 
-	    # Override CMD to run data_prep_entrypoint.sh instead of train_entrypoint.sh
-	    local pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-data-prep\\\", imageName: \\\"${data_prep_image}\\\", cloudType: SECURE, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, dockerArgs: \\\"/workspace/runpod/data_prep_entrypoint.sh\\\", env: [ { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"OUTPUT_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data/train_data_final.pt\\\" }, { key: \\\"USE_CURATED_DATA\\\", value: \\\"${USE_CURATED_DATA}\\\" }, { key: \\\"SYNTHETIC_SAMPLES\\\", value: \\\"50000\\\" }, { key: \\\"HF_PUSH_DATASET\\\", value: \\\"${HF_PUSH_DATASET:-false}\\\" }, { key: \\\"HF_DATASET_REPO\\\", value: \\\"${HF_DATASET_REPO:-GesturaAI/stick-gen-dataset}\\\" }, { key: \\\"HF_TOKEN\\\", value: \\\"${HF_TOKEN:-}\\\" }, { key: \\\"GROK_API_KEY\\\", value: \\\"${GROK_API_KEY:-}\\\" } ] }) { id machine { podHostId gpuDisplayName } } }"
+    # Build the mutation as a proper JSON payload (avoid escaping issues)
+    local mutation_json
+    mutation_json=$(cat <<EOF
+{
+  "query": "mutation CreateDataPrepPod(\$input: PodFindAndDeployOnDemandInput!) { podFindAndDeployOnDemand(input: \$input) { id machine { podHostId gpuDisplayName } } }",
+  "variables": {
+    "input": {
+      "name": "stick-gen-data-prep",
+      "imageName": "${data_prep_image}",
+      "cloudType": "${CLOUD_TYPE}",
+      "dataCenterId": "${VOLUME_DATACENTER}",
+      "gpuTypeIdList": ${gpu_list},
+      "gpuCount": 1,
+      "volumeInGb": 0,
+      "containerDiskInGb": 50,
+      "networkVolumeId": "${VOLUME_ID}",
+      "volumeMountPath": "${VOLUME_MOUNT_PATH}",
+      "ports": "22/tcp",
+      "startSsh": true,
+      "dockerArgs": "/workspace/runpod/data_prep_entrypoint.sh",
+      "env": [
+        { "key": "DATA_PATH", "value": "${VOLUME_MOUNT_PATH}/data" },
+        { "key": "OUTPUT_PATH", "value": "${VOLUME_MOUNT_PATH}/data/train_data_final.pt" },
+        { "key": "USE_CURATED_DATA", "value": "${USE_CURATED_DATA:-false}" },
+        { "key": "SYNTHETIC_SAMPLES", "value": "50000" },
+        { "key": "FORCE_REGENERATE", "value": "${FORCE_REGENERATE:-false}" },
+        { "key": "HF_PUSH_DATASET", "value": "${HF_PUSH_DATASET:-false}" },
+        { "key": "HF_DATASET_REPO", "value": "${HF_DATASET_REPO:-GesturaAI/stick-gen-dataset}" },
+        { "key": "HF_TOKEN", "value": "${HF_TOKEN:-}" },
+        { "key": "GROK_API_KEY", "value": "${GROK_API_KEY:-}" }
+      ]
+    }
+  }
+}
+EOF
+)
 
+    # Make the GraphQL request with proper JSON
     local pod_response
-    pod_response=$(runpod_graphql "$pod_query")
+    pod_response=$(curl -s -X POST "${RUNPOD_API_URL}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+        -d "${mutation_json}")
 
     if check_jq; then
+        # Check for errors first
+        local error_msg
+        error_msg=$(echo "$pod_response" | jq -r '.errors[0].message // empty')
+        if [ -n "$error_msg" ] && [ "$error_msg" != "null" ]; then
+            echo -e "${RED}ERROR: API returned error: ${error_msg}${NC}"
+            local error_code
+            error_code=$(echo "$pod_response" | jq -r '.errors[0].extensions.code // empty')
+            if [ -n "$error_code" ]; then
+                echo "  Error code: ${error_code}"
+            fi
+        fi
+
         data_prep_pod_id=$(echo "$pod_response" | jq -r '.data.podFindAndDeployOnDemand.id // empty')
         local gpu_used=$(echo "$pod_response" | jq -r '.data.podFindAndDeployOnDemand.machine.gpuDisplayName // "Unknown"')
     else
@@ -1347,9 +1722,21 @@ auto_train_all() {
         gpu_used="Unknown"
     fi
 
-    if [ -z "$data_prep_pod_id" ]; then
+    if [ -z "$data_prep_pod_id" ] || [ "$data_prep_pod_id" = "null" ]; then
         echo -e "${RED}ERROR: Failed to create data preparation Pod${NC}"
-        echo "$pod_response"
+        echo ""
+        echo "API Response:"
+        if check_jq; then
+            echo "$pod_response" | jq .
+        else
+            echo "$pod_response"
+        fi
+        echo ""
+        echo -e "${YELLOW}Troubleshooting:${NC}"
+        echo "  1. Check if the Docker image is accessible: ${data_prep_image}"
+        echo "  2. Verify GPUs are available in the volume's datacenter"
+        echo "  3. Try running: ./runpod/deploy.sh list-volumes"
+        echo "  4. Check RunPod status: https://status.runpod.io/"
         exit 1
     fi
 
@@ -1404,9 +1791,32 @@ auto_train_all() {
     fi
 
     # =========================================================================
-    # Terminate Data Prep Pod
+    # Verify Data Prep Success Before Proceeding
     # =========================================================================
-    echo -e "${YELLOW}[3/8] Terminating data preparation Pod...${NC}"
+    echo -e "${YELLOW}[3/8] Verifying data preparation results...${NC}"
+
+    # Wait a moment for any final file writes
+    sleep 5
+
+    # Check for failure marker first
+    local failure_marker="${VOLUME_MOUNT_PATH}/data/.prep_failed"
+    local completion_marker="${VOLUME_MOUNT_PATH}/data/.prep_complete"
+    local expected_output="${VOLUME_MOUNT_PATH}/data/curated/pretrain_data_embedded.pt"
+
+    # We can't directly check files on the network volume from the local machine
+    # The best we can do is verify the pod exited cleanly and provide guidance
+    echo "  Note: Cannot verify network volume files directly from local machine."
+    echo ""
+    echo "  Expected files on network volume:"
+    echo "    - Completion marker: ${completion_marker}"
+    echo "    - Training data: ${expected_output}"
+    echo "    - Logs: ${VOLUME_MOUNT_PATH}/data/logs/"
+    echo ""
+    echo "  If training fails, check these files via SSH to a new pod."
+    echo ""
+
+    # Terminate Data Prep Pod
+    echo -e "${YELLOW}Terminating data preparation Pod...${NC}"
     local term_query="mutation { podTerminate(input: { podId: \\\"${data_prep_pod_id}\\\" }) }"
     runpod_graphql "$term_query" > /dev/null 2>&1
     echo -e "${GREEN}  ✓ Data prep Pod terminated${NC}"
@@ -1457,13 +1867,59 @@ auto_train_all() {
         # Create training Pod for this variant
         MODEL_VARIANT="${variant}"
 
-        # Use Secure Cloud with full GPU type IDs for better availability
-        local train_gpu_list='[\"NVIDIA RTX A4000\", \"NVIDIA RTX A4500\", \"NVIDIA RTX 4000 Ada Generation\", \"NVIDIA RTX A5000\", \"NVIDIA L4\", \"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\"]'
-        local train_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-train-${variant}\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: SECURE, gpuTypeIdList: ${train_gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, env: [ { key: \\\"MODEL_VARIANT\\\", value: \\\"${variant}\\\" }, { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"CHECKPOINT_DIR\\\", value: \\\"${VOLUME_MOUNT_PATH}/checkpoints\\\" }, { key: \\\"HF_TOKEN\\\", value: \\\"${HF_TOKEN:-}\\\" }, { key: \\\"GROK_API_KEY\\\", value: \\\"${GROK_API_KEY:-}\\\" }, { key: \\\"HF_REPO_NAME\\\", value: \\\"${HF_REPO_NAME:-GesturaAI/stick-gen}\\\" }, { key: \\\"AUTO_PUSH\\\", value: \\\"true\\\" }, { key: \\\"AUTO_CLEANUP\\\", value: \\\"true\\\" }, { key: \\\"VERSION\\\", value: \\\"${VERSION:-1.0.0}\\\" } ] }) { id machine { gpuDisplayName } } }"
+        # Use Community Cloud with full GPU type IDs for better availability
+        local train_gpu_list='["NVIDIA RTX A4000", "NVIDIA RTX A4500", "NVIDIA RTX 4000 Ada Generation", "NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 5090"]'
 
-        local train_response=$(runpod_graphql "$train_query")
+        # Build the mutation as a proper JSON payload
+        local train_mutation_json
+        train_mutation_json=$(cat <<EOF
+{
+  "query": "mutation CreateTrainingPod(\$input: PodFindAndDeployOnDemandInput!) { podFindAndDeployOnDemand(input: \$input) { id machine { gpuDisplayName } } }",
+  "variables": {
+    "input": {
+      "name": "stick-gen-train-${variant}",
+      "imageName": "${FULL_IMAGE}",
+      "cloudType": "${CLOUD_TYPE}",
+      "dataCenterId": "${VOLUME_DATACENTER}",
+      "gpuTypeIdList": ${train_gpu_list},
+      "gpuCount": 1,
+      "volumeInGb": 0,
+      "containerDiskInGb": 50,
+      "networkVolumeId": "${VOLUME_ID}",
+      "volumeMountPath": "${VOLUME_MOUNT_PATH}",
+      "ports": "22/tcp",
+      "startSsh": true,
+      "env": [
+        { "key": "MODEL_VARIANT", "value": "${variant}" },
+        { "key": "DATA_PATH", "value": "${VOLUME_MOUNT_PATH}/data" },
+        { "key": "CHECKPOINT_DIR", "value": "${VOLUME_MOUNT_PATH}/checkpoints" },
+        { "key": "HF_TOKEN", "value": "${HF_TOKEN:-}" },
+        { "key": "GROK_API_KEY", "value": "${GROK_API_KEY:-}" },
+        { "key": "HF_REPO_NAME", "value": "${HF_REPO_NAME:-GesturaAI/stick-gen}" },
+        { "key": "AUTO_PUSH", "value": "true" },
+        { "key": "AUTO_CLEANUP", "value": "true" },
+        { "key": "VERSION", "value": "${VERSION:-1.0.0}" }
+      ]
+    }
+  }
+}
+EOF
+)
+
+        local train_response
+        train_response=$(curl -s -X POST "${RUNPOD_API_URL}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+            -d "${train_mutation_json}")
 
         if check_jq; then
+            # Check for errors first
+            local error_msg
+            error_msg=$(echo "$train_response" | jq -r '.errors[0].message // empty')
+            if [ -n "$error_msg" ] && [ "$error_msg" != "null" ]; then
+                echo -e "${RED}  ERROR: API returned error: ${error_msg}${NC}"
+            fi
+
             training_pod_id=$(echo "$train_response" | jq -r '.data.podFindAndDeployOnDemand.id // empty')
             gpu_used=$(echo "$train_response" | jq -r '.data.podFindAndDeployOnDemand.machine.gpuDisplayName // "Unknown"')
         else
@@ -1471,8 +1927,13 @@ auto_train_all() {
             gpu_used="Unknown"
         fi
 
-        if [ -z "$training_pod_id" ]; then
+        if [ -z "$training_pod_id" ] || [ "$training_pod_id" = "null" ]; then
             echo -e "${RED}  ERROR: Failed to create training Pod for ${variant}${NC}"
+            if check_jq; then
+                echo "$train_response" | jq .
+            else
+                echo "$train_response"
+            fi
             continue
         fi
 
@@ -1552,6 +2013,21 @@ auto_train_all() {
 full_deploy() {
     check_runpod_api_key
     print_header
+
+    # Auto-select best datacenter if not specified
+    if [ "$RUNPOD_DATACENTER" == "auto" ]; then
+        echo -e "${CYAN}No datacenter specified - searching for best option...${NC}"
+        echo ""
+        if find_best_datacenter; then
+            RUNPOD_DATACENTER="$BEST_DATACENTER"
+            echo -e "${GREEN}Selected datacenter: ${RUNPOD_DATACENTER}${NC}"
+            echo ""
+        else
+            echo -e "${RED}ERROR: Could not find any available datacenter${NC}"
+            echo "  Try specifying a datacenter manually with --datacenter"
+            exit 1
+        fi
+    fi
 
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║     Full Deployment Pipeline                               ║${NC}"
@@ -1726,9 +2202,10 @@ full_deploy() {
 
     step_start=$(date +%s)
     echo ""
-    echo -e "${YELLOW}[4/9] Uploading training data via S3 API...${NC}"
+    echo -e "${YELLOW}[4/9] Uploading training data via S3 API (file-by-file)...${NC}"
     echo "  Source: ${DATA_DIR} (${data_size})"
     echo "  Destination: s3://${VOLUME_ID}/data/"
+    echo "  Method: File-by-file upload (avoids S3 LIST API pagination issues)"
     echo ""
 
     if [ -z "${RUNPOD_S3_ACCESS_KEY:-}" ] || [ -z "${RUNPOD_S3_SECRET_KEY:-}" ]; then
@@ -1748,27 +2225,35 @@ full_deploy() {
     echo "  Region: ${s3_region}"
     echo ""
 
-    # Configure AWS CLI for RunPod S3 compatibility
-    # Reduce multipart threshold/chunksize to avoid "InvalidPart" errors
-    echo "  Configuring S3 transfer settings..."
-    aws configure set default.s3.multipart_threshold 64MB
-    aws configure set default.s3.multipart_chunksize 16MB
-    aws configure set default.s3.max_concurrent_requests 4
-    aws configure set default.s3.max_queue_size 100
+    # Use file-by-file upload to avoid S3 LIST API pagination bugs with large directories
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    export AWS_RETRY_MODE=adaptive
-    export AWS_MAX_ATTEMPTS=5
-
-    # Run S3 upload with retries
-    local upload_retry=0
-    local upload_max_retries=3
-    local upload_success=false
-
-    while [ $upload_retry -lt $upload_max_retries ] && [ "$upload_success" = "false" ]; do
-        if [ $upload_retry -gt 0 ]; then
-            echo -e "${YELLOW}  Retry attempt ${upload_retry}/${upload_max_retries}...${NC}"
-            sleep 5
+    if [ -x "${script_dir}/upload_all_by_file.sh" ]; then
+        # Use the dedicated file-by-file upload script
+        if "${script_dir}/upload_all_by_file.sh" \
+            --volume-id "${VOLUME_ID}" \
+            --datacenter "${RUNPOD_DATACENTER}"; then
+            echo ""
+            echo -e "${GREEN}  ✓ Training data uploaded successfully${NC}"
+        else
+            echo -e "${RED}ERROR: S3 upload failed${NC}"
+            echo ""
+            echo "Troubleshooting:"
+            echo "  1. Re-run - already uploaded files will be skipped"
+            echo "  2. Try uploading specific directories:"
+            echo "     ./runpod/upload_by_file.sh --volume-id ${VOLUME_ID} --dir amass"
+            echo "  3. Check network stability"
+            exit 1
         fi
+    else
+        echo -e "${YELLOW}WARNING: upload_all_by_file.sh not found, using aws s3 sync fallback${NC}"
+        echo ""
+
+        # Fallback to aws s3 sync (may fail with many files)
+        aws configure set default.s3.multipart_threshold 64MB
+        aws configure set default.s3.multipart_chunksize 16MB
+        aws configure set default.s3.max_concurrent_requests 4
 
         if AWS_ACCESS_KEY_ID="${RUNPOD_S3_ACCESS_KEY}" \
              AWS_SECRET_ACCESS_KEY="${RUNPOD_S3_SECRET_KEY}" \
@@ -1778,24 +2263,13 @@ full_deploy() {
              --cli-read-timeout 300 \
              --cli-connect-timeout 60 \
              --no-progress; then
-            upload_success=true
+            echo -e "${GREEN}  ✓ Training data uploaded successfully${NC}"
         else
-            upload_retry=$((upload_retry + 1))
+            echo -e "${RED}ERROR: S3 upload failed${NC}"
+            exit 1
         fi
-    done
-
-    if [ "$upload_success" = "false" ]; then
-        echo -e "${RED}ERROR: S3 upload failed after ${upload_max_retries} attempts${NC}"
-        echo ""
-        echo "Troubleshooting:"
-        echo "  1. Re-run this command - 'sync' will resume from where it left off"
-        echo "  2. Try smaller chunks: aws configure set default.s3.multipart_chunksize 8MB"
-        echo "  3. Check network stability"
-        exit 1
     fi
 
-    echo ""
-    echo -e "${GREEN}  ✓ Training data uploaded successfully${NC}"
     step_times+=("Upload: $(($(date +%s) - step_start))s")
 
     # =========================================================================
@@ -1809,16 +2283,67 @@ full_deploy() {
 
     step_start=$(date +%s)
     echo -e "${YELLOW}[5/9] Creating data preparation Pod...${NC}"
+    echo "  Image: ${FULL_IMAGE}"
+    echo "  Volume: ${VOLUME_ID}"
+    echo ""
 
-	    local gpu_list='[\"NVIDIA GeForce RTX 3090\", \"NVIDIA GeForce RTX 4090\", \"NVIDIA GeForce RTX 4080\", \"NVIDIA RTX A4000\", \"NVIDIA L4\"]'
-	    local data_prep_pod_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-data-prep\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: COMMUNITY, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, dockerArgs: \\\"/workspace/runpod/data_prep_entrypoint.sh\\\", env: [ { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"OUTPUT_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data/train_data_final.pt\\\" }, { key: \\\"USE_CURATED_DATA\\\", value: \\\"${USE_CURATED_DATA}\\\" }, { key: \\\"SYNTHETIC_SAMPLES\\\", value: \\\"50000\\\" }, { key: \\\"HF_PUSH_DATASET\\\", value: \\\"${HF_PUSH_DATASET:-false}\\\" }, { key: \\\"HF_DATASET_REPO\\\", value: \\\"${HF_DATASET_REPO:-GesturaAI/stick-gen-dataset}\\\" }, { key: \\\"HF_TOKEN\\\", value: \\\"${HF_TOKEN:-}\\\" }, { key: \\\"GROK_API_KEY\\\", value: \\\"${GROK_API_KEY:-}\\\" } ] }) { id machine { podHostId gpuDisplayName } } }"
+    # Use Community Cloud with full GPU type IDs for better availability
+    local gpu_list='["NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 4080", "NVIDIA RTX A4000", "NVIDIA L4", "NVIDIA GeForce RTX 5090"]'
 
+    # Build the mutation as a proper JSON payload (avoid escaping issues)
+    local mutation_json
+    mutation_json=$(cat <<EOF
+{
+  "query": "mutation CreateDataPrepPod(\$input: PodFindAndDeployOnDemandInput!) { podFindAndDeployOnDemand(input: \$input) { id machine { podHostId gpuDisplayName } } }",
+  "variables": {
+    "input": {
+      "name": "stick-gen-data-prep",
+      "imageName": "${FULL_IMAGE}",
+      "cloudType": "${CLOUD_TYPE}",
+      "dataCenterId": "${VOLUME_DATACENTER}",
+      "gpuTypeIdList": ${gpu_list},
+      "gpuCount": 1,
+      "volumeInGb": 0,
+      "containerDiskInGb": 50,
+      "networkVolumeId": "${VOLUME_ID}",
+      "volumeMountPath": "${VOLUME_MOUNT_PATH}",
+      "ports": "22/tcp",
+      "startSsh": true,
+      "dockerArgs": "/workspace/runpod/data_prep_entrypoint.sh",
+      "env": [
+        { "key": "DATA_PATH", "value": "${VOLUME_MOUNT_PATH}/data" },
+        { "key": "OUTPUT_PATH", "value": "${VOLUME_MOUNT_PATH}/data/train_data_final.pt" },
+        { "key": "USE_CURATED_DATA", "value": "${USE_CURATED_DATA:-false}" },
+        { "key": "SYNTHETIC_SAMPLES", "value": "50000" },
+        { "key": "FORCE_REGENERATE", "value": "${FORCE_REGENERATE:-false}" },
+        { "key": "HF_PUSH_DATASET", "value": "${HF_PUSH_DATASET:-false}" },
+        { "key": "HF_DATASET_REPO", "value": "${HF_DATASET_REPO:-GesturaAI/stick-gen-dataset}" },
+        { "key": "HF_TOKEN", "value": "${HF_TOKEN:-}" },
+        { "key": "GROK_API_KEY", "value": "${GROK_API_KEY:-}" }
+      ]
+    }
+  }
+}
+EOF
+)
+
+    # Make the GraphQL request with proper JSON
     local data_prep_response
-    data_prep_response=$(runpod_graphql "$data_prep_pod_query")
+    data_prep_response=$(curl -s -X POST "${RUNPOD_API_URL}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+        -d "${mutation_json}")
 
     local data_prep_pod_id
     local gpu_used
     if check_jq; then
+        # Check for errors first
+        local error_msg
+        error_msg=$(echo "$data_prep_response" | jq -r '.errors[0].message // empty')
+        if [ -n "$error_msg" ] && [ "$error_msg" != "null" ]; then
+            echo -e "${RED}ERROR: API returned error: ${error_msg}${NC}"
+        fi
+
         data_prep_pod_id=$(echo "$data_prep_response" | jq -r '.data.podFindAndDeployOnDemand.id // empty')
         gpu_used=$(echo "$data_prep_response" | jq -r '.data.podFindAndDeployOnDemand.machine.gpuDisplayName // "Unknown"')
     else
@@ -1826,9 +2351,20 @@ full_deploy() {
         gpu_used="Unknown"
     fi
 
-    if [ -z "$data_prep_pod_id" ]; then
+    if [ -z "$data_prep_pod_id" ] || [ "$data_prep_pod_id" = "null" ]; then
         echo -e "${RED}ERROR: Failed to create data preparation Pod${NC}"
-        echo "$data_prep_response"
+        echo ""
+        echo "API Response:"
+        if check_jq; then
+            echo "$data_prep_response" | jq .
+        else
+            echo "$data_prep_response"
+        fi
+        echo ""
+        echo -e "${YELLOW}Troubleshooting:${NC}"
+        echo "  1. Check if the Docker image is accessible: ${FULL_IMAGE}"
+        echo "  2. Verify GPUs are available in the volume's datacenter"
+        echo "  3. Check RunPod status: https://status.runpod.io/"
         exit 1
     fi
 
@@ -1923,13 +2459,60 @@ full_deploy() {
         step_start=$(date +%s)
         echo -e "${YELLOW}[${variant_step}/${total_steps}] Training ${variant} model...${NC}"
 
-        local train_query="mutation { podFindAndDeployOnDemand(input: { name: \\\"stick-gen-train-${variant}\\\", imageName: \\\"${FULL_IMAGE}\\\", cloudType: COMMUNITY, gpuTypeIdList: ${gpu_list}, gpuCount: 1, volumeInGb: 0, containerDiskInGb: 50, networkVolumeId: \\\"${VOLUME_ID}\\\", volumeMountPath: \\\"${VOLUME_MOUNT_PATH}\\\", ports: \\\"22/tcp\\\", startSsh: true, env: [ { key: \\\"MODEL_VARIANT\\\", value: \\\"${variant}\\\" }, { key: \\\"DATA_PATH\\\", value: \\\"${VOLUME_MOUNT_PATH}/data\\\" }, { key: \\\"CHECKPOINT_DIR\\\", value: \\\"${VOLUME_MOUNT_PATH}/checkpoints\\\" }, { key: \\\"HF_TOKEN\\\", value: \\\"${HF_TOKEN:-}\\\" }, { key: \\\"GROK_API_KEY\\\", value: \\\"${GROK_API_KEY:-}\\\" }, { key: \\\"HF_REPO_NAME\\\", value: \\\"${HF_REPO_NAME:-GesturaAI/stick-gen}\\\" }, { key: \\\"AUTO_PUSH\\\", value: \\\"true\\\" }, { key: \\\"AUTO_CLEANUP\\\", value: \\\"true\\\" }, { key: \\\"VERSION\\\", value: \\\"${VERSION:-1.0.0}\\\" } ] }) { id machine { gpuDisplayName } } }"
+        # Use Community Cloud with full GPU type IDs for better availability
+        local train_gpu_list='["NVIDIA RTX A4000", "NVIDIA RTX A4500", "NVIDIA RTX 4000 Ada Generation", "NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA GeForce RTX 3090", "NVIDIA GeForce RTX 4090", "NVIDIA GeForce RTX 5090"]'
+
+        # Build the mutation as a proper JSON payload
+        local train_mutation_json
+        train_mutation_json=$(cat <<EOF
+{
+  "query": "mutation CreateTrainingPod(\$input: PodFindAndDeployOnDemandInput!) { podFindAndDeployOnDemand(input: \$input) { id machine { gpuDisplayName } } }",
+  "variables": {
+    "input": {
+      "name": "stick-gen-train-${variant}",
+      "imageName": "${FULL_IMAGE}",
+      "cloudType": "${CLOUD_TYPE}",
+      "dataCenterId": "${VOLUME_DATACENTER}",
+      "gpuTypeIdList": ${train_gpu_list},
+      "gpuCount": 1,
+      "volumeInGb": 0,
+      "containerDiskInGb": 50,
+      "networkVolumeId": "${VOLUME_ID}",
+      "volumeMountPath": "${VOLUME_MOUNT_PATH}",
+      "ports": "22/tcp",
+      "startSsh": true,
+      "env": [
+        { "key": "MODEL_VARIANT", "value": "${variant}" },
+        { "key": "DATA_PATH", "value": "${VOLUME_MOUNT_PATH}/data" },
+        { "key": "CHECKPOINT_DIR", "value": "${VOLUME_MOUNT_PATH}/checkpoints" },
+        { "key": "HF_TOKEN", "value": "${HF_TOKEN:-}" },
+        { "key": "GROK_API_KEY", "value": "${GROK_API_KEY:-}" },
+        { "key": "HF_REPO_NAME", "value": "${HF_REPO_NAME:-GesturaAI/stick-gen}" },
+        { "key": "AUTO_PUSH", "value": "true" },
+        { "key": "AUTO_CLEANUP", "value": "true" },
+        { "key": "VERSION", "value": "${VERSION:-1.0.0}" }
+      ]
+    }
+  }
+}
+EOF
+)
 
         local train_response
-        train_response=$(runpod_graphql "$train_query")
+        train_response=$(curl -s -X POST "${RUNPOD_API_URL}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
+            -d "${train_mutation_json}")
 
         local training_pod_id
         if check_jq; then
+            # Check for errors first
+            local error_msg
+            error_msg=$(echo "$train_response" | jq -r '.errors[0].message // empty')
+            if [ -n "$error_msg" ] && [ "$error_msg" != "null" ]; then
+                echo -e "${RED}  ERROR: API returned error: ${error_msg}${NC}"
+            fi
+
             training_pod_id=$(echo "$train_response" | jq -r '.data.podFindAndDeployOnDemand.id // empty')
             gpu_used=$(echo "$train_response" | jq -r '.data.podFindAndDeployOnDemand.machine.gpuDisplayName // "Unknown"')
         else
@@ -1937,8 +2520,13 @@ full_deploy() {
             gpu_used="Unknown"
         fi
 
-        if [ -z "$training_pod_id" ]; then
+        if [ -z "$training_pod_id" ] || [ "$training_pod_id" = "null" ]; then
             echo -e "${RED}  ERROR: Failed to create training Pod for ${variant}${NC}"
+            if check_jq; then
+                echo "$train_response" | jq .
+            else
+                echo "$train_response"
+            fi
             continue
         fi
 
@@ -2405,13 +2993,17 @@ case $ACTION in
         echo "  --variant small|medium|large Model variant for single commands (default: medium)"
         echo "  --version VERSION            Image version tag (default: latest)"
         echo "  --volume-id ID               Network Volume ID"
-        echo "  --volume-size GB             Volume size in GB (default: 200)"
-        echo "  --datacenter ID              Data center ID (default: EU-CZ-1)"
-        echo "                               Options: US-TX-3, US-CA-1, EU-NL-1, EU-CZ-1, etc."
+        echo "  --volume-size GB             Volume size in GB (default: 300)"
+        echo "  --datacenter ID              Data center ID (default: auto)"
+        echo "                               Use 'auto' to find best datacenter by availability/price"
+        echo "                               Options: auto, US-TX-3, US-CA-1, EU-NL-1, EU-CZ-1, etc."
         echo "                               NOTE: Pods MUST be in same datacenter as Network Volume!"
         echo "  --gpu GPU_TYPE               GPU type (default: NVIDIA RTX A4000)"
         echo "  --data-dir PATH              Data directory (default: ./data)"
         echo "  --curated                    Use curated data prep pipeline"
+        echo "  --force-regenerate           Force regeneration of training data (overwrite existing)"
+        echo "  --secure-cloud               Use Secure Cloud (dedicated, T4 compliant, higher cost)"
+        echo "  --community-cloud            Use Community Cloud (shared, lower cost, default)"
         echo "  --endpoint-id ID             Serverless endpoint ID"
         echo "  --workers-min N              Min workers for serverless (default: 0)"
         echo "  --workers-max N              Max workers for serverless (default: 3)"
@@ -2427,20 +3019,27 @@ case $ACTION in
         echo ""
         echo -e "${YELLOW}Examples:${NC}"
         echo ""
-        echo "  # Train small + medium models (recommended for first-time, ~\$50)"
+        echo "  # Auto-select best datacenter (recommended - finds best price/availability)"
+        echo "  ./runpod/deploy.sh --models small,medium"
+        echo ""
+        echo "  # Train small + medium models with specific datacenter"
         echo "  ./runpod/deploy.sh --datacenter EU-CZ-1 --models small,medium"
         echo ""
         echo "  # Train large model only (requires A100, ~\$165)"
         echo "  ./runpod/deploy.sh --datacenter EU-CZ-1 --models large --gpu 'NVIDIA A100 PCIe'"
         echo ""
         echo "  # Train all models (small, medium, large, ~\$215)"
-        echo "  ./runpod/deploy.sh --datacenter EU-CZ-1 --models all"
+        echo "  ./runpod/deploy.sh --models all"
         echo ""
         echo "  # With existing volume (skip volume creation + data upload)"
         echo "  ./runpod/deploy.sh auto-train-all --volume-id vol_xxxxx --models small,medium"
         echo ""
-        echo "  # Explicit full-deploy action"
-        echo "  ./runpod/deploy.sh full-deploy --datacenter EU-CZ-1 --volume-size 200 --models all"
+        echo "  # Explicit full-deploy action with auto datacenter"
+        echo "  ./runpod/deploy.sh full-deploy --volume-size 300 --models all"
+        echo ""
+        echo "  # Force regenerate training data (overwrite previous)"
+        echo "  ./runpod/deploy.sh prep-data --volume-id vol_xxxxx --force-regenerate"
+        echo "  ./runpod/deploy.sh auto-train-all --volume-id vol_xxxxx --force-regenerate"
         exit 0
         ;;
 
