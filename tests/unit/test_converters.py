@@ -175,3 +175,97 @@ def test_beat_emotion_mapping_complete():
     for emotion in expected_emotions:
         assert emotion in BEAT_EMOTION_TO_ACTION
         assert isinstance(BEAT_EMOTION_TO_ACTION[emotion], ActionType)
+
+
+# --- Backward Compatibility Tests ---
+
+
+def test_sample_without_enhanced_meta_validates():
+    """Samples without enhanced_meta should still validate correctly."""
+    import torch
+
+    from src.data_gen.validator import DataValidator
+
+    # Create a minimal valid sample without enhanced_meta (pre-enhancement format)
+    sample = {
+        "motion": torch.randn(100, 20),
+        "physics": torch.randn(100, 6),
+        "actions": torch.zeros(100, dtype=torch.long),
+        "camera": torch.zeros(100, 3),
+        "description": "A person walking",
+        "source": "test",
+        "meta": {"fps": 25},
+        # No enhanced_meta field
+    }
+
+    validator = DataValidator(fps=25)
+    is_valid, score, reason = validator.validate(sample)
+
+    # Should still validate (enhanced_meta is optional)
+    assert is_valid or "physics" in reason.lower() or "skeleton" in reason.lower()
+
+
+def test_sample_with_enhanced_meta_validates():
+    """Samples with valid enhanced_meta should validate correctly."""
+    import torch
+
+    from src.data_gen.metadata_extractors import build_enhanced_metadata
+    from src.data_gen.validator import DataValidator
+
+    motion = torch.randn(100, 20)
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=25,
+        description="A person walking",
+        original_fps=30,
+        original_num_frames=120,
+    )
+
+    sample = {
+        "motion": motion,
+        "physics": torch.randn(100, 6) * 0.1,  # Small values to pass physics checks
+        "actions": torch.zeros(100, dtype=torch.long),
+        "camera": torch.zeros(100, 3),
+        "description": "A person walking",
+        "source": "test",
+        "meta": {"fps": 25},
+        "enhanced_meta": enhanced_meta.model_dump(),
+    }
+
+    validator = DataValidator(fps=25)
+    is_valid, score, reason = validator.validate(sample)
+
+    # Should validate metadata ranges
+    assert "motion style range error" not in reason.lower()
+    assert "temporal metadata error" not in reason.lower()
+    assert "quality range error" not in reason.lower()
+
+
+def test_enhanced_meta_with_invalid_ranges_fails():
+    """Samples with out-of-range enhanced_meta values should fail validation."""
+    import torch
+
+    from src.data_gen.validator import DataValidator
+
+    sample = {
+        "motion": torch.randn(100, 20),
+        "physics": torch.randn(100, 6) * 0.1,
+        "actions": torch.zeros(100, dtype=torch.long),
+        "enhanced_meta": {
+            "motion_style": {
+                "tempo": 1.5,  # Invalid: > 1.0
+                "energy_level": 0.5,
+                "smoothness": 0.5,
+            },
+            "temporal": None,
+            "quality": None,
+        },
+    }
+
+    validator = DataValidator(fps=25)
+    is_valid, score, reason = validator.check_enhanced_metadata(
+        sample["enhanced_meta"]
+    )
+
+    assert not is_valid
+    assert "motion style range error" in reason.lower()

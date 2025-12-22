@@ -72,7 +72,7 @@ def test_dataset_init_and_getitem_pil(tmp_path: Path) -> None:
     )
 
     assert len(ds) == 1
-    image, motion_frame, camera_pose, text, action = ds[0]
+    image, motion_frame, camera_pose, text, action, env_type = ds[0]
 
     assert image.shape == (3, 16, 16)
     assert torch.is_floating_point(image)
@@ -81,6 +81,7 @@ def test_dataset_init_and_getitem_pil(tmp_path: Path) -> None:
     assert isinstance(text, str) and text == "test sample"
     assert isinstance(action, torch.Tensor) and action.dtype == torch.long
     assert ds.index[0]["view_id"] == 7
+    assert isinstance(env_type, str)  # environment_type is now returned
 
 
 def test_dataset_image_backend_torchvision(tmp_path: Path) -> None:
@@ -95,7 +96,7 @@ def test_dataset_image_backend_torchvision(tmp_path: Path) -> None:
         image_backend="torchvision",
     )
 
-    image, _motion_frame, _camera_pose, _text, _action = ds[0]
+    image, _motion_frame, _camera_pose, _text, _action, _env_type = ds[0]
     assert image.shape == (3, 8, 8)
 
 
