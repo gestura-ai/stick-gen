@@ -23,6 +23,13 @@ from src.data_gen.curation import (
     load_canonical_datasets,
 )
 
+# Import centralized paths config
+try:
+    from src.config.paths import get_path
+    DEFAULT_OUTPUT_DIR = str(get_path("curated"))
+except ImportError:
+    DEFAULT_OUTPUT_DIR = "data/curated"
+
 
 def run_curation(input_paths: list[str], output_dir: str, cfg: CurationConfig) -> None:
     samples = load_canonical_datasets(input_paths)
@@ -58,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="data/curated",
+        default=DEFAULT_OUTPUT_DIR,
         help="Directory to write curated splits and stats",
     )
     parser.add_argument(

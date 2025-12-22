@@ -24,6 +24,17 @@ def main_generate_animation(argv=None):
         "--output", "-o", type=str, default="output.mp4", help="Output video path"
     )
     parser.add_argument(
+        "--image",
+        "-i",
+        type=str,
+        default=None,
+        help=(
+            "Optional path to a 2.5D stick-figure image to condition motion "
+            "generation. When provided, the transformer runs in image-"
+            "conditioned mode."
+        ),
+    )
+    parser.add_argument(
         "--model",
         "-m",
         type=str,
@@ -60,13 +71,25 @@ def main_generate_animation(argv=None):
     )
 
     generator = InferenceGenerator(model_path=args.model)
-    generator.generate(
-        prompt=args.prompt,
-        output_path=args.output,
-        style=args.style,
-        camera_mode=args.camera,
-        use_llm=args.story_mode,
-    )
+
+    # If an image is provided, run image-conditioned inference by default.
+    if args.image:
+        generator.generate_from_image(
+            image_path=args.image,
+            prompt=args.prompt,
+            output_path=args.output,
+            refine=None,
+            style=args.style,
+            camera_mode=args.camera,
+        )
+    else:
+        generator.generate(
+            prompt=args.prompt,
+            output_path=args.output,
+            style=args.style,
+            camera_mode=args.camera,
+            use_llm=args.story_mode,
+        )
 
     print(f"Success! Video saved to {args.output}")
 

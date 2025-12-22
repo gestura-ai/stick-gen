@@ -240,16 +240,39 @@ def load_amass_data(
     return sequences
 
 
-def generate_synthetic_data(num_samples: int, target_frames: int = 250) -> list:
-    """Generate synthetic training data with camera trajectories."""
+def generate_synthetic_data(
+    num_samples: int,
+    target_frames: int = 250,
+    output_dir: str = None,
+    force: bool = False,
+) -> list:
+    """Generate synthetic training data with camera trajectories.
+
+    Args:
+        num_samples: Number of synthetic samples to generate
+        target_frames: Target frames per sequence (unused - configured in base.yaml)
+        output_dir: Output directory for intermediate files (default: "data")
+        force: If True, regenerate data even if it already exists
+    """
+    # Note: target_frames is configured via configs/base.yaml data_generation.sequence
+    # settings, so the parameter here is kept for backwards compatibility only.
+    del target_frames  # Parameter kept for backwards compatibility
     from src.data_gen.dataset_generator import generate_dataset
 
-    output_path = "data/synthetic_data.pt"
+    # Use provided output_dir or default to "data"
+    if output_dir is None:
+        output_dir = "data"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "synthetic_data.pt")
 
-    # Check if already generated
-    if os.path.exists(output_path):
+    # Check if already generated (skip if force=True)
+    if os.path.exists(output_path) and not force:
         print(f"Loading pre-generated synthetic data from {output_path}")
         return torch.load(output_path)
+
+    if force and os.path.exists(output_path):
+        print(f"Force mode: removing existing {output_path}")
+        os.remove(output_path)
 
     print(f"Generating {num_samples} synthetic samples...")
     generate_dataset(num_samples=num_samples, output_path=output_path, augment=True)
@@ -519,6 +542,13 @@ def main():
         default="BAAI/bge-large-en-v1.5",
         help="Text embedding model",
     )
+    parser.add_argument(
+        "--force",
+        "--overwrite",
+        action="store_true",
+        dest="force",
+        help="Force regeneration of all data, overwriting existing files",
+    )
 
     args = parser.parse_args()
 
@@ -569,8 +599,12 @@ def main():
     # Step 3: Generate synthetic data
     if not args.skip_synthetic:
         print(f"\n[3/5] Generating {args.synthetic_samples} synthetic samples")
+        if args.force:
+            print("  Force mode: will overwrite existing data")
+        # Use the same directory as the output file for intermediate files
+        output_dir = os.path.dirname(args.output) if os.path.dirname(args.output) else "data"
         synthetic_data = generate_synthetic_data(
-            args.synthetic_samples, args.target_frames
+            args.synthetic_samples, args.target_frames, output_dir=output_dir, force=args.force
         )
         print(f"  Generated {len(synthetic_data)} synthetic samples")
     else:
