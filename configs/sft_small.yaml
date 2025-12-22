@@ -74,9 +74,9 @@ diffusion:
 
 # Dataset Paths (SFT uses curated SFT dataset)
 data:
-  train_data: "data/curated/sft_data_embedded.pt"  # Default to SFT dataset
-  curated_pretrain_data: "data/curated/pretrain_data_embedded.pt"
-  curated_sft_data: "data/curated/sft_data_embedded.pt"
+  train_data: "generation/curated/sft_data_embedded.pt"  # Default to SFT dataset
+  curated_pretrain_data: "generation/curated/pretrain_data_embedded.pt"
+  curated_sft_data: "generation/curated/sft_data_embedded.pt"
   checkpoint_dir: "checkpoints/sft_small"
   log_dir: "logs/sft_small"
   use_parallax_augmentation: true            # Master switch for 2.5D parallax training

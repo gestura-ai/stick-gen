@@ -1,0 +1,128 @@
+# Stick-Gen Base Configuration
+# Default configuration for data generation and general use
+# This file serves as the fallback configuration when no specific variant is specified
+#
+# For training, prefer using variant-specific configs:
+#   - small.yaml: 7.2M params, lightweight, edge deployment
+#   - medium.yaml: 20.6M params, recommended default
+#   - large.yaml: 44.6M params, highest quality
+
+# Model Variant Metadata
+metadata:
+  variant: "base"
+  display_name: "Stick-Gen Base"
+  description: "Default configuration for data generation and general use"
+
+# Model Architecture (using medium as default)
+model:
+  input_dim: 20           # 10 joints × 2 coords
+  d_model: 384            # Transformer hidden dimension
+  nhead: 12               # Number of attention heads
+  num_layers: 8           # Number of transformer layers
+  output_dim: 20          # Same as input_dim
+  embedding_dim: 1024     # Text embedding dimension (BAAI/bge-large-en-v1.5)
+  dropout: 0.1            # Dropout rate
+  num_actions: 64         # Number of action classes
+  image_encoder_arch: "lightweight_cnn"  # Options: "lightweight_cnn", "resnet", "mini_vit"
+  fusion_strategy: "gated"               # Options: "concat", "gated", "film", "cross_attention"
+
+# Training Settings
+training:
+  batch_size: 2           # Batch size (reduce if OOM)
+  grad_accum_steps: 32    # Gradient accumulation steps
+  epochs: 50              # Number of training epochs
+  learning_rate: 0.0003   # Initial learning rate
+  warmup_epochs: 10       # Number of warmup epochs
+  max_grad_norm: 1.0      # Gradient clipping threshold
+  resume_from: null       # Optional: checkpoint path for continued pretraining
+
+# Loss Weights
+loss_weights:
+  temporal: 0.1           # Temporal consistency loss weight
+  action: 0.15            # Action prediction loss weight
+  physics: 0.2            # Physics loss weight
+  diff_physics: 0.1       # Differentiable physics loss weight
+  diffusion: 0.1          # Diffusion refinement loss weight
+
+# Physics Settings
+physics:
+  enabled: true           # Enable physics-aware training
+  velocity_weight: 1.0    # Velocity loss weight
+  acceleration_weight: 0.5  # Acceleration loss weight
+  momentum_weight: 0.3    # Momentum loss weight
+
+# Diffusion Settings
+diffusion:
+  enabled: true           # Enable diffusion refinement
+  learning_rate: 0.0001   # Diffusion model learning rate
+  timesteps: 1000         # Number of diffusion timesteps
+
+# Dataset Paths
+data:
+  train_data: "data/train_data_final.pt"
+  curated_pretrain_data: "generation/curated/pretrain_data_embedded.pt"
+  curated_sft_data: "generation/curated/sft_data_embedded.pt"
+  checkpoint_dir: "checkpoints"
+  log_dir: "logs"
+  use_parallax_augmentation: true
+  parallax_root: "data/2.5d_parallax"
+  parallax_image_size: [256, 256]
+  image_backend: "pil"
+
+# Data Generation Settings (primary use of this config)
+data_generation:
+  num_samples: 50000           # Number of base samples to generate
+  output_path: "data/train_data.pt"
+  embedded_path: "data/train_data_embedded.pt"
+  merged_path: "data/train_data_merged.pt"
+  augmentation:
+    enabled: true              # Enable data augmentation
+    multiplier: 4              # Augmentation multiplier (4x = speed, position, scale, mirror)
+  sequence:
+    duration_seconds: 10.0     # Sequence duration in seconds
+    fps: 25                    # Frames per second
+    max_actors: 3              # Maximum actors per scene
+  llm:
+    use_mock: true             # Use mock LLM (set false to enable real Grok API)
+    llm_ratio: 0.2             # Ratio of LLM-generated scenes (0.0 to 1.0)
+
+# Data Curation Settings
+data_curation:
+  merge:
+    balance_sources: true
+    max_source_fraction: 0.3
+    filter_artifacts: true
+    max_artifact_score: 0.4
+    min_frames: 25
+    max_frames: 500
+  curation:
+    min_quality_pretrain: 0.5
+    min_quality_sft: 0.8
+    min_camera_stability_sft: 0.6
+    balance_max_fraction: 0.3
+
+# Device Settings
+device:
+  type: "auto"            # "auto", "cpu", "cuda", or "mps"
+  num_workers: 0          # DataLoader workers
+  pin_memory: false       # Pin memory for faster GPU transfer
+
+# Logging Settings
+logging:
+  level: "INFO"
+  log_interval: 10
+  save_interval: 5
+  verbose_file: "training_verbose.log"
+
+# Optimization
+optimization:
+  optimizer: "AdamW"
+  weight_decay: 0.01
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+
+# CPU Optimization
+cpu:
+  num_threads: 8
+  use_mkldnn: true
+

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 
 from pydantic import BaseModel
@@ -157,6 +158,798 @@ class ActorType(str, Enum):
     ANIMAL = "animal"
 
 
+class MotionProfile:
+    """
+    Actor-type-specific motion characteristics.
+
+    These parameters modify how animations are generated to create
+    distinct movement patterns for different actor types.
+    """
+
+    def __init__(
+        self,
+        # Timing and rhythm
+        frequency_multiplier: float = 1.0,  # Animation speed modifier
+        time_quantization: float = 0.0,  # Quantize time to steps (0=smooth, 0.1=100ms steps)
+
+        # Motion amplitude and style
+        amplitude_modifier: float = 1.0,  # Scale of motion swings
+        sway_amplitude: float = 1.0,  # Organic sway/breathing
+        joint_noise: float = 0.0,  # Random jitter per frame
+
+        # Proportions
+        limb_length_scale: float = 1.0,  # Arm/leg length modifier
+        torso_scale: float = 1.0,  # Torso length modifier
+        stance_width: float = 1.0,  # Leg spread modifier
+
+        # Posture
+        forward_lean: float = 0.0,  # Forward tilt in radians
+        crouch_factor: float = 0.0,  # Lower stance (0-1)
+
+        # Interpolation style
+        smoothness: float = 1.0,  # 1.0=smooth sinusoid, 0.0=stepped/mechanical
+        phase_offset: float = 0.0,  # Offset between arm/leg phases
+    ):
+        self.frequency_multiplier = frequency_multiplier
+        self.time_quantization = time_quantization
+        self.amplitude_modifier = amplitude_modifier
+        self.sway_amplitude = sway_amplitude
+        self.joint_noise = joint_noise
+        self.limb_length_scale = limb_length_scale
+        self.torso_scale = torso_scale
+        self.stance_width = stance_width
+        self.forward_lean = forward_lean
+        self.crouch_factor = crouch_factor
+        self.smoothness = smoothness
+        self.phase_offset = phase_offset
+
+
+# Motion profiles for each actor type
+MOTION_PROFILES: dict[ActorType, MotionProfile] = {
+    # Human: Natural, smooth, organic motion (baseline)
+    ActorType.HUMAN: MotionProfile(
+        frequency_multiplier=1.0,
+        time_quantization=0.0,
+        amplitude_modifier=1.0,
+        sway_amplitude=1.0,
+        joint_noise=0.0,
+        limb_length_scale=1.0,
+        torso_scale=1.0,
+        stance_width=1.0,
+        forward_lean=0.0,
+        crouch_factor=0.0,
+        smoothness=1.0,
+        phase_offset=0.0,
+    ),
+
+    # Robot: Mechanical, stepped, precise movements
+    ActorType.ROBOT: MotionProfile(
+        frequency_multiplier=0.8,  # Slightly slower, more deliberate
+        time_quantization=0.08,  # Quantize to ~12fps (servo-like)
+        amplitude_modifier=0.85,  # Tighter, more controlled movements
+        sway_amplitude=0.1,  # Almost no organic sway
+        joint_noise=0.02,  # Slight mechanical jitter
+        limb_length_scale=1.0,
+        torso_scale=1.0,
+        stance_width=1.1,  # Slightly wider, more stable stance
+        forward_lean=0.0,
+        crouch_factor=0.0,
+        smoothness=0.3,  # Very stepped/mechanical
+        phase_offset=0.05,  # Slight joint delay (servo lag)
+    ),
+
+    # Alien: Fluid but unusual, non-human rhythms
+    ActorType.ALIEN: MotionProfile(
+        frequency_multiplier=1.3,  # Slightly faster, unusual timing
+        time_quantization=0.0,  # Smooth but eerie
+        amplitude_modifier=1.2,  # More exaggerated movements
+        sway_amplitude=0.6,  # Less breathing, more gliding
+        joint_noise=0.015,  # Slight otherworldly shimmer
+        limb_length_scale=1.15,  # Slightly longer limbs
+        torso_scale=0.95,  # Slightly shorter torso
+        stance_width=0.85,  # Narrower stance
+        forward_lean=0.05,  # Slight forward lean
+        crouch_factor=0.0,
+        smoothness=1.2,  # Extra smooth, almost floating
+        phase_offset=0.15,  # Asymmetric arm-leg timing
+    ),
+
+    # Animal: Lower, forward-leaning, natural but non-humanoid
+    ActorType.ANIMAL: MotionProfile(
+        frequency_multiplier=1.4,  # Faster gait
+        time_quantization=0.0,
+        amplitude_modifier=1.3,  # More dynamic movement
+        sway_amplitude=0.8,
+        joint_noise=0.01,
+        limb_length_scale=0.9,  # Shorter limbs
+        torso_scale=1.1,  # Longer torso
+        stance_width=1.2,  # Wider stance
+        forward_lean=0.15,  # Noticeable forward lean
+        crouch_factor=0.2,  # Lower to ground
+        smoothness=0.9,
+        phase_offset=0.0,  # Natural gait phase
+    ),
+}
+
+
+def get_motion_profile(actor_type: ActorType) -> MotionProfile:
+    """Get the motion profile for an actor type."""
+    return MOTION_PROFILES.get(actor_type, MOTION_PROFILES[ActorType.HUMAN])
+
+
+class EnvironmentType(str, Enum):
+    """Types of environments that affect physics and motion."""
+    # Terrestrial
+    EARTH_NORMAL = "earth_normal"
+    GRASSLAND = "grassland"
+    FOREST = "forest"
+    DESERT = "desert"
+    BEACH = "beach"
+    MOUNTAIN = "mountain"
+    ARCTIC = "arctic"
+    JUNGLE = "jungle"
+    SWAMP = "swamp"
+    CAVE = "cave"
+    VOLCANO = "volcano"
+
+    # Urban
+    CITY_STREET = "city_street"
+    CITY_PARK = "city_park"
+    ROOFTOP = "rooftop"
+    ALLEY = "alley"
+    SUBWAY = "subway"
+    MALL = "mall"
+
+    # Indoor
+    OFFICE = "office"
+    GYM = "gym"
+    MUSEUM = "museum"
+    RESTAURANT = "restaurant"
+    THEATER = "theater"
+    LIBRARY = "library"
+    HOSPITAL = "hospital"
+    FACTORY = "factory"
+    WAREHOUSE = "warehouse"
+    CLASSROOM = "classroom"
+
+    # Aquatic
+    UNDERWATER = "underwater"
+    OCEAN_SURFACE = "ocean_surface"
+    RIVER = "river"
+    LAKE = "lake"
+    POOL = "pool"
+
+    # Space/Sci-Fi
+    SPACE_VACUUM = "space_vacuum"
+    MOON = "moon"
+    MARS = "mars"
+    ASTEROID = "asteroid"
+    SPACESHIP_INTERIOR = "spaceship_interior"
+    SPACE_STATION = "space_station"
+    ALIEN_PLANET_LOW_G = "alien_planet_low_g"
+    ALIEN_PLANET_HIGH_G = "alien_planet_high_g"
+
+    # Fantasy
+    CASTLE = "castle"
+    DUNGEON = "dungeon"
+    ENCHANTED_FOREST = "enchanted_forest"
+    CLOUD_REALM = "cloud_realm"
+    LAVA_REALM = "lava_realm"
+    ICE_REALM = "ice_realm"
+
+    # Weather Conditions (can combine with location)
+    RAINY = "rainy"
+    SNOWY = "snowy"
+    WINDY = "windy"
+    FOGGY = "foggy"
+    STORMY = "stormy"
+
+    # Sports/Activity Venues
+    STADIUM = "stadium"
+    ARENA = "arena"
+    RINK = "rink"
+    COURT = "court"
+    TRACK = "track"
+    FIELD = "field"
+
+    # Social
+    CONCERT = "concert"
+    PARTY = "party"
+    WEDDING = "wedding"
+    MARKET = "market"
+    FESTIVAL = "festival"
+    PROTEST = "protest"
+    PARADE = "parade"
+
+
+@dataclass
+class EnvironmentProfile:
+    """
+    Physics and atmosphere parameters for different environments.
+    These modify motion characteristics based on physical realism.
+    """
+    # Gravity effects
+    gravity_scale: float = 1.0  # 0.16 (moon), 0.38 (mars), 1.0 (earth), 2.5 (high-g)
+
+    # Surface/terrain friction
+    friction: float = 1.0  # 0.1 (ice), 0.5 (wet), 1.0 (normal), 1.5 (sand/rough)
+
+    # Atmosphere/medium resistance
+    air_resistance: float = 1.0  # 0.0 (vacuum), 0.7 (thin), 1.0 (normal), 3.0 (underwater)
+
+    # Buoyancy effect (vertical float tendency)
+    buoyancy: float = 0.0  # 0.0 (normal), 0.5 (partial float), 1.0 (neutral buoyancy)
+
+    # Movement speed modifier
+    movement_speed_scale: float = 1.0  # 0.5 (difficult terrain), 1.0 (normal), 1.2 (smooth)
+
+    # Step height (how high feet lift)
+    step_height_scale: float = 1.0  # 0.5 (smooth floor), 1.0 (normal), 2.0 (rocky/obstacles)
+
+    # Jump height modifier (combines with gravity)
+    jump_height_scale: float = 1.0  # Based on gravity and surface
+
+    # Landing impact (affects recovery time)
+    landing_impact: float = 1.0  # 0.3 (soft/low-g), 1.0 (normal), 1.5 (hard surface)
+
+    # Balance difficulty (affects sway and stability)
+    balance_difficulty: float = 1.0  # 0.5 (stable), 1.0 (normal), 2.0 (unstable/slippery)
+
+    # Visibility modifier (affects looking around behavior)
+    visibility: float = 1.0  # 0.3 (fog/dark), 1.0 (clear)
+
+    # Temperature effect (affects movement energy)
+    temperature_modifier: float = 1.0  # 0.7 (cold/sluggish), 1.0 (normal), 1.1 (warm/energetic)
+
+    # Wind effect (lateral movement influence)
+    wind_strength: float = 0.0  # 0.0 (calm), 0.5 (breezy), 1.0 (strong wind)
+    wind_direction: float = 0.0  # Angle in radians (0 = from left, π/2 = from front)
+
+    # Terrain slope effect
+    slope_angle: float = 0.0  # Radians, positive = uphill
+
+    # Crowd density (affects movement freedom)
+    crowd_density: float = 0.0  # 0.0 (empty), 0.5 (moderate), 1.0 (packed)
+
+    # Noise level (affects behavior intensity)
+    ambient_noise: float = 0.5  # 0.0 (silent), 0.5 (normal), 1.0 (loud)
+
+
+# Environment profiles for each environment type
+ENVIRONMENT_PROFILES: dict[EnvironmentType, EnvironmentProfile] = {
+    # === TERRESTRIAL ===
+    EnvironmentType.EARTH_NORMAL: EnvironmentProfile(),  # Baseline
+
+    EnvironmentType.GRASSLAND: EnvironmentProfile(
+        friction=0.9,
+        step_height_scale=1.1,
+    ),
+
+    EnvironmentType.FOREST: EnvironmentProfile(
+        friction=0.85,
+        movement_speed_scale=0.85,
+        step_height_scale=1.3,  # Roots, uneven ground
+        visibility=0.7,
+    ),
+
+    EnvironmentType.DESERT: EnvironmentProfile(
+        friction=0.6,  # Sand shifts
+        movement_speed_scale=0.75,
+        step_height_scale=1.4,  # Sinking in sand
+        temperature_modifier=0.85,  # Heat exhaustion
+        visibility=0.9,
+    ),
+
+    EnvironmentType.BEACH: EnvironmentProfile(
+        friction=0.5,  # Wet sand
+        movement_speed_scale=0.8,
+        step_height_scale=1.2,
+        wind_strength=0.3,
+    ),
+
+    EnvironmentType.MOUNTAIN: EnvironmentProfile(
+        air_resistance=0.7,  # Thin air
+        movement_speed_scale=0.7,
+        step_height_scale=1.5,  # Rocky terrain
+        jump_height_scale=0.85,  # Harder to jump at altitude
+        balance_difficulty=1.3,
+        slope_angle=0.3,  # ~17 degrees
+        temperature_modifier=0.8,
+    ),
+
+    EnvironmentType.ARCTIC: EnvironmentProfile(
+        friction=0.15,  # Ice
+        movement_speed_scale=0.6,
+        step_height_scale=1.2,
+        balance_difficulty=2.0,
+        temperature_modifier=0.6,
+        wind_strength=0.5,
+    ),
+
+    EnvironmentType.JUNGLE: EnvironmentProfile(
+        friction=0.7,  # Humid, muddy
+        air_resistance=1.2,  # Dense vegetation
+        movement_speed_scale=0.65,
+        step_height_scale=1.6,  # Vines, roots
+        visibility=0.5,
+        temperature_modifier=0.9,
+    ),
+
+    EnvironmentType.SWAMP: EnvironmentProfile(
+        friction=0.4,
+        movement_speed_scale=0.5,
+        step_height_scale=1.8,  # Pulling feet from mud
+        balance_difficulty=1.5,
+        visibility=0.6,
+    ),
+
+    EnvironmentType.CAVE: EnvironmentProfile(
+        movement_speed_scale=0.8,
+        step_height_scale=1.4,
+        visibility=0.3,
+        ambient_noise=0.2,
+    ),
+
+    EnvironmentType.VOLCANO: EnvironmentProfile(
+        friction=0.8,
+        movement_speed_scale=0.7,
+        step_height_scale=1.5,
+        temperature_modifier=0.7,  # Extreme heat
+        visibility=0.6,  # Smoke
+        ambient_noise=0.8,
+    ),
+
+    # === URBAN ===
+    EnvironmentType.CITY_STREET: EnvironmentProfile(
+        friction=1.1,  # Concrete
+        movement_speed_scale=1.0,
+        crowd_density=0.4,
+        ambient_noise=0.7,
+    ),
+
+    EnvironmentType.CITY_PARK: EnvironmentProfile(
+        friction=0.95,
+        step_height_scale=1.1,
+        crowd_density=0.2,
+        ambient_noise=0.4,
+    ),
+
+    EnvironmentType.ROOFTOP: EnvironmentProfile(
+        wind_strength=0.6,
+        balance_difficulty=1.2,
+        visibility=1.0,
+    ),
+
+    EnvironmentType.ALLEY: EnvironmentProfile(
+        visibility=0.6,
+        crowd_density=0.1,
+        ambient_noise=0.3,
+    ),
+
+    EnvironmentType.SUBWAY: EnvironmentProfile(
+        friction=1.0,
+        visibility=0.7,
+        crowd_density=0.6,
+        ambient_noise=0.9,
+    ),
+
+    EnvironmentType.MALL: EnvironmentProfile(
+        friction=1.1,  # Smooth floors
+        movement_speed_scale=1.1,
+        crowd_density=0.5,
+        ambient_noise=0.6,
+    ),
+
+    # === INDOOR ===
+    EnvironmentType.OFFICE: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.9,  # Confined spaces
+        crowd_density=0.3,
+        ambient_noise=0.3,
+    ),
+
+    EnvironmentType.GYM: EnvironmentProfile(
+        friction=1.2,  # Rubber mats
+        movement_speed_scale=1.1,
+        jump_height_scale=1.1,
+        ambient_noise=0.6,
+    ),
+
+    EnvironmentType.MUSEUM: EnvironmentProfile(
+        friction=1.1,
+        movement_speed_scale=0.7,  # Walking slowly
+        ambient_noise=0.2,
+    ),
+
+    EnvironmentType.RESTAURANT: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.8,
+        crowd_density=0.4,
+        ambient_noise=0.5,
+    ),
+
+    EnvironmentType.THEATER: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.7,
+        visibility=0.4,
+        ambient_noise=0.1,
+    ),
+
+    EnvironmentType.LIBRARY: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.6,
+        ambient_noise=0.1,
+    ),
+
+    EnvironmentType.HOSPITAL: EnvironmentProfile(
+        friction=1.1,
+        movement_speed_scale=0.8,
+        ambient_noise=0.3,
+    ),
+
+    EnvironmentType.FACTORY: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.9,
+        step_height_scale=1.2,
+        ambient_noise=0.9,
+    ),
+
+    EnvironmentType.WAREHOUSE: EnvironmentProfile(
+        friction=1.0,
+        step_height_scale=1.3,
+        visibility=0.7,
+        ambient_noise=0.4,
+    ),
+
+    EnvironmentType.CLASSROOM: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.8,
+        crowd_density=0.5,
+        ambient_noise=0.4,
+    ),
+
+    # === AQUATIC ===
+    EnvironmentType.UNDERWATER: EnvironmentProfile(
+        gravity_scale=0.1,  # Near-neutral buoyancy
+        friction=0.3,
+        air_resistance=3.0,  # Water resistance
+        buoyancy=0.9,
+        movement_speed_scale=0.4,
+        step_height_scale=0.5,  # Swimming motion
+        jump_height_scale=0.3,
+        landing_impact=0.2,
+        balance_difficulty=0.5,  # Easier to balance in water
+        visibility=0.5,
+    ),
+
+    EnvironmentType.OCEAN_SURFACE: EnvironmentProfile(
+        gravity_scale=0.8,
+        friction=0.2,
+        buoyancy=0.6,
+        movement_speed_scale=0.5,
+        balance_difficulty=1.8,  # Waves
+        wind_strength=0.4,
+    ),
+
+    EnvironmentType.RIVER: EnvironmentProfile(
+        gravity_scale=0.9,
+        friction=0.4,
+        air_resistance=1.5,
+        buoyancy=0.3,
+        movement_speed_scale=0.6,
+        balance_difficulty=1.5,
+    ),
+
+    EnvironmentType.LAKE: EnvironmentProfile(
+        gravity_scale=0.85,
+        friction=0.3,
+        buoyancy=0.4,
+        movement_speed_scale=0.55,
+        balance_difficulty=1.2,
+    ),
+
+    EnvironmentType.POOL: EnvironmentProfile(
+        gravity_scale=0.2,
+        friction=0.25,
+        air_resistance=2.5,
+        buoyancy=0.8,
+        movement_speed_scale=0.45,
+        landing_impact=0.3,
+    ),
+
+    # === SPACE/SCI-FI ===
+    EnvironmentType.SPACE_VACUUM: EnvironmentProfile(
+        gravity_scale=0.0,  # Zero-G
+        friction=0.0,
+        air_resistance=0.0,
+        buoyancy=1.0,  # Float freely
+        movement_speed_scale=0.3,  # Slow, deliberate
+        jump_height_scale=5.0,  # Infinite jump
+        landing_impact=0.0,
+        balance_difficulty=0.3,
+    ),
+
+    EnvironmentType.MOON: EnvironmentProfile(
+        gravity_scale=0.16,
+        friction=0.5,  # Regolith
+        air_resistance=0.0,
+        movement_speed_scale=0.6,
+        step_height_scale=2.0,  # Bounding
+        jump_height_scale=6.0,
+        landing_impact=0.3,
+    ),
+
+    EnvironmentType.MARS: EnvironmentProfile(
+        gravity_scale=0.38,
+        friction=0.6,
+        air_resistance=0.01,  # Thin atmosphere
+        movement_speed_scale=0.75,
+        step_height_scale=1.5,
+        jump_height_scale=2.6,
+        landing_impact=0.5,
+        wind_strength=0.2,  # Dust storms
+    ),
+
+    EnvironmentType.ASTEROID: EnvironmentProfile(
+        gravity_scale=0.05,
+        friction=0.4,
+        air_resistance=0.0,
+        buoyancy=0.8,
+        movement_speed_scale=0.4,
+        jump_height_scale=10.0,
+        balance_difficulty=2.0,
+    ),
+
+    EnvironmentType.SPACESHIP_INTERIOR: EnvironmentProfile(
+        gravity_scale=1.0,  # Artificial gravity
+        friction=1.0,
+        movement_speed_scale=0.9,
+        ambient_noise=0.4,
+    ),
+
+    EnvironmentType.SPACE_STATION: EnvironmentProfile(
+        gravity_scale=0.8,  # Partial artificial gravity
+        friction=1.0,
+        movement_speed_scale=0.85,
+        step_height_scale=1.2,
+        ambient_noise=0.3,
+    ),
+
+    EnvironmentType.ALIEN_PLANET_LOW_G: EnvironmentProfile(
+        gravity_scale=0.3,
+        friction=0.7,
+        air_resistance=0.8,
+        movement_speed_scale=0.8,
+        step_height_scale=1.8,
+        jump_height_scale=3.3,
+        visibility=0.8,
+    ),
+
+    EnvironmentType.ALIEN_PLANET_HIGH_G: EnvironmentProfile(
+        gravity_scale=2.5,
+        friction=1.2,
+        air_resistance=1.5,
+        movement_speed_scale=0.5,
+        step_height_scale=0.6,
+        jump_height_scale=0.4,
+        landing_impact=2.0,
+        balance_difficulty=1.5,
+    ),
+
+    # === FANTASY ===
+    EnvironmentType.CASTLE: EnvironmentProfile(
+        friction=1.0,
+        step_height_scale=1.3,  # Stairs
+        visibility=0.7,
+        ambient_noise=0.3,
+    ),
+
+    EnvironmentType.DUNGEON: EnvironmentProfile(
+        friction=0.8,
+        movement_speed_scale=0.75,
+        step_height_scale=1.4,
+        visibility=0.2,
+        ambient_noise=0.2,
+    ),
+
+    EnvironmentType.ENCHANTED_FOREST: EnvironmentProfile(
+        gravity_scale=0.9,  # Slight magical lift
+        friction=0.85,
+        movement_speed_scale=0.9,
+        step_height_scale=1.2,
+        visibility=0.6,
+    ),
+
+    EnvironmentType.CLOUD_REALM: EnvironmentProfile(
+        gravity_scale=0.4,
+        friction=0.3,
+        buoyancy=0.5,
+        movement_speed_scale=0.7,
+        step_height_scale=0.8,
+        jump_height_scale=2.5,
+        landing_impact=0.3,
+        visibility=0.8,
+    ),
+
+    EnvironmentType.LAVA_REALM: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=0.6,
+        step_height_scale=1.5,
+        temperature_modifier=0.5,
+        visibility=0.7,
+        ambient_noise=0.8,
+    ),
+
+    EnvironmentType.ICE_REALM: EnvironmentProfile(
+        friction=0.1,
+        movement_speed_scale=0.5,
+        balance_difficulty=2.5,
+        temperature_modifier=0.5,
+        visibility=0.9,
+    ),
+
+    # === WEATHER CONDITIONS ===
+    EnvironmentType.RAINY: EnvironmentProfile(
+        friction=0.6,
+        movement_speed_scale=0.85,
+        visibility=0.6,
+        wind_strength=0.2,
+    ),
+
+    EnvironmentType.SNOWY: EnvironmentProfile(
+        friction=0.4,
+        movement_speed_scale=0.7,
+        step_height_scale=1.4,
+        visibility=0.5,
+        temperature_modifier=0.7,
+    ),
+
+    EnvironmentType.WINDY: EnvironmentProfile(
+        wind_strength=0.8,
+        balance_difficulty=1.4,
+        movement_speed_scale=0.85,
+    ),
+
+    EnvironmentType.FOGGY: EnvironmentProfile(
+        visibility=0.2,
+        movement_speed_scale=0.8,
+    ),
+
+    EnvironmentType.STORMY: EnvironmentProfile(
+        friction=0.5,
+        movement_speed_scale=0.6,
+        visibility=0.3,
+        wind_strength=1.0,
+        balance_difficulty=1.8,
+        ambient_noise=1.0,
+    ),
+
+    # === SPORTS/ACTIVITY VENUES ===
+    EnvironmentType.STADIUM: EnvironmentProfile(
+        friction=1.0,
+        movement_speed_scale=1.1,
+        crowd_density=0.7,
+        ambient_noise=0.9,
+    ),
+
+    EnvironmentType.ARENA: EnvironmentProfile(
+        friction=1.1,
+        movement_speed_scale=1.0,
+        crowd_density=0.6,
+        ambient_noise=0.8,
+    ),
+
+    EnvironmentType.RINK: EnvironmentProfile(
+        friction=0.08,  # Ice
+        movement_speed_scale=1.2,  # Gliding
+        balance_difficulty=2.0,
+        crowd_density=0.3,
+    ),
+
+    EnvironmentType.COURT: EnvironmentProfile(
+        friction=1.2,  # Hardwood
+        movement_speed_scale=1.1,
+        jump_height_scale=1.1,
+        crowd_density=0.3,
+    ),
+
+    EnvironmentType.TRACK: EnvironmentProfile(
+        friction=1.3,  # Rubberized
+        movement_speed_scale=1.2,
+        crowd_density=0.2,
+    ),
+
+    EnvironmentType.FIELD: EnvironmentProfile(
+        friction=0.9,
+        step_height_scale=1.1,
+        crowd_density=0.1,
+    ),
+
+    # === SOCIAL ===
+    EnvironmentType.CONCERT: EnvironmentProfile(
+        movement_speed_scale=0.7,
+        crowd_density=0.9,
+        ambient_noise=1.0,
+        visibility=0.6,
+    ),
+
+    EnvironmentType.PARTY: EnvironmentProfile(
+        movement_speed_scale=0.9,
+        crowd_density=0.6,
+        ambient_noise=0.8,
+        visibility=0.7,
+    ),
+
+    EnvironmentType.WEDDING: EnvironmentProfile(
+        movement_speed_scale=0.7,
+        crowd_density=0.5,
+        ambient_noise=0.4,
+    ),
+
+    EnvironmentType.MARKET: EnvironmentProfile(
+        movement_speed_scale=0.75,
+        crowd_density=0.7,
+        ambient_noise=0.7,
+        step_height_scale=1.2,
+    ),
+
+    EnvironmentType.FESTIVAL: EnvironmentProfile(
+        movement_speed_scale=0.8,
+        crowd_density=0.8,
+        ambient_noise=0.9,
+    ),
+
+    EnvironmentType.PROTEST: EnvironmentProfile(
+        movement_speed_scale=0.6,
+        crowd_density=0.9,
+        ambient_noise=1.0,
+        balance_difficulty=1.2,
+    ),
+
+    EnvironmentType.PARADE: EnvironmentProfile(
+        movement_speed_scale=0.8,
+        crowd_density=0.7,
+        ambient_noise=0.8,
+    ),
+}
+
+
+def get_environment_profile(env_type: EnvironmentType) -> EnvironmentProfile:
+    """Get the environment profile for an environment type."""
+    return ENVIRONMENT_PROFILES.get(env_type, ENVIRONMENT_PROFILES[EnvironmentType.EARTH_NORMAL])
+
+
+def combine_environment_profiles(
+    base: EnvironmentProfile,
+    weather: EnvironmentProfile | None = None,
+) -> EnvironmentProfile:
+    """
+    Combine a base environment with weather conditions.
+    Weather modifiers are applied multiplicatively.
+    """
+    if weather is None:
+        return base
+
+    return EnvironmentProfile(
+        gravity_scale=base.gravity_scale,  # Weather doesn't affect gravity
+        friction=base.friction * weather.friction,
+        air_resistance=base.air_resistance * weather.air_resistance,
+        buoyancy=max(base.buoyancy, weather.buoyancy),
+        movement_speed_scale=base.movement_speed_scale * weather.movement_speed_scale,
+        step_height_scale=base.step_height_scale * weather.step_height_scale,
+        jump_height_scale=base.jump_height_scale * weather.jump_height_scale,
+        landing_impact=base.landing_impact * weather.landing_impact,
+        balance_difficulty=base.balance_difficulty * weather.balance_difficulty,
+        visibility=min(base.visibility, weather.visibility),
+        temperature_modifier=base.temperature_modifier * weather.temperature_modifier,
+        wind_strength=max(base.wind_strength, weather.wind_strength),
+        wind_direction=weather.wind_direction if weather.wind_strength > base.wind_strength else base.wind_direction,
+        slope_angle=base.slope_angle,
+        crowd_density=base.crowd_density,
+        ambient_noise=max(base.ambient_noise, weather.ambient_noise),
+    )
+
+
 class ObjectType(str, Enum):
     # Nature
     TREE = "tree"
@@ -281,6 +1074,8 @@ class Scene(BaseModel):
     description: str
     theme: str | None = None
     camera_keyframes: list[CameraKeyframe] = []
+    environment_type: EnvironmentType = EnvironmentType.EARTH_NORMAL
+    weather_type: EnvironmentType | None = None  # Optional weather overlay
 
 
 # Action-to-velocity mapping (in units/second, where 1 unit ≈ 0.68m)
@@ -372,3 +1167,161 @@ OBJECT_SCALES = {
     ObjectType.PLATE: 0.4,  # 0.3m diameter
     ObjectType.CUP: 0.2,  # 0.15m height
 }
+
+
+# =============================================================================
+# Enhanced Sample Metadata Models
+# =============================================================================
+# These optional metadata models enrich canonical samples with additional
+# information that can improve motion generation quality by providing
+# richer conditioning signals during training and inference.
+
+
+class MotionStyleMetadata(BaseModel):
+    """Motion style characteristics computed from the motion data.
+
+    These metrics help distinguish between different types of motion
+    (e.g., athletic vs relaxed, smooth vs jerky) and can be used as
+    conditioning signals for style-aware generation.
+
+    Attributes:
+        tempo: Motion speed/rhythm normalized to 0-1.
+               0.0 = very slow (tai chi), 0.5 = walking, 1.0 = sprinting
+        energy_level: Overall motion intensity normalized to 0-1.
+                     0.0 = idle/resting, 0.5 = moderate activity, 1.0 = intense
+        smoothness: Motion fluidity normalized to 0-1.
+                   0.0 = jerky/mechanical, 0.5 = natural, 1.0 = very fluid
+    """
+
+    tempo: float | None = None
+    energy_level: float | None = None
+    smoothness: float | None = None
+
+
+class SubjectMetadata(BaseModel):
+    """Subject/performer demographic information.
+
+    Extracted from SMPL body shape parameters or dataset annotations.
+    Useful for body-aware motion generation.
+
+    Attributes:
+        height_cm: Estimated height in centimeters (typically 150-200)
+        gender: Subject gender if known ("male", "female", "unknown")
+        age_group: Age category ("child", "adult", "elderly", "unknown")
+    """
+
+    height_cm: float | None = None
+    gender: str | None = None  # "male", "female", "unknown"
+    age_group: str | None = None  # "child", "adult", "elderly", "unknown"
+
+
+class MusicMetadata(BaseModel):
+    """Music/rhythm information for dance sequences.
+
+    Primarily used for AIST++ dataset to enable music-synchronized
+    motion generation.
+
+    Attributes:
+        bpm: Beats per minute of the accompanying music
+        beat_frames: List of frame indices where beats occur
+        genre: Music genre (e.g., "break", "pop", "lock", "middle_hip_hop")
+    """
+
+    bpm: float | None = None
+    beat_frames: list[int] | None = None
+    genre: str | None = None
+
+
+class InteractionMetadata(BaseModel):
+    """Multi-actor interaction information.
+
+    Used for InterHuman and other multi-person datasets to capture
+    the relationship and coordination between actors.
+
+    Attributes:
+        contact_frames: Frame indices where actors are in contact/proximity
+        interaction_role: Role in the interaction ("leader", "follower", "symmetric")
+        interaction_type: Type of interaction (e.g., "handshake", "dance", "fight")
+    """
+
+    contact_frames: list[int] | None = None
+    interaction_role: str | None = None  # "leader", "follower", "symmetric"
+    interaction_type: str | None = None
+
+
+class TemporalMetadata(BaseModel):
+    """Original temporal information before resampling/padding.
+
+    Preserves source timing information that may be lost during
+    preprocessing. Useful for understanding motion pacing.
+
+    Attributes:
+        original_fps: Original frame rate of the source data
+        original_duration_sec: Original duration in seconds
+        original_num_frames: Original number of frames before processing
+    """
+
+    original_fps: int | None = None
+    original_duration_sec: float | None = None
+    original_num_frames: int | None = None
+
+
+class QualityMetadata(BaseModel):
+    """Data quality metrics for the motion sequence.
+
+    Used to weight samples during training or filter low-quality data.
+
+    Attributes:
+        reconstruction_confidence: MoCap reconstruction quality (0-1)
+        marker_quality: Joint position noise/jitter quality (0-1, higher=cleaner)
+        physics_score: Physics validation score from DataValidator
+    """
+
+    reconstruction_confidence: float | None = None
+    marker_quality: float | None = None
+    physics_score: float | None = None
+
+
+class EmotionMetadata(BaseModel):
+    """Emotional characteristics of the motion.
+
+    Inferred from text descriptions or motion patterns. Uses the
+    valence-arousal model common in affective computing.
+
+    Attributes:
+        emotion_label: Primary emotion label from FacialExpression enum
+        valence: Pleasantness dimension (-1.0 negative to 1.0 positive)
+        arousal: Intensity/energy dimension (0.0 calm to 1.0 excited)
+    """
+
+    emotion_label: str | None = None  # From FacialExpression values
+    valence: float | None = None  # -1.0 to 1.0
+    arousal: float | None = None  # 0.0 to 1.0
+
+
+class EnhancedSampleMetadata(BaseModel):
+    """Container for all enhanced metadata fields.
+
+    This unified container holds all optional metadata models.
+    All fields are optional to maintain backward compatibility
+    with existing samples that lack enhanced metadata.
+
+    Usage in canonical samples:
+        sample = {
+            "motion": motion_tensor,
+            "physics": physics_tensor,
+            ...
+            "enhanced_meta": EnhancedSampleMetadata(
+                motion_style=MotionStyleMetadata(tempo=0.5, energy_level=0.7),
+                temporal=TemporalMetadata(original_fps=120, original_duration_sec=5.2),
+            ).model_dump()
+        }
+    """
+
+    motion_style: MotionStyleMetadata | None = None
+    subject: SubjectMetadata | None = None
+    music: MusicMetadata | None = None
+    interaction: InteractionMetadata | None = None
+    temporal: TemporalMetadata | None = None
+    quality: QualityMetadata | None = None
+    emotion: EmotionMetadata | None = None

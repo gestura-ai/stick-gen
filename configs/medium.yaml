@@ -80,8 +80,8 @@ lora:
 # Dataset Paths
 data:
   train_data: "data/train_data_final.pt"                    # Legacy combined dataset (embedding-augmented)
-  curated_pretrain_data: "data/curated/pretrain_data_embedded.pt"  # Curated pretraining dataset (with embeddings)
-  curated_sft_data: "data/curated/sft_data_embedded.pt"            # Curated SFT dataset (with embeddings)
+  curated_pretrain_data: "generation/curated/pretrain_data_embedded.pt"  # Curated pretraining dataset (with embeddings)
+  curated_sft_data: "generation/curated/sft_data_embedded.pt"            # Curated SFT dataset (with embeddings)
   checkpoint_dir: "checkpoints"                                # Directory for saving checkpoints
   log_dir: "logs"                                              # Directory for training logs
   use_parallax_augmentation: true                               # Master switch for 2.5D parallax training
