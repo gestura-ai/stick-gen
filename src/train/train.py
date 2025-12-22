@@ -43,11 +43,15 @@ try:
         DDPMScheduler,
         DiffusionRefinementModule,
         PoseRefinementUNet,
+        StyleCondition,
+        extract_style_conditions_from_batch,
     )
 
     DIFFUSION_AVAILABLE = True
 except ImportError:
     DIFFUSION_AVAILABLE = False
+    StyleCondition = None  # type: ignore
+    extract_style_conditions_from_batch = None  # type: ignore
     print("⚠️  Diffusion module not available - training without refinement")
 
 # LoRA support (optional)
@@ -74,12 +78,16 @@ class StickFigureDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # Item is dict {"description": str, "motion": tensor, "embedding": tensor, "actions": tensor, "physics": tensor}
+        # Item is dict {"description": str, "motion": tensor, "embedding": tensor, "actions": tensor,
+        #               "physics": tensor, "environment_type": str, "weather_type": str,
+        #               "enhanced_meta": dict (optional)}
         item = self.data[idx]
         motion = item["motion"]
         embedding = item["embedding"]  # [1024]
         actions = item.get("actions", None)  # [num_frames] - Phase 1
         physics = item.get("physics", None)  # [num_frames, 6] - Phase 2
+        environment_type = item.get("environment_type", "earth_normal")  # Environment-aware physics
+        enhanced_meta = item.get("enhanced_meta", None)  # Style/emotion metadata for diffusion
 
         # Input: Frame t
         # Target: Frame t+1
@@ -89,6 +97,8 @@ class StickFigureDataset(Dataset):
             motion[1:],
             actions[:-1] if actions is not None else None,
             physics[:-1] if physics is not None else None,
+            environment_type,
+            enhanced_meta,  # Pass through for diffusion conditioning
         )
 
 
@@ -115,18 +125,52 @@ def temporal_consistency_loss(predictions):
     return loss
 
 
-def physics_loss(physics_output, physics_targets):
+# Environment-specific gravity constants (m/s^2)
+# Maps environment_type to gravity scale factor (1.0 = Earth gravity)
+ENVIRONMENT_GRAVITY_SCALES = {
+    # Zero/micro-gravity
+    "space_vacuum": 0.0,
+    "asteroid": 0.05,
+    "cloud_realm": 0.1,
+    # Low gravity
+    "moon": 0.16,
+    "mars": 0.38,
+    "alien_planet_low_g": 0.2,
+    # High gravity
+    "alien_planet_high_g": 2.0,
+    # Underwater (buoyancy counteracts gravity)
+    "underwater": 0.1,
+    "ocean_surface": 0.3,
+    "river": 0.5,
+    "lake": 0.5,
+    "pool": 0.5,
+    "swamp": 0.6,
+    # Normal gravity environments
+    "earth_normal": 1.0,
+    "grassland": 1.0,
+    "forest": 1.0,
+    "desert": 1.0,
+    "mountain": 1.0,
+    "city_street": 1.0,
+    "stadium": 1.0,
+    "arena": 1.0,
+    "rink": 1.0,
+}
+
+
+def physics_loss(physics_output, physics_targets, environment_type: str | None = None):
     """
     Phase 2: Physics-aware loss function
 
     Enforces physical constraints:
-    - Gravity: vertical acceleration should be ~-9.8 m/s^2 when airborne
+    - Gravity: vertical acceleration should match environment-specific gravity
     - Momentum conservation: momentum should be continuous
     - Velocity-acceleration consistency: v(t+1) = v(t) + a(t) * dt
 
     Args:
         physics_output: [seq_len, batch, 6] - predicted (vx, vy, ax, ay, momentum_x, momentum_y)
         physics_targets: [seq_len, batch, 6] - ground truth physics
+        environment_type: Optional environment type for gravity scaling
 
     Returns:
         Total physics loss (scalar), dict of loss components
@@ -143,9 +187,10 @@ def physics_loss(physics_output, physics_targets):
     # 1. Basic MSE loss for all physics parameters
     mse_loss = nn.MSELoss()(physics_output, physics_targets)
 
-    # 2. Gravity constraint: ay should be close to -9.8 when airborne
-    # (simplified: penalize deviation from expected gravity)
-    gravity_constant = -9.8
+    # 2. Environment-aware gravity constraint
+    # Get gravity scale for this environment (default to Earth gravity)
+    gravity_scale = ENVIRONMENT_GRAVITY_SCALES.get(environment_type, 1.0)
+    gravity_constant = -9.8 * gravity_scale
     gravity_loss = torch.mean((pred_ay - gravity_constant) ** 2)
 
     # 3. Momentum conservation: momentum should change smoothly
@@ -166,23 +211,13 @@ def physics_loss(physics_output, physics_targets):
         mse_loss + 0.1 * gravity_loss + 0.1 * momentum_loss + 0.2 * consistency_loss
     )
 
-    # Phase 2: Physics-aware loss function (Standard)
-
-    # Phase 2: Physics-aware loss function (Standard)
-    # physics_output is already passed in argument
-
-    # physics_targets would be needed here, currently reusing what we have or skipping if not available
-    # For now, we keep the existing logic but wrap the new layer
-
-    # NEW: Differentiable Physics Layer (Brax)
-    # We instantiate it once outside the loop in a real scenario, but for minimal diff:
-    # (In practice, pass this instance from main())
-
     return total_loss, {
         "physics_mse": mse_loss.item(),
         "gravity_loss": gravity_loss.item(),
         "momentum_loss": momentum_loss.item(),
         "consistency_loss": consistency_loss.item(),
+        "gravity_constant": gravity_constant,
+        "environment_type": environment_type,
     }
 
 
@@ -470,18 +505,25 @@ def train(
         print(f"  - Trainable parameters: {trainable:,} ({trainable/total*100:.2f}%)")
 
     # Phase 3: Initialize diffusion refinement module (optional)
+    # With style conditioning for metadata-aware motion refinement
     diffusion_module = None
     diffusion_optimizer = None
+    USE_STYLE_CONDITIONING = config.get("diffusion.use_style_conditioning", True)
+    CFG_DROPOUT_PROB = config.get("diffusion.cfg_dropout_prob", 0.1)
     if USE_DIFFUSION:
         print("\n" + "=" * 60)
         print("INITIALIZING DIFFUSION REFINEMENT MODULE")
         print("=" * 60)
         unet = PoseRefinementUNet(
-            pose_dim=INPUT_DIM, hidden_dims=[64, 128, 256], time_emb_dim=128
+            pose_dim=INPUT_DIM,
+            hidden_dims=[64, 128, 256],
+            time_emb_dim=128,
+            style_emb_dim=128,
+            use_style_conditioning=USE_STYLE_CONDITIONING,
         )
         scheduler = DDPMScheduler(num_train_timesteps=1000)
         diffusion_module = DiffusionRefinementModule(
-            unet, scheduler, device=str(device)
+            unet, scheduler, device=str(device), cfg_dropout_prob=CFG_DROPOUT_PROB
         )
         diffusion_optimizer = optim.Adam(unet.parameters(), lr=DIFFUSION_LR)
 
@@ -493,11 +535,23 @@ def train(
         )
         print(f"  - Diffusion learning rate: {DIFFUSION_LR}")
         print(f"  - Diffusion loss weight: {DIFFUSION_LOSS_WEIGHT}")
+        print(f"  - Style conditioning: {'ENABLED' if USE_STYLE_CONDITIONING else 'DISABLED'}")
+        print(f"  - CFG dropout probability: {CFG_DROPOUT_PROB}")
 
     # Multi-task loss function
-    def multi_task_loss(outputs, targets, action_targets=None, physics_targets=None):
+    def multi_task_loss(
+        outputs, targets, action_targets=None, physics_targets=None, environment_types=None
+    ):
         """
         Compute multi-task loss: pose + temporal + action (Phase 1) + physics (Phase 2)
+
+        Args:
+            outputs: Dict of model outputs
+            targets: Target motion tensor
+            action_targets: Optional action labels
+            physics_targets: Optional physics targets
+            environment_types: Optional list of environment type strings (one per batch item)
+                               Used for environment-aware physics loss computation.
         """
         logger.debug("ENTER multi_task_loss()")
         logger.debug(f"  outputs keys: {outputs.keys()}")
@@ -508,6 +562,7 @@ def train(
         logger.debug(
             f"  physics_targets: {physics_targets.shape if physics_targets is not None else None}"
         )
+        logger.debug(f"  environment_types: {environment_types}")
 
         # Main pose reconstruction loss
         logger.debug("  Computing pose loss...")
@@ -538,16 +593,22 @@ def train(
             loss_components["action_loss"] = action_loss
             logger.debug(f"  action_loss computed: {action_loss.item():.6f}")
 
-        # Phase 2: Physics loss
+        # Phase 2: Physics loss (environment-aware)
         if physics_targets is not None and "physics" in outputs:
             logger.debug("  Computing physics loss...")
             # physics: [seq_len, batch, 6]
             # physics_targets: [batch, seq_len, 6] -> permute to [seq_len, batch, 6]
             physics_targets_permuted = physics_targets.permute(1, 0, 2)
 
-            # Phase 2: Physics-aware loss function (Standard)
+            # Get environment type for physics loss (use first sample's type as batch representative)
+            # For more precision, could compute per-sample loss and aggregate
+            batch_env_type = None
+            if environment_types is not None and len(environment_types) > 0:
+                batch_env_type = environment_types[0] if isinstance(environment_types, list) else environment_types
+
+            # Phase 2: Physics-aware loss function (Standard) with environment conditioning
             phys_loss, phys_components = physics_loss(
-                outputs["physics"], physics_targets_permuted
+                outputs["physics"], physics_targets_permuted, environment_type=batch_env_type
             )
             current_physics_loss = phys_loss
 
@@ -776,16 +837,18 @@ def train(
 
             # Unpack batch based on dataset type
             # Multimodal: (image, motion_frame, camera_pose, text_prompt, action_label)
-            # Motion-only: (data, embedding, target, [actions], [physics])
+            # Motion-only: (data, embedding, target, [actions], [physics], [environment_type])
             logger.debug(f"  Unpacking batch_data (len={len(batch_data)})")
 
             image_tensor = None
             image_camera_pose = None
+            environment_types = None  # List of environment_type strings for physics-aware loss
+            enhanced_metas = None  # Enhanced metadata for style-conditioned diffusion
 
             if USE_PARALLAX and multimodal_dataset is not None:
-                # Multimodal batch: (image, motion_frame, camera_pose, text_prompt, action)
+                # Multimodal batch: (image, motion_frame, camera_pose, text_prompt, action, environment_type)
                 # Note: text_prompt is a string, we need to embed it or use cached embeddings
-                image_tensor, motion_frame, camera_pose, text_prompts, actions = (
+                image_tensor, motion_frame, camera_pose, text_prompts, actions, environment_types = (
                     batch_data
                 )
 
@@ -801,6 +864,7 @@ def train(
 
                 # Get embeddings from the motion data (pre-computed in the .pt file)
                 # For multimodal, we retrieve embeddings via sample index
+                # Note: environment_types is now directly provided by the dataset
                 embeddings_list = []
                 for i in range(batch_size_curr):
                     # Get sample index from dataset
@@ -818,6 +882,7 @@ def train(
                         emb = torch.zeros(1024)
                     embeddings_list.append(emb)
                 embedding = torch.stack(embeddings_list)
+                # environment_types is already unpacked from batch_data above
 
                 image_camera_pose = camera_pose
                 physics = None
@@ -829,15 +894,25 @@ def train(
                 else:
                     actions = None
 
+            elif len(batch_data) == 7:
+                # New format with enhanced_meta for style conditioning
+                data, embedding, target, actions, physics, environment_types, enhanced_metas = batch_data
+            elif len(batch_data) == 6:
+                # Format with environment_type (no enhanced_meta)
+                data, embedding, target, actions, physics, environment_types = batch_data
+                enhanced_metas = None
             elif len(batch_data) == 5:
                 data, embedding, target, actions, physics = batch_data
+                enhanced_metas = None
             elif len(batch_data) == 4:
                 data, embedding, target, actions = batch_data
                 physics = None
+                enhanced_metas = None
             else:
                 data, embedding, target = batch_data
                 actions = None
                 physics = None
+                enhanced_metas = None
 
             # Move to device
             logger.debug(f"  Moving tensors to device: {device}")
@@ -882,9 +957,11 @@ def train(
             )
             logger.debug(f"  Forward pass complete. Output keys: {outputs.keys()}")
 
-            # Compute multi-task loss (Phase 2: includes physics)
+            # Compute multi-task loss (Phase 2: includes physics, environment-aware)
             logger.debug("  Computing multi-task loss...")
-            loss, loss_components = multi_task_loss(outputs, target, actions, physics)
+            loss, loss_components = multi_task_loss(
+                outputs, target, actions, physics, environment_types
+            )
             logger.debug(f"  Loss computed: {loss.item():.6f}")
 
             # Scale loss for gradient accumulation
@@ -924,15 +1001,33 @@ def train(
                 )
 
             # Phase 3: Diffusion refinement training (optional)
+            # With style conditioning from enhanced_meta when available
             if diffusion_module is not None and diffusion_optimizer is not None:
                 # Get transformer predictions (detach to avoid backprop through transformer)
                 transformer_poses = (
                     outputs["pose"].permute(1, 0, 2).detach()
                 )  # [batch, seq, dim]
 
+                # Extract style conditions from enhanced_meta (if available)
+                style_conditions = None
+                if (
+                    USE_STYLE_CONDITIONING
+                    and enhanced_metas is not None
+                    and extract_style_conditions_from_batch is not None
+                ):
+                    # enhanced_metas is a list/tuple of dicts from the batch
+                    style_conditions = [
+                        StyleCondition.from_enhanced_meta(meta)
+                        for meta in enhanced_metas
+                        if meta is not None
+                    ]
+                    # If not all samples have metadata, set to None for CFG dropout
+                    if len(style_conditions) != transformer_poses.shape[0]:
+                        style_conditions = None
+
                 # Train diffusion model to denoise transformer outputs
                 diffusion_result = diffusion_module.train_step(
-                    transformer_poses, diffusion_optimizer
+                    transformer_poses, diffusion_optimizer, style_conditions=style_conditions
                 )
                 total_diffusion_loss += diffusion_result["loss"]
 
@@ -1006,8 +1101,11 @@ def train(
 
         with torch.no_grad():
             for batch_data in val_loader:
-                # Unpack batch (Phase 2: includes physics)
-                if len(batch_data) == 5:
+                # Unpack batch (Phase 2: includes physics, environment_types)
+                environment_types = None
+                if len(batch_data) == 6:
+                    data, embedding, target, actions, physics, environment_types = batch_data
+                elif len(batch_data) == 5:
                     data, embedding, target, actions, physics = batch_data
                 elif len(batch_data) == 4:
                     data, embedding, target, actions = batch_data
@@ -1039,7 +1137,7 @@ def train(
                     return_all_outputs=True,
                     action_sequence=actions_seq,
                 )
-                loss, _ = multi_task_loss(outputs, target, actions, physics)
+                loss, _ = multi_task_loss(outputs, target, actions, physics, environment_types)
                 total_val_loss += loss.item()
 
                 # Compute metrics

@@ -18,13 +18,14 @@ class MultimodalParallaxDataset(Dataset):
 
     Each item corresponds to a single rendered PNG frame and returns:
 
-        (image_tensor, motion_frame_data, camera_pose, text_prompt, action_label)
+        (image_tensor, motion_frame_data, camera_pose, text_prompt, action_label, environment_type)
 
     - ``image_tensor``: [3, H, W] float32 in [0, 1]
     - ``motion_frame_data``: [20] motion vector for the selected actor/frame
     - ``camera_pose``: [7] (pos_x, pos_y, pos_z, tgt_x, tgt_y, tgt_z, fov)
     - ``text_prompt``: str (sample description)
     - ``action_label``: LongTensor scalar or ``None``
+    - ``environment_type``: str environment type (e.g., "earth_normal", "underwater")
     """
 
     def __init__(
@@ -161,8 +162,9 @@ class MultimodalParallaxDataset(Dataset):
         image_tensor = self._load_image(meta["image_path"])
 
         text_prompt = sample.get("description", "")
+        environment_type = sample.get("environment_type", "earth_normal")
 
-        return image_tensor, motion_frame, camera_pose, text_prompt, action_label
+        return image_tensor, motion_frame, camera_pose, text_prompt, action_label, environment_type
 
     def _select_action_label(
         self, actions: Any, frame_idx: int, actor_idx: int

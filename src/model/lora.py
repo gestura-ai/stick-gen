@@ -284,3 +284,155 @@ def load_lora_state_dict(model: nn.Module, lora_state: dict) -> int:
             model_state[name].copy_(param)
             loaded_count += 1
     return loaded_count
+
+
+# ============================================================================
+# Environment-Specific LoRA Adapter Support
+# ============================================================================
+
+# Registry mapping environment types to adapter file paths
+# Users can populate this at runtime or load from config
+ENVIRONMENT_ADAPTER_REGISTRY: dict[str, str] = {}
+
+
+def register_environment_adapter(environment_type: str, adapter_path: str) -> None:
+    """Register a LoRA adapter for a specific environment type.
+
+    Args:
+        environment_type: Environment type string (e.g., "underwater", "space")
+        adapter_path: Path to the saved LoRA adapter file (.pt)
+    """
+    ENVIRONMENT_ADAPTER_REGISTRY[environment_type] = adapter_path
+
+
+def get_registered_environments() -> list[str]:
+    """Get list of environment types with registered adapters.
+
+    Returns:
+        List of environment type strings
+    """
+    return list(ENVIRONMENT_ADAPTER_REGISTRY.keys())
+
+
+def load_environment_adapter(
+    model: nn.Module, environment_type: str, device: str = "cpu"
+) -> tuple[bool, int]:
+    """Load environment-specific LoRA adapter into model.
+
+    Looks up the adapter path from the registry and loads it.
+
+    Args:
+        model: The model with LoRA adapters injected
+        environment_type: Environment type to load adapter for
+        device: Device to load tensors to
+
+    Returns:
+        Tuple of (success: bool, num_params_loaded: int)
+    """
+    if environment_type not in ENVIRONMENT_ADAPTER_REGISTRY:
+        return False, 0
+
+    adapter_path = ENVIRONMENT_ADAPTER_REGISTRY[environment_type]
+
+    try:
+        lora_state = torch.load(adapter_path, map_location=device, weights_only=True)
+        loaded = load_lora_state_dict(model, lora_state)
+        return True, loaded
+    except (FileNotFoundError, RuntimeError) as e:
+        print(f"Warning: Failed to load adapter for {environment_type}: {e}")
+        return False, 0
+
+
+def save_environment_adapter(
+    model: nn.Module, environment_type: str, output_path: str
+) -> int:
+    """Save current LoRA weights as an environment-specific adapter.
+
+    Args:
+        model: The model with trained LoRA adapters
+        environment_type: Environment type this adapter is trained for
+        output_path: Path to save the adapter file
+
+    Returns:
+        Number of parameters saved
+    """
+    lora_state = get_lora_state_dict(model)
+
+    # Add metadata
+    save_dict = {
+        "environment_type": environment_type,
+        "lora_state": lora_state,
+        "num_params": sum(p.numel() for p in lora_state.values()),
+    }
+
+    torch.save(save_dict, output_path)
+
+    # Optionally register the adapter
+    register_environment_adapter(environment_type, output_path)
+
+    return len(lora_state)
+
+
+def load_environment_adapter_from_file(
+    model: nn.Module, adapter_path: str, device: str = "cpu"
+) -> tuple[str | None, int]:
+    """Load a LoRA adapter from file and return its environment type.
+
+    Args:
+        model: The model with LoRA adapters injected
+        adapter_path: Path to the adapter file
+        device: Device to load tensors to
+
+    Returns:
+        Tuple of (environment_type: str or None, num_params_loaded: int)
+    """
+    try:
+        save_dict = torch.load(adapter_path, map_location=device, weights_only=False)
+
+        # Handle both old format (just state dict) and new format (with metadata)
+        if isinstance(save_dict, dict) and "lora_state" in save_dict:
+            lora_state = save_dict["lora_state"]
+            env_type = save_dict.get("environment_type")
+        else:
+            lora_state = save_dict
+            env_type = None
+
+        loaded = load_lora_state_dict(model, lora_state)
+        return env_type, loaded
+    except (FileNotFoundError, RuntimeError) as e:
+        print(f"Warning: Failed to load adapter from {adapter_path}: {e}")
+        return None, 0
+
+
+def load_adapter_registry_from_config(config_path: str) -> int:
+    """Load environment adapter registry from a JSON config file.
+
+    Config format:
+    {
+        "adapters": {
+            "underwater": "/path/to/underwater_lora.pt",
+            "space": "/path/to/space_lora.pt",
+            ...
+        }
+    }
+
+    Args:
+        config_path: Path to JSON config file
+
+    Returns:
+        Number of adapters registered
+    """
+    import json
+
+    try:
+        with open(config_path) as f:
+            config = json.load(f)
+
+        adapters = config.get("adapters", {})
+        for env_type, adapter_path in adapters.items():
+            register_environment_adapter(env_type, adapter_path)
+
+        return len(adapters)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Warning: Failed to load adapter registry from {config_path}: {e}")
+        return 0
