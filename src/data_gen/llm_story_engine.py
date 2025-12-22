@@ -6,6 +6,7 @@ from typing import Protocol
 from pydantic import BaseModel
 
 from .schema import ActionType, Actor, ActorType, CameraKeyframe, Position, Scene
+from .story_engine import random_actor_type
 
 
 class ScriptSchema(BaseModel):
@@ -295,9 +296,13 @@ class LLMStoryGenerator:
             # Assign random colors and positions
             color = random.choice(["black", "blue", "red", "green", "purple"])
             pos = Position(x=random.uniform(-2, 2), y=0)
+
+            # Parse actor type from character data or use random
+            actor_type = self._parse_actor_type(char)
+
             actor = Actor(
                 id=f"actor_{i}",
-                actor_type=ActorType.HUMAN,
+                actor_type=actor_type,
                 initial_position=pos,
                 color=color,
                 actions=[],
@@ -341,6 +346,52 @@ class LLMStoryGenerator:
             scenes.append(scene)
 
         return scenes
+
+    def _parse_actor_type(self, char: dict) -> ActorType:
+        """
+        Parse actor type from character data.
+
+        Looks for 'type', 'actor_type', or 'species' fields in character dict.
+        Falls back to random selection if not specified.
+        """
+        # Check for explicit type field
+        type_str = char.get("type") or char.get("actor_type") or char.get("species", "")
+        type_str = type_str.lower().strip()
+
+        # Map common terms to actor types
+        type_mapping = {
+            "human": ActorType.HUMAN,
+            "person": ActorType.HUMAN,
+            "man": ActorType.HUMAN,
+            "woman": ActorType.HUMAN,
+            "child": ActorType.HUMAN,
+            "robot": ActorType.ROBOT,
+            "android": ActorType.ROBOT,
+            "cyborg": ActorType.ROBOT,
+            "droid": ActorType.ROBOT,
+            "machine": ActorType.ROBOT,
+            "alien": ActorType.ALIEN,
+            "extraterrestrial": ActorType.ALIEN,
+            "creature": ActorType.ALIEN,
+            "monster": ActorType.ALIEN,
+            "animal": ActorType.ANIMAL,
+            "dog": ActorType.ANIMAL,
+            "cat": ActorType.ANIMAL,
+            "bird": ActorType.ANIMAL,
+            "beast": ActorType.ANIMAL,
+        }
+
+        if type_str in type_mapping:
+            return type_mapping[type_str]
+
+        # Check character name for hints
+        name = char.get("name", "").lower()
+        for keyword, actor_type in type_mapping.items():
+            if keyword in name:
+                return actor_type
+
+        # Fall back to random selection
+        return random_actor_type()
 
     def _map_action(self, action_name: str) -> ActionType | None:
         """Map string action name to ActionType enum."""
