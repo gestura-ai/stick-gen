@@ -10,12 +10,51 @@ from .schema import (
     ActionType,
     Actor,
     ActorType,
+    EnvironmentProfile,
+    EnvironmentType,
     FaceFeatures,
     FacialExpression,
+    MotionProfile,
     MouthShape,
     ObjectType,
     Scene,
+    combine_environment_profiles,
+    get_environment_profile,
+    get_motion_profile,
 )
+
+
+# Environment-specific visual configurations for rendering
+ENVIRONMENT_VISUAL_CONFIGS = {
+    # Format: (background_color, tint_color, tint_alpha, particle_type)
+    # particle_type: None, "rain", "snow", "bubbles", "stars", "ash", "leaves", "sand"
+    "earth_normal": ("#f0f8ff", None, 0.0, None),  # Light sky blue, no tint
+    "underwater": ("#001a33", "#0066cc", 0.15, "bubbles"),  # Deep blue with bubble particles
+    "space": ("#000000", "#0a0a20", 0.1, "stars"),  # Black with star particles
+    "moon": ("#1a1a1a", "#404040", 0.1, None),  # Dark gray lunar surface
+    "forest": ("#1a3d1a", "#228b22", 0.08, "leaves"),  # Forest green with falling leaves
+    "desert": ("#f4a460", "#daa520", 0.1, "sand"),  # Sandy with sand particles
+    "arctic": ("#e0f0ff", "#ffffff", 0.15, "snow"),  # Ice white with snow
+    "volcanic": ("#1a0a0a", "#ff4500", 0.12, "ash"),  # Dark with orange glow and ash
+    "urban": ("#2d3748", "#708090", 0.08, None),  # City gray
+    "cyberpunk": ("#0a0514", "#ff00ff", 0.1, None),  # Dark purple with neon tint
+    "fantasy": ("#1a0a2e", "#ff80c0", 0.08, None),  # Magical purple-pink
+    "horror": ("#0a0505", "#4a0000", 0.15, None),  # Dark red
+    "sunset": ("#4b0082", "#ff7f50", 0.12, None),  # Indigo with coral tint
+    "sunrise": ("#191970", "#ffd700", 0.1, None),  # Navy with golden tint
+    "storm": ("#0d1117", "#4a5568", 0.1, "rain"),  # Dark with rain
+    "cave": ("#050505", "#3d3d3d", 0.1, None),  # Very dark
+    "beach": ("#87ceeb", "#f4a460", 0.05, None),  # Sky blue with sandy tint
+    "mountain": ("#4682b4", "#696969", 0.05, None),  # Steel blue with gray
+    "swamp": ("#1a2f1a", "#6b8e23", 0.12, None),  # Murky green
+    "jungle": ("#002600", "#32cd32", 0.1, "leaves"),  # Deep green with leaves
+    # Weather overlays
+    "rain": ("#2d3748", "#4a5568", 0.08, "rain"),
+    "snow": ("#e0f0ff", "#ffffff", 0.1, "snow"),
+    "fog": ("#808080", "#c0c0c0", 0.2, None),
+    "wind": ("#f0f8ff", None, 0.0, "leaves"),
+    "sandstorm": ("#daa520", "#cd853f", 0.25, "sand"),
+}
 
 
 class RenderStyle:
@@ -26,7 +65,12 @@ class RenderStyle:
 
 
 class StickFigure:
-    def __init__(self, actor: Actor):
+    def __init__(
+        self,
+        actor: Actor,
+        environment_type: EnvironmentType = EnvironmentType.EARTH_NORMAL,
+        weather_type: EnvironmentType | None = None,
+    ):
         self.id = actor.id
         self.actor_type = actor.actor_type
         self.color = actor.color
@@ -61,24 +105,190 @@ class StickFigure:
         self.is_transitioning = False
         self.previous_features = None
 
+        # Actor-type-specific motion profile
+        self.motion_profile: MotionProfile = get_motion_profile(self.actor_type)
+        self._last_quantized_t = 0.0  # For time quantization
+        self._rng = np.random.default_rng(hash(actor.id) % (2**31))  # Deterministic noise
+
+        # Environment physics profile (combines base environment + optional weather)
+        base_env = get_environment_profile(environment_type)
+        weather_env = get_environment_profile(weather_type) if weather_type else None
+        self.environment_profile: EnvironmentProfile = combine_environment_profiles(
+            base_env, weather_env
+        )
+        self.environment_type = environment_type
+        self.weather_type = weather_type
+
+    def _apply_time_quantization(self, t: float) -> float:
+        """Quantize time for mechanical/stepped motion (robots)."""
+        if self.motion_profile.time_quantization > 0:
+            step = self.motion_profile.time_quantization
+            return np.floor(t / step) * step
+        return t
+
+    def _apply_smoothness(self, value: float, t: float) -> float:
+        """Apply smoothness modifier to oscillating values."""
+        smoothness = self.motion_profile.smoothness
+        if smoothness >= 1.0:
+            return value  # Normal or extra smooth
+        # Stepped motion: quantize the sinusoidal output
+        # smoothness=0 means full quantization, smoothness=1 means no quantization
+        if smoothness < 0.5:
+            # Strong quantization for mechanical motion
+            steps = 8  # Number of discrete positions
+            quantized = np.round(value * steps) / steps
+            # Blend between quantized and smooth based on smoothness
+            blend = smoothness * 2  # 0-0.5 -> 0-1
+            return quantized * (1 - blend) + value * blend
+        return value
+
+    def _get_joint_noise(self) -> float:
+        """Get random noise for mechanical jitter."""
+        if self.motion_profile.joint_noise > 0:
+            return self._rng.uniform(
+                -self.motion_profile.joint_noise,
+                self.motion_profile.joint_noise
+            )
+        return 0.0
+
+    # === Environment Physics Methods ===
+
+    def _get_effective_speed(self, base_speed: float) -> float:
+        """Apply environment modifiers to movement speed."""
+        env = self.environment_profile
+        # Stack actor and environment speed modifiers
+        actor_freq = self.motion_profile.frequency_multiplier
+        env_speed = env.movement_speed_scale
+        # Friction affects speed (lower friction = harder to accelerate)
+        friction_effect = 0.5 + 0.5 * env.friction  # 0.5-1.0 range
+        # Air resistance slows movement
+        air_effect = 1.0 / (1.0 + (env.air_resistance - 1.0) * 0.3)
+        # Crowd density reduces speed
+        crowd_effect = 1.0 - env.crowd_density * 0.4
+        # Temperature affects energy
+        temp_effect = env.temperature_modifier
+
+        return base_speed * actor_freq * env_speed * friction_effect * air_effect * crowd_effect * temp_effect
+
+    def _get_effective_step_height(self, base_height: float) -> float:
+        """Apply environment modifiers to step/leg lift height."""
+        env = self.environment_profile
+        actor_amp = self.motion_profile.amplitude_modifier
+        env_step = env.step_height_scale
+        # Gravity affects how high legs lift
+        gravity_effect = 1.0 + (1.0 - env.gravity_scale) * 0.3
+
+        return base_height * actor_amp * env_step * gravity_effect
+
+    def _get_effective_jump_height(self, base_height: float) -> float:
+        """Apply environment modifiers to jump height."""
+        env = self.environment_profile
+        actor_amp = self.motion_profile.amplitude_modifier
+        # Jump height inversely proportional to gravity
+        gravity_effect = 1.0 / max(env.gravity_scale, 0.01)
+        env_jump = env.jump_height_scale
+
+        return base_height * actor_amp * gravity_effect * env_jump
+
+    def _get_effective_gravity(self) -> float:
+        """Get effective gravity for physics calculations."""
+        return 9.8 * self.environment_profile.gravity_scale
+
+    def _get_buoyancy_offset(self, t: float) -> float:
+        """Get vertical offset from buoyancy (floating in water/space)."""
+        env = self.environment_profile
+        if env.buoyancy > 0:
+            # Gentle bobbing motion in buoyant environments
+            bob_amplitude = env.buoyancy * 0.2  # Max 0.2 units of bob
+            bob_freq = 0.5  # Slow, gentle bob
+            return bob_amplitude * np.sin(2 * np.pi * bob_freq * t)
+        return 0.0
+
+    def _get_wind_offset(self, t: float) -> tuple[float, float]:
+        """Get lateral offset from wind."""
+        env = self.environment_profile
+        if env.wind_strength > 0:
+            # Wind causes swaying and drift
+            sway_amp = env.wind_strength * 0.15
+            sway_freq = 0.8 + self._rng.uniform(-0.1, 0.1)
+            sway = sway_amp * np.sin(2 * np.pi * sway_freq * t + env.wind_direction)
+            # Wind direction affects x/y components
+            x_offset = sway * np.cos(env.wind_direction)
+            y_offset = sway * np.sin(env.wind_direction) * 0.3  # Less vertical effect
+            return x_offset, y_offset
+        return 0.0, 0.0
+
+    def _get_balance_sway(self, t: float) -> float:
+        """Get balance difficulty sway (slippery surfaces, unstable ground)."""
+        env = self.environment_profile
+        if env.balance_difficulty > 1.0:
+            # Increased sway on difficult balance surfaces
+            difficulty_factor = (env.balance_difficulty - 1.0) * 0.1
+            sway_freq = 1.5 + self._rng.uniform(-0.2, 0.2)
+            return difficulty_factor * np.sin(2 * np.pi * sway_freq * t)
+        return 0.0
+
+    def _get_friction_slide(self) -> float:
+        """Get slide factor for low-friction surfaces (ice, wet)."""
+        env = self.environment_profile
+        if env.friction < 0.5:
+            # Low friction = sliding motion
+            return 1.0 - env.friction * 2  # 0.0-1.0 slide factor
+        return 0.0
+
+    def _apply_environment_to_pose(
+        self, lines: list, head_center: np.ndarray, t: float
+    ) -> tuple[list, np.ndarray]:
+        """Apply environment physics to final pose (buoyancy, wind, balance)."""
+        env = self.environment_profile
+
+        # Get environmental offsets
+        buoyancy_y = self._get_buoyancy_offset(t)
+        wind_x, wind_y = self._get_wind_offset(t)
+        balance_x = self._get_balance_sway(t)
+
+        # Combine offsets
+        total_x_offset = wind_x + balance_x
+        total_y_offset = buoyancy_y + wind_y
+
+        # Apply slope lean (lean into uphill)
+        slope_lean = np.sin(env.slope_angle) * 0.2
+
+        if abs(total_x_offset) > 0.001 or abs(total_y_offset) > 0.001 or abs(slope_lean) > 0.001:
+            # Apply offsets to all line endpoints
+            offset = np.array([total_x_offset + slope_lean, total_y_offset])
+            adjusted_lines = []
+            for start, end in lines:
+                adjusted_lines.append((start + offset, end + offset))
+            head_center = head_center + offset
+            return adjusted_lines, head_center
+
+        return lines, head_center
+
     def update_position(self, t: float, dt: float = 0.04, apply_physics: bool = True):
         """
         Update actor position based on movement path or action velocity
 
         Phase 2: Now includes physics constraints (gravity, ground collision)
+        Phase 3: Environment physics modifiers (gravity, friction, buoyancy)
 
         Args:
             t: Current time in seconds
             dt: Time delta (1/fps, default 0.04 for 25fps)
             apply_physics: Whether to apply physics constraints (default: True)
         """
+        env = self.environment_profile
+
         if self.movement_path and len(self.movement_path) > 0:
             # Use predefined movement path (waypoint interpolation)
             self.pos = self._interpolate_path(t)
         else:
             # Use action-based velocity
             current_action = self.get_current_action(t)
-            velocity_magnitude = ACTION_VELOCITIES.get(current_action, 0.0)
+            base_velocity = ACTION_VELOCITIES.get(current_action, 0.0)
+
+            # Apply environment speed modifiers
+            velocity_magnitude = self._get_effective_speed(base_velocity)
 
             if velocity_magnitude > 0:
                 # Move in the direction specified by self.velocity
@@ -88,20 +298,38 @@ class StickFigure:
                 else:
                     direction = np.array([1.0, 0.0])  # Default: move right
 
-                # Update position
+                # Update position with environment-adjusted velocity
                 self.pos += direction * velocity_magnitude * dt
 
-            # Phase 2: Apply physics constraints
+                # Apply friction-based sliding (ice, wet surfaces)
+                slide_factor = self._get_friction_slide()
+                if slide_factor > 0 and hasattr(self, '_last_velocity'):
+                    # Continue sliding in previous direction
+                    slide_decay = 0.95  # Gradual slowdown
+                    self._last_velocity *= slide_decay
+                    self.pos += self._last_velocity * slide_factor * dt
+                self._last_velocity = direction * velocity_magnitude
+
+            # Phase 2/3: Apply physics constraints
             if apply_physics:
-                # Apply gravity for jumping actions
+                # Apply gravity for jumping actions (with environment modifier)
                 if current_action == ActionType.JUMP:
                     # Initialize physics velocity if not present
                     if not hasattr(self, "physics_velocity"):
                         self.physics_velocity = np.array([0.0, 0.0])
 
-                    # Apply gravity (9.8 m/s^2 downward)
-                    gravity = -9.8
+                    # Apply environment-scaled gravity
+                    gravity = -self._get_effective_gravity()
                     self.physics_velocity[1] += gravity * dt
+
+                    # Apply air resistance to physics velocity
+                    air_drag = 1.0 - (env.air_resistance - 1.0) * 0.1 * dt
+                    self.physics_velocity *= max(air_drag, 0.9)
+
+                    # Apply buoyancy (upward force in water/space)
+                    if env.buoyancy > 0:
+                        buoyancy_force = env.buoyancy * 5.0  # Counteracts gravity
+                        self.physics_velocity[1] += buoyancy_force * dt
 
                     # Update position based on physics velocity
                     self.pos += self.physics_velocity * dt
@@ -282,69 +510,163 @@ class StickFigure:
 
     def get_pose(self, t: float, dt: float = 0.04) -> tuple[list, np.ndarray]:
         """
-        Get pose based on current action and time
+        Get pose based on current action and time, with actor-type-specific modifiers.
 
         Args:
             t: Current time in seconds
             dt: Time delta for position update
         """
+        # Apply time quantization for mechanical motion (robots)
+        anim_t = self._apply_time_quantization(t)
+
+        # Apply frequency modifier for actor-type-specific timing
+        anim_t *= self.motion_profile.frequency_multiplier
+
         # Update position based on movement
         self.update_position(t, dt)
 
         self.current_action = self.get_current_action(t)
 
-        # Base skeleton positions (using updated self.pos)
-        head_center = self.pos + np.array([0, 1.5]) * self.scale
-        neck = self.pos + np.array([0, 1.0]) * self.scale
-        hip = self.pos
+        # Apply posture modifiers from motion profile
+        mp = self.motion_profile
 
-        # Action-specific animations
+        # Crouch factor lowers the stance
+        crouch_offset = mp.crouch_factor * 0.5 * self.scale
+
+        # Forward lean tilts the body
+        lean_x = np.sin(mp.forward_lean) * 0.3 * self.scale
+        lean_y = (1 - np.cos(mp.forward_lean)) * 0.2 * self.scale
+
+        # Base skeleton positions with motion profile modifiers
+        torso_height = 1.0 * mp.torso_scale
+        head_height = 1.5 * mp.torso_scale
+
+        hip = self.pos - np.array([0, crouch_offset])
+        neck = hip + np.array([lean_x, torso_height - lean_y]) * self.scale
+        head_center = hip + np.array([lean_x, head_height - lean_y]) * self.scale
+
+        # Action-specific animations (pass modified time for actor-specific rhythms)
         if self.current_action == ActionType.WALK:
-            return self._animate_walk(t, neck, hip, head_center)
+            lines, head = self._animate_walk(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.RUN:
-            return self._animate_run(t, neck, hip, head_center)
+            lines, head = self._animate_run(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.SPRINT:
-            return self._animate_sprint(t, neck, hip, head_center)
+            lines, head = self._animate_sprint(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.JUMP:
-            return self._animate_jump(t, neck, hip, head_center)
+            lines, head = self._animate_jump(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.WAVE:
-            return self._animate_wave(t, neck, hip, head_center)
+            lines, head = self._animate_wave(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.BATTING:
-            return self._animate_batting(t, neck, hip, head_center)
+            lines, head = self._animate_batting(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.PITCHING:
-            return self._animate_pitching(t, neck, hip, head_center)
+            lines, head = self._animate_pitching(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.CATCHING:
-            return self._animate_catching(t, neck, hip, head_center)
+            lines, head = self._animate_catching(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.RUNNING_BASES:
-            return self._animate_run(t, neck, hip, head_center)  # Similar to run
+            lines, head = self._animate_run(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.FIELDING:
-            return self._animate_fielding(t, neck, hip, head_center)
+            lines, head = self._animate_fielding(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.THROWING:
-            return self._animate_throwing(t, neck, hip, head_center)
+            lines, head = self._animate_throwing(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.KICKING:
-            return self._animate_kicking(t, neck, hip, head_center)
+            lines, head = self._animate_kicking(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.SIT:
-            return self._animate_sit(t, neck, hip, head_center)
+            lines, head = self._animate_sit(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.EATING:
-            return self._animate_eating(t, neck, hip, head_center)
+            lines, head = self._animate_eating(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.TALK:
-            return self._animate_talk(t, neck, hip, head_center)
+            lines, head = self._animate_talk(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.LOOKING_AROUND:
-            return self._animate_looking_around(t, neck, hip, head_center)
+            lines, head = self._animate_looking_around(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.FIGHT:
-            return self._animate_fight(t, neck, hip, head_center)
+            lines, head = self._animate_fight(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.DANCE:
-            return self._animate_dance(t, neck, hip, head_center)
+            lines, head = self._animate_dance(anim_t, neck, hip, head_center)
         elif self.current_action == ActionType.TYPING:
-            return self._animate_typing(t, neck, hip, head_center)
+            lines, head = self._animate_typing(anim_t, neck, hip, head_center)
         else:  # IDLE and others
-            return self._animate_idle(t, neck, hip, head_center)
+            lines, head = self._animate_idle(anim_t, neck, hip, head_center)
+
+        # Apply post-processing motion profile modifiers (actor-specific)
+        lines = self._apply_motion_profile_to_pose(lines, hip)
+
+        # Apply environment physics effects (buoyancy, wind, balance, slope)
+        lines, head = self._apply_environment_to_pose(lines, head, t)
+
+        return lines, head
+
+    def _apply_motion_profile_to_pose(
+        self, lines: list, hip: np.ndarray
+    ) -> list:
+        """
+        Apply actor-type-specific motion modifiers to the pose.
+
+        This post-processes the animation output to add:
+        - Limb length scaling
+        - Stance width adjustment
+        - Joint noise (mechanical jitter)
+        - Amplitude modification
+        """
+        mp = self.motion_profile
+
+        # Skip if all modifiers are at baseline
+        if (mp.limb_length_scale == 1.0 and mp.stance_width == 1.0 and
+            mp.amplitude_modifier == 1.0 and mp.joint_noise == 0.0):
+            return lines
+
+        modified_lines = []
+
+        for i, (start, end) in enumerate(lines):
+            new_start = start.copy()
+            new_end = end.copy()
+
+            # Lines 1-2 are legs (hip to feet), lines 3-4 are arms
+            is_leg = (i == 1 or i == 2)
+            is_arm = (i == 3 or i == 4)
+
+            if is_leg or is_arm:
+                # Calculate limb vector from hip/neck
+                limb_vec = end - start
+                limb_length = np.linalg.norm(limb_vec)
+
+                if limb_length > 0:
+                    # Apply limb length scaling
+                    limb_dir = limb_vec / limb_length
+                    new_length = limb_length * mp.limb_length_scale
+                    new_end = start + limb_dir * new_length
+
+                    # Apply amplitude modifier (affects how far limbs swing from rest)
+                    rest_end = start + limb_dir * new_length
+                    swing = new_end - rest_end
+                    new_end = rest_end + swing * mp.amplitude_modifier
+
+            # Apply stance width for legs
+            if is_leg:
+                # Adjust horizontal spread
+                center_x = hip[0]
+                new_end[0] = center_x + (new_end[0] - center_x) * mp.stance_width
+
+            # Apply joint noise
+            if mp.joint_noise > 0:
+                noise = np.array([self._get_joint_noise(), self._get_joint_noise()])
+                new_end = new_end + noise
+
+            modified_lines.append((new_start, new_end))
+
+        return modified_lines
 
     def _animate_idle(
         self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
     ):
-        """Idle animation - slight breathing motion"""
-        breathe = np.sin(t * 2) * 0.05
+        """Idle animation - slight breathing motion with actor-type modifiers"""
+        mp = self.motion_profile
+
+        # Breathing amplitude affected by sway_amplitude (robots breathe less)
+        breathe = np.sin(t * 2) * 0.05 * mp.sway_amplitude
+
+        # Apply smoothness (mechanical actors have stepped breathing)
+        breathe = self._apply_smoothness(breathe, t)
+
         left_foot = hip + np.array([-0.3, -1.5]) * self.scale
         right_foot = hip + np.array([0.3, -1.5]) * self.scale
         left_hand = neck + np.array([-0.6, -0.8 + breathe]) * self.scale
@@ -362,9 +684,16 @@ class StickFigure:
     def _animate_walk(
         self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
     ):
-        """Walking animation"""
-        leg_swing = np.sin(t * 8) * 0.4
-        arm_swing = np.sin(t * 8) * 0.3
+        """Walking animation with actor-type modifiers"""
+        mp = self.motion_profile
+
+        # Base swing values
+        leg_swing_raw = np.sin(t * 8) * 0.4 * mp.amplitude_modifier
+        arm_swing_raw = np.sin(t * 8 + mp.phase_offset) * 0.3 * mp.amplitude_modifier
+
+        # Apply smoothness modifier (robots have stepped motion)
+        leg_swing = self._apply_smoothness(leg_swing_raw, t)
+        arm_swing = self._apply_smoothness(arm_swing_raw, t)
 
         left_foot = hip + np.array([-0.3 + leg_swing, -1.5]) * self.scale
         right_foot = hip + np.array([0.3 - leg_swing, -1.5]) * self.scale
@@ -383,10 +712,18 @@ class StickFigure:
     def _animate_run(
         self, t: float, neck: np.ndarray, hip: np.ndarray, head_center: np.ndarray
     ):
-        """Running animation - faster and more exaggerated"""
-        leg_swing = np.sin(t * 15) * 0.7
-        arm_swing = np.sin(t * 15) * 0.5
-        bob = abs(np.sin(t * 15)) * 0.1
+        """Running animation with actor-type modifiers"""
+        mp = self.motion_profile
+
+        # Base swing values with amplitude modifier
+        leg_swing_raw = np.sin(t * 15) * 0.7 * mp.amplitude_modifier
+        arm_swing_raw = np.sin(t * 15 + mp.phase_offset) * 0.5 * mp.amplitude_modifier
+        bob_raw = abs(np.sin(t * 15)) * 0.1 * mp.sway_amplitude
+
+        # Apply smoothness modifier
+        leg_swing = self._apply_smoothness(leg_swing_raw, t)
+        arm_swing = self._apply_smoothness(arm_swing_raw, t)
+        bob = self._apply_smoothness(bob_raw, t)
 
         # Adjust body position for running
         hip_adjusted = hip + np.array([0, bob])
@@ -1212,6 +1549,14 @@ class CinematicRenderer(StickFigure):
     - Z-sorting (occlusion)
     """
 
+    def __init__(
+        self,
+        actor: Actor,
+        environment_type: EnvironmentType = EnvironmentType.EARTH_NORMAL,
+        weather_type: EnvironmentType | None = None,
+    ):
+        super().__init__(actor, environment_type, weather_type)
+
     def project_3d_to_2d(self, x, y, z, camera_zoom=1.0):
         """
         Project 3D point to 2D with perspective.
@@ -1336,6 +1681,96 @@ class Renderer:
                 ]
             )
 
+    def _get_environment_visuals(self, env_type: EnvironmentType, weather_type=None):
+        """Get visual configuration for environment type."""
+        env_name = env_type.value if hasattr(env_type, 'value') else str(env_type)
+        config = ENVIRONMENT_VISUAL_CONFIGS.get(env_name, ENVIRONMENT_VISUAL_CONFIGS["earth_normal"])
+        bg_color, tint_color, tint_alpha, particle_type = config
+
+        # Override with weather if specified
+        if weather_type:
+            weather_name = weather_type.value if hasattr(weather_type, 'value') else str(weather_type)
+            if weather_name in ENVIRONMENT_VISUAL_CONFIGS:
+                _, w_tint, w_alpha, w_particles = ENVIRONMENT_VISUAL_CONFIGS[weather_name]
+                if w_tint:
+                    tint_color = w_tint
+                    tint_alpha = max(tint_alpha, w_alpha)
+                if w_particles:
+                    particle_type = w_particles
+
+        return bg_color, tint_color, tint_alpha, particle_type
+
+    def _draw_environment_tint(self, tint_color: str, tint_alpha: float, xmin, xmax, ymin, ymax):
+        """Draw a semi-transparent color overlay for environment tinting."""
+        if tint_color and tint_alpha > 0:
+            tint_rect = patches.Rectangle(
+                (xmin, ymin), xmax - xmin, ymax - ymin,
+                facecolor=tint_color, alpha=tint_alpha, zorder=100
+            )
+            self.ax.add_patch(tint_rect)
+
+    def _draw_particles(self, particle_type: str, t: float, xmin, xmax, ymin, ymax):
+        """Draw environment-specific particle effects."""
+        if not particle_type:
+            return
+
+        rng = np.random.default_rng(int(t * 10) % 1000)  # Deterministic per-frame
+        num_particles = 30
+
+        if particle_type == "rain":
+            for _ in range(num_particles):
+                x = rng.uniform(xmin, xmax)
+                y_start = rng.uniform(ymin, ymax)
+                length = rng.uniform(0.2, 0.5)
+                self.ax.plot([x, x - 0.05], [y_start, y_start - length],
+                           color='#6699cc', alpha=0.4, linewidth=1, zorder=90)
+
+        elif particle_type == "snow":
+            for _ in range(num_particles):
+                x = rng.uniform(xmin, xmax)
+                y = rng.uniform(ymin, ymax)
+                size = rng.uniform(0.02, 0.08)
+                self.ax.add_patch(patches.Circle((x, y), size, color='white', alpha=0.7, zorder=90))
+
+        elif particle_type == "bubbles":
+            for _ in range(num_particles // 2):
+                x = rng.uniform(xmin, xmax)
+                y = rng.uniform(ymin, ymax)
+                size = rng.uniform(0.03, 0.1)
+                self.ax.add_patch(patches.Circle((x, y), size, facecolor='none',
+                                                edgecolor='#66ccff', alpha=0.5, linewidth=1, zorder=90))
+
+        elif particle_type == "stars":
+            for _ in range(num_particles):
+                x = rng.uniform(xmin, xmax)
+                y = rng.uniform(ymin, ymax)
+                size = rng.uniform(0.01, 0.04)
+                alpha = rng.uniform(0.3, 1.0)
+                self.ax.add_patch(patches.Circle((x, y), size, color='white', alpha=alpha, zorder=5))
+
+        elif particle_type == "ash":
+            for _ in range(num_particles // 2):
+                x = rng.uniform(xmin, xmax)
+                y = rng.uniform(ymin, ymax)
+                size = rng.uniform(0.02, 0.06)
+                gray = rng.uniform(0.3, 0.6)
+                self.ax.add_patch(patches.Circle((x, y), size, color=str(gray), alpha=0.6, zorder=90))
+
+        elif particle_type == "leaves":
+            for _ in range(num_particles // 3):
+                x = rng.uniform(xmin, xmax)
+                y = rng.uniform(ymin, ymax)
+                size = rng.uniform(0.03, 0.08)
+                color = rng.choice(['#228b22', '#32cd32', '#6b8e23', '#8b4513'])
+                self.ax.add_patch(patches.Circle((x, y), size, color=color, alpha=0.6, zorder=90))
+
+        elif particle_type == "sand":
+            for _ in range(num_particles):
+                x = rng.uniform(xmin, xmax)
+                y = rng.uniform(ymin, ymax)
+                size = rng.uniform(0.01, 0.03)
+                self.ax.add_patch(patches.Circle((x, y), size, color='#daa520', alpha=0.4, zorder=90))
+
     def render_scene(
         self,
         scene: Scene,
@@ -1343,10 +1778,25 @@ class Renderer:
         camera_mode: str = "static",
         cinematic: bool = False,
     ):
+        # Get environment info from scene
+        env_type = getattr(scene, 'environment_type', EnvironmentType.EARTH_NORMAL)
+        weather_type = getattr(scene, 'weather_type', None)
+
+        # Get environment-specific visual configuration
+        bg_color, tint_color, tint_alpha, particle_type = self._get_environment_visuals(
+            env_type, weather_type
+        )
+
         if cinematic:
-            actors = [CinematicRenderer(a) for a in scene.actors]
+            actors = [
+                CinematicRenderer(a, environment_type=env_type, weather_type=weather_type)
+                for a in scene.actors
+            ]
         else:
-            actors = [StickFigure(a) for a in scene.actors]
+            actors = [
+                StickFigure(a, environment_type=env_type, weather_type=weather_type)
+                for a in scene.actors
+            ]
         objects = scene.objects
 
         # Setup Camera based on mode
@@ -1358,10 +1808,7 @@ class Renderer:
             # Or add a slow zoom in
             # self.camera.add_movement(Zoom((0,0), 0.8, 1.2, 0, scene.duration))
 
-        # Set background color based on theme or style
-        bg_color = "white"
-        if scene.theme and "space" in scene.theme:
-            bg_color = "black"
+        # Override background for specific styles
         if self.style == RenderStyle.NEON:
             bg_color = "black"
 
@@ -1381,12 +1828,23 @@ class Renderer:
             self.ax.set_facecolor(bg_color)
             self.fig.patch.set_facecolor(bg_color)
 
+            # Draw background particles (stars, etc.) - behind everything
+            if particle_type == "stars":
+                self._draw_particles(particle_type, t, xmin, xmax, ymin, ymax)
+
             # Draw Background Objects
             self._draw_objects(objects, t)
 
             # Draw all actors
             for actor in actors:
                 self._draw_actor(actor, t)
+
+            # Draw foreground particles (rain, snow, bubbles, etc.) - in front of actors
+            if particle_type and particle_type != "stars":
+                self._draw_particles(particle_type, t, xmin, xmax, ymin, ymax)
+
+            # Draw environment tint overlay (on top of everything)
+            self._draw_environment_tint(tint_color, tint_alpha, xmin, xmax, ymin, ymax)
 
         ani = animation.FuncAnimation(
             self.fig, update, frames=int(scene.duration * 25), interval=40
