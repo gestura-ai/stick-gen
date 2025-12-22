@@ -20,7 +20,8 @@ tqdm>=4.65.0
 pyyaml>=6.0  # For configuration file loading
 
 # SMPL/AMASS processing
-chumpy>=0.70  # For SMPL model loading
+smplx>=0.1.28  # SMPL-X body model library for motion processing
+chumpy>=0.70  # Legacy SMPL model loading (dependency for some older SMPL files)
 scipy>=1.9.0  # For scientific computing
 
 # BVH/Motion Capture processing
@@ -33,3 +34,6 @@ ollama>=0.1.0
 
 # Web Interface
 gradio>=4.0.0
+
+# HuggingFace Hub
+huggingface-hub>=0.20.0

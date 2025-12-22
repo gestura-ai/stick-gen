@@ -45,6 +45,9 @@ checkpoints/
 # Allow tracking of essential metadata
 !data/amass_descriptions.json
 
+# Generated data (all conversion outputs, curated datasets, etc.)
+/generation/
+
 # Temporary files
 *.tmp
 *.temp
@@ -54,3 +57,5 @@ checkpoints/
 venv/
 env/
 .env
+.venv
+/out

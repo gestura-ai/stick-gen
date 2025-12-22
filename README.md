@@ -19,7 +19,7 @@
 - **Realistic Spatial Movement**: Actors move through space with real-world velocities
 - **Temporal Consistency**: Smooth frame-to-frame transitions
 - **42 Actions**: Walk, run, jump, throw, catch, kick, dance, and more
-- **25+ Objects**: Realistic object scales and interactions
+- **25+ Objects**: Realistic object scales and interactions/Users/bc/Documents/repos/gestura/stick-gen/README.md
 
 ### Facial Expressions 
 - **6 Expression Types**: NEUTRAL, HAPPY, SAD, SURPRISED, ANGRY, EXCITED
@@ -106,6 +106,21 @@ graph LR
 ./stick-gen "Two teams playing against each other in a World Series playoff"
 ./stick-gen "A man exploring space and meets an alien" --output space.mp4
 ```
+
+### Image-Conditioned Motion from a 2.5D Stick Figure
+
+You can condition the transformer directly on a single 2.5D stick-figure image
+in addition to text:
+
+```bash
+./stick-gen "A person jumps and waves" \
+  --image path/to/stick_figure.png \
+  --output jump_wave.mp4
+```
+
+When `--image` is provided, the default inference pipeline enables the
+multimodal transformer (text + image + camera pose) and exports the generated
+motion as a companion `.motion` file alongside the rendered video.
 
 ### Examples
 - **Baseball**: Players run around bases with realistic movement

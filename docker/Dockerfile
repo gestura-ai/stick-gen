@@ -75,6 +75,7 @@ COPY package.json package-lock.json* ./
 
 # Install Python dependencies
 # Note: chumpy has a broken setup.py that imports pip directly, so we install it with --no-build-isolation
+# smplx is the SMPL-X body model library needed for AMASS motion processing
 RUN pip install --upgrade pip setuptools wheel && \
     pip install chumpy --no-build-isolation && \
     pip install -r requirements.txt && \

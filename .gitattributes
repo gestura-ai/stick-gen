@@ -1,0 +1,32 @@
+# HuggingFace Spaces Export Ignore
+# These files/directories are excluded when syncing to HF Spaces
+# See: https://huggingface.co/docs/hub/spaces-github-actions
+
+# Internal deployment and training scripts
+runpod/ export-ignore
+scripts/ export-ignore
+configs/ export-ignore
+
+# Documentation (not needed for demo)
+docs/ export-ignore
+model_cards/ export-ignore
+*.md export-ignore
+!README.md
+
+# Tests
+tests/ export-ignore
+
+# Data and checkpoints (large files)
+data/ export-ignore
+checkpoints/ export-ignore
+outputs/ export-ignore
+
+# Development files
+.github/ export-ignore
+.vscode/ export-ignore
+docker/ export-ignore
+
+# Training-only source code
+src/train/ export-ignore
+src/data_gen/ export-ignore
+src/eval/ export-ignore
