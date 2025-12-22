@@ -67,8 +67,41 @@ class SafetyCriticResult:
         return [issue.description for issue in self.issues if issue.severity >= 0.7]
 
 
+# Environment-specific physics threshold multipliers for safety evaluation
+# These adjust thresholds based on environment physics characteristics
+SAFETY_ENVIRONMENT_MULTIPLIERS = {
+    # Low gravity environments - different expectations
+    "space_vacuum": {"velocity": 0.5, "acceleration": 0.3, "ground_y": -10.0},  # No ground in space
+    "moon": {"velocity": 1.5, "acceleration": 0.5, "ground_y": -0.1},
+    "mars": {"velocity": 1.3, "acceleration": 0.7, "ground_y": -0.1},
+    "asteroid": {"velocity": 0.5, "acceleration": 0.3, "ground_y": -10.0},
+    "alien_planet_low_g": {"velocity": 1.5, "acceleration": 0.5, "ground_y": -0.1},
+    "cloud_realm": {"velocity": 0.6, "acceleration": 0.4, "ground_y": -10.0},  # Floating
+    # Underwater - slow movement, no ground constraint
+    "underwater": {"velocity": 0.4, "acceleration": 0.4, "ground_y": -10.0},
+    "ocean_surface": {"velocity": 0.6, "acceleration": 0.5, "ground_y": -10.0},
+    "river": {"velocity": 0.5, "acceleration": 0.5, "ground_y": -5.0},
+    "lake": {"velocity": 0.5, "acceleration": 0.5, "ground_y": -5.0},
+    "pool": {"velocity": 0.5, "acceleration": 0.5, "ground_y": -2.0},
+    # Ice/slippery - can have higher velocities
+    "rink": {"velocity": 1.5, "acceleration": 0.7, "ground_y": -0.1},
+    "arctic": {"velocity": 1.2, "acceleration": 0.8, "ground_y": -0.1},
+    "ice_realm": {"velocity": 1.3, "acceleration": 0.7, "ground_y": -0.1},
+    # High altitude/rooftop - allow some negative Y
+    "rooftop": {"velocity": 1.0, "acceleration": 1.0, "ground_y": -5.0},
+    # Sports venues - fast motion expected
+    "stadium": {"velocity": 1.2, "acceleration": 1.2, "ground_y": -0.1},
+    "arena": {"velocity": 1.2, "acceleration": 1.2, "ground_y": -0.1},
+    "track": {"velocity": 1.3, "acceleration": 1.2, "ground_y": -0.1},
+}
+
+
 class SafetyCriticConfig:
-    """Configuration for the safety critic thresholds."""
+    """Configuration for the safety critic thresholds.
+
+    Supports environment-aware threshold adjustment for different physics contexts
+    (e.g., underwater, space, ice).
+    """
 
     def __init__(
         self,
@@ -80,7 +113,7 @@ class SafetyCriticConfig:
         repetition_min_cycles: int = 3,
         jitter_acceleration_threshold: float = 50.0,
         jitter_frame_ratio: float = 0.3,
-        # Physics thresholds
+        # Physics thresholds (base values for Earth-normal)
         max_velocity: float = 15.0,  # m/s
         max_acceleration: float = 50.0,  # m/s²
         ground_y_threshold: float = -0.1,  # Allow small negative for tolerance
@@ -89,6 +122,8 @@ class SafetyCriticConfig:
         min_smoothness_score: float = 0.2,
         # Rejection threshold
         rejection_severity_threshold: float = 0.7,
+        # Environment type for physics-aware thresholds
+        environment_type: str | None = None,
     ):
         self.frozen_velocity_threshold = frozen_velocity_threshold
         self.frozen_frame_ratio = frozen_frame_ratio
@@ -97,12 +132,41 @@ class SafetyCriticConfig:
         self.repetition_min_cycles = repetition_min_cycles
         self.jitter_acceleration_threshold = jitter_acceleration_threshold
         self.jitter_frame_ratio = jitter_frame_ratio
-        self.max_velocity = max_velocity
-        self.max_acceleration = max_acceleration
-        self.ground_y_threshold = ground_y_threshold
+
+        # Store base values for environment adjustment
+        self._base_max_velocity = max_velocity
+        self._base_max_acceleration = max_acceleration
+        self._base_ground_y_threshold = ground_y_threshold
+
+        # Apply environment multipliers
+        self.environment_type = environment_type
+        self._apply_environment_multipliers(environment_type)
+
         self.min_quality_score = min_quality_score
         self.min_smoothness_score = min_smoothness_score
         self.rejection_severity_threshold = rejection_severity_threshold
+
+    def _apply_environment_multipliers(self, environment_type: str | None) -> None:
+        """Apply environment-specific multipliers to physics thresholds."""
+        if environment_type and environment_type in SAFETY_ENVIRONMENT_MULTIPLIERS:
+            mult = SAFETY_ENVIRONMENT_MULTIPLIERS[environment_type]
+            self.max_velocity = self._base_max_velocity * mult.get("velocity", 1.0)
+            self.max_acceleration = self._base_max_acceleration * mult.get("acceleration", 1.0)
+            self.ground_y_threshold = mult.get("ground_y", self._base_ground_y_threshold)
+        else:
+            self.max_velocity = self._base_max_velocity
+            self.max_acceleration = self._base_max_acceleration
+            self.ground_y_threshold = self._base_ground_y_threshold
+
+    def set_environment(self, environment_type: str | None) -> None:
+        """Update thresholds for a new environment type."""
+        self.environment_type = environment_type
+        self._apply_environment_multipliers(environment_type)
+
+    @classmethod
+    def for_environment(cls, environment_type: str, **kwargs) -> "SafetyCriticConfig":
+        """Create a config pre-configured for a specific environment."""
+        return cls(environment_type=environment_type, **kwargs)
 
 
 class SafetyCritic:
@@ -125,6 +189,7 @@ class SafetyCritic:
         physics: torch.Tensor | None = None,
         quality_score: float | None = None,
         expected_action: str | None = None,
+        environment_type: str | None = None,
     ) -> SafetyCriticResult:
         """
         Evaluate a generated motion sequence for safety and quality.
@@ -134,10 +199,15 @@ class SafetyCritic:
             physics: Optional physics tensor [T, 6] or [T, A, 6]
             quality_score: Optional pre-computed quality score from auto-annotator
             expected_action: Optional expected action category for semantic check
+            environment_type: Optional environment type for physics-aware thresholds
 
         Returns:
             SafetyCriticResult with is_safe, overall_score, and detailed issues
         """
+        # Temporarily adjust thresholds for environment-specific evaluation
+        original_env = self.config.environment_type
+        if environment_type and environment_type != original_env:
+            self.config.set_environment(environment_type)
         issues: list[SafetyIssue] = []
         check_results: dict[str, dict[str, Any]] = {}
 
@@ -238,6 +308,10 @@ class SafetyCritic:
         overall_score = self._compute_overall_score(issues, check_results)
         max_severity = max((i.severity for i in issues), default=0.0)
         is_safe = max_severity < self.config.rejection_severity_threshold
+
+        # Restore original environment if we changed it
+        if environment_type and environment_type != original_env:
+            self.config.set_environment(original_env)
 
         return SafetyCriticResult(
             is_safe=is_safe,

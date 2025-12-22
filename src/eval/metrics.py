@@ -385,11 +385,52 @@ def compute_synthetic_artifact_score(motion: torch.Tensor) -> dict[str, float]:
     }
 
 
-def compute_motion_realism_score(motion: torch.Tensor) -> dict[str, float]:
+# Environment-specific expected velocity ranges
+# Maps environment_type to (expected_velocity, tolerance)
+ENVIRONMENT_VELOCITY_EXPECTATIONS = {
+    # Low velocity environments
+    "underwater": (0.04, 0.03),  # Very slow movement
+    "ocean_surface": (0.06, 0.04),
+    "river": (0.05, 0.03),
+    "lake": (0.05, 0.03),
+    "pool": (0.05, 0.03),
+    "swamp": (0.06, 0.04),
+    # Zero/micro-gravity - floating
+    "space_vacuum": (0.02, 0.02),  # Minimal movement
+    "asteroid": (0.03, 0.02),
+    "cloud_realm": (0.04, 0.03),
+    # Low gravity - higher velocities possible
+    "moon": (0.15, 0.1),
+    "mars": (0.12, 0.08),
+    "alien_planet_low_g": (0.15, 0.1),
+    # Ice - faster sliding movement
+    "rink": (0.15, 0.1),
+    "arctic": (0.12, 0.08),
+    "ice_realm": (0.12, 0.08),
+    # Sports venues - faster movement
+    "stadium": (0.12, 0.08),
+    "arena": (0.12, 0.08),
+    "track": (0.15, 0.1),
+    "field": (0.12, 0.08),
+    # Default Earth-normal
+    "earth_normal": (0.1, 0.07),
+    "grassland": (0.1, 0.07),
+    "forest": (0.08, 0.05),
+    "city_street": (0.1, 0.07),
+}
+
+
+def compute_motion_realism_score(
+    motion: torch.Tensor, environment_type: str | None = None
+) -> dict[str, float]:
     """Compute overall motion realism/quality score.
 
     Combines multiple quality signals into a single realism score
     suitable for data curation and filtering.
+
+    Args:
+        motion: Motion tensor [T, D] or [T, A, D]
+        environment_type: Optional environment type for velocity expectations
 
     Returns score in [0, 1] where higher = more realistic.
     """
@@ -403,10 +444,16 @@ def compute_motion_realism_score(motion: torch.Tensor) -> dict[str, float]:
     # Artifacts contribute negatively
     artifact_penalty = artifacts["artifact_score"]
 
-    # Reasonable velocity range contributes positively
-    # Too slow or too fast is unnatural
+    # Environment-aware velocity scoring
+    # Get expected velocity for this environment (default to Earth-normal)
+    expected_vel, tolerance = ENVIRONMENT_VELOCITY_EXPECTATIONS.get(
+        environment_type, (0.1, 0.07)
+    )
     mean_vel = temporal["mean_velocity"]
-    velocity_score = 1.0 / (1.0 + abs(mean_vel - 0.1))  # 0.1 is typical
+    # Score based on deviation from expected velocity
+    # Higher tolerance means more forgiving scoring
+    velocity_deviation = abs(mean_vel - expected_vel)
+    velocity_score = 1.0 / (1.0 + velocity_deviation / max(tolerance, 0.01))
 
     # Combine into realism score
     realism = (
@@ -421,6 +468,8 @@ def compute_motion_realism_score(motion: torch.Tensor) -> dict[str, float]:
         "artifact_component": float(1.0 - min(artifact_penalty, 1.0)),
         "velocity_component": float(velocity_score),
         "is_realistic": realism > 0.5,
+        "environment_type": environment_type,
+        "expected_velocity": expected_vel,
     }
 
 
