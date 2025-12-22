@@ -1,3 +1,12 @@
+
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("kit_ml_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/kit_ml/canonical.pt"
+
 """Convert KIT-ML dataset to Stick-Gen canonical format.
 
 KIT-ML uses a similar feature layout to HumanML3D with 251 dimensions:
@@ -24,6 +33,7 @@ from .convert_humanml3d import (
 from .convert_humanml3d import (
     _infer_action_from_text,
 )
+from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX
 from .validator import DataValidator
 
@@ -93,6 +103,15 @@ def _build_sample(
 
     description = texts[0] if texts else f"A human motion clip from KIT-ML ({clip_id})."
 
+    # Build enhanced metadata
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,  # KIT-ML is at native fps
+        original_num_frames=T,
+    )
+
     return {
         "description": description,
         "all_descriptions": texts,
@@ -108,6 +127,7 @@ def _build_sample(
             "num_frames": T,
             "feature_dim": feats.shape[1] if len(feats.shape) > 1 else 0,
         },
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
 
 

@@ -1,22 +1,93 @@
-from typing import Any
+from typing import Any, Optional
 
 import torch
+
+# Environment-specific physics threshold multipliers
+# These adjust validation thresholds based on environment physics
+ENVIRONMENT_VELOCITY_MULTIPLIERS = {
+    # Low gravity environments allow faster movement
+    "space_vacuum": 0.5,  # Very low expected velocity in zero-g (floating)
+    "moon": 1.5,  # Higher velocities possible in low-g
+    "mars": 1.3,
+    "asteroid": 0.5,
+    "alien_planet_low_g": 1.5,
+    "cloud_realm": 0.6,  # Floating motion
+    # High resistance environments have slower movement
+    "underwater": 0.4,  # Much slower underwater
+    "ocean_surface": 0.6,
+    "river": 0.5,
+    "lake": 0.5,
+    "pool": 0.5,
+    "swamp": 0.6,
+    # Slippery surfaces can have higher velocities (sliding)
+    "rink": 1.5,  # Ice skating can be fast
+    "arctic": 1.2,
+    "ice_realm": 1.3,
+    # Normal environments
+    "earth_normal": 1.0,
+    "grassland": 1.0,
+    "forest": 0.9,
+    "desert": 0.9,  # Sand slows movement
+    "beach": 0.9,
+    "mountain": 0.8,  # Uphill effort
+    "city_street": 1.0,
+    "stadium": 1.2,  # Sports can be fast
+    "arena": 1.2,
+    "track": 1.3,  # Running track
+    "field": 1.1,
+}
+
+ENVIRONMENT_ACCELERATION_MULTIPLIERS = {
+    # Low gravity = lower acceleration needed
+    "space_vacuum": 0.3,
+    "moon": 0.5,
+    "mars": 0.7,
+    "asteroid": 0.3,
+    "alien_planet_low_g": 0.5,
+    "cloud_realm": 0.4,
+    # High resistance = lower acceleration possible
+    "underwater": 0.4,
+    "ocean_surface": 0.5,
+    "river": 0.5,
+    "lake": 0.5,
+    "pool": 0.5,
+    "swamp": 0.5,
+    # Low friction = can have sudden direction changes
+    "rink": 0.7,  # Less friction means less sudden stops
+    "arctic": 0.8,
+    "ice_realm": 0.7,
+    # Normal environments
+    "earth_normal": 1.0,
+    "stadium": 1.2,
+    "arena": 1.2,
+    "track": 1.2,
+}
 
 
 class DataValidator:
     """
     Validates generated stick figure motion data for physical realism and structural consistency.
+
+    Supports environment-aware validation with adjusted thresholds based on
+    environment type (e.g., underwater, space, ice).
     """
 
-    def __init__(self, fps: int = 25):
+    def __init__(self, fps: int = 25, environment_type: Optional[str] = None):
         self.fps = fps
         self.dt = 1.0 / fps
+        self.environment_type = environment_type
 
-        # Thresholds
-        self.max_velocity = 20.0  # Units/sec (approx 13m/s - Usain Bolt is ~12m/s, margin for stick fig scale)
-        self.max_acceleration = (
-            100.0  # Units/sec^2 (High margin for snap movements, but filters glitches)
-        )
+        # Base thresholds (for Earth-normal conditions)
+        self.base_max_velocity = 20.0  # Units/sec (approx 13m/s)
+        self.base_max_acceleration = 100.0  # Units/sec^2
+
+        # Apply environment multipliers
+        vel_mult = ENVIRONMENT_VELOCITY_MULTIPLIERS.get(environment_type, 1.0)
+        acc_mult = ENVIRONMENT_ACCELERATION_MULTIPLIERS.get(environment_type, 1.0)
+
+        self.max_velocity = self.base_max_velocity * vel_mult
+        self.max_acceleration = self.base_max_acceleration * acc_mult
+
         self.limb_length_tolerance = (
             0.15  # 15% variance allowed in limb length (interpolation artifacts)
         )
@@ -33,6 +104,14 @@ class DataValidator:
         # 3: Left Leg
         # 4: Right Leg
         self.num_limbs = 5
+
+    def set_environment(self, environment_type: Optional[str]) -> None:
+        """Update validator thresholds for a new environment type."""
+        self.environment_type = environment_type
+        vel_mult = ENVIRONMENT_VELOCITY_MULTIPLIERS.get(environment_type, 1.0)
+        acc_mult = ENVIRONMENT_ACCELERATION_MULTIPLIERS.get(environment_type, 1.0)
+        self.max_velocity = self.base_max_velocity * vel_mult
+        self.max_acceleration = self.base_max_acceleration * acc_mult
 
     def check_physics_consistency(
         self, physics_tensor: torch.Tensor
@@ -219,28 +298,170 @@ class DataValidator:
 
         return True, 1.0, "Interactions OK"
 
+    def check_motion_style_ranges(
+        self, enhanced_meta: dict[str, Any] | None
+    ) -> tuple[bool, float, str]:
+        """Validate motion style metadata values are within expected ranges.
+
+        Args:
+            enhanced_meta: Enhanced metadata dict (from sample["enhanced_meta"])
+
+        Returns:
+            (is_valid, score, reason)
+        """
+        if enhanced_meta is None:
+            return True, 1.0, "No enhanced metadata (optional)"
+
+        motion_style = enhanced_meta.get("motion_style")
+        if motion_style is None:
+            return True, 1.0, "No motion style metadata (optional)"
+
+        issues: list[str] = []
+        for field in ["tempo", "energy_level", "smoothness"]:
+            value = motion_style.get(field)
+            if value is not None:
+                if not (0.0 <= value <= 1.0):
+                    issues.append(f"{field}={value:.3f} out of [0,1]")
+
+        if issues:
+            return False, 0.0, f"Motion style range error: {'; '.join(issues)}"
+        return True, 1.0, "Motion style ranges OK"
+
+    def check_temporal_metadata(
+        self, enhanced_meta: dict[str, Any] | None
+    ) -> tuple[bool, float, str]:
+        """Validate temporal metadata values are sensible.
+
+        Args:
+            enhanced_meta: Enhanced metadata dict (from sample["enhanced_meta"])
+
+        Returns:
+            (is_valid, score, reason)
+        """
+        if enhanced_meta is None:
+            return True, 1.0, "No enhanced metadata (optional)"
+
+        temporal = enhanced_meta.get("temporal")
+        if temporal is None:
+            return True, 1.0, "No temporal metadata (optional)"
+
+        issues: list[str] = []
+
+        fps = temporal.get("original_fps")
+        if fps is not None and (fps < 1 or fps > 240):
+            issues.append(f"original_fps={fps} out of [1,240]")
+
+        num_frames = temporal.get("original_num_frames")
+        if num_frames is not None and num_frames < 1:
+            issues.append(f"original_num_frames={num_frames} < 1")
+
+        duration = temporal.get("original_duration_sec")
+        if duration is not None and duration < 0:
+            issues.append(f"original_duration_sec={duration} < 0")
+
+        if issues:
+            return False, 0.0, f"Temporal metadata error: {'; '.join(issues)}"
+        return True, 1.0, "Temporal metadata OK"
+
+    def check_quality_ranges(
+        self, enhanced_meta: dict[str, Any] | None
+    ) -> tuple[bool, float, str]:
+        """Validate quality metadata values are within expected ranges.
+
+        Args:
+            enhanced_meta: Enhanced metadata dict (from sample["enhanced_meta"])
+
+        Returns:
+            (is_valid, score, reason)
+        """
+        if enhanced_meta is None:
+            return True, 1.0, "No enhanced metadata (optional)"
+
+        quality = enhanced_meta.get("quality")
+        if quality is None:
+            return True, 1.0, "No quality metadata (optional)"
+
+        issues: list[str] = []
+        for field in ["reconstruction_confidence", "marker_quality"]:
+            value = quality.get(field)
+            if value is not None:
+                if not (0.0 <= value <= 1.0):
+                    issues.append(f"{field}={value:.3f} out of [0,1]")
+
+        if issues:
+            return False, 0.0, f"Quality range error: {'; '.join(issues)}"
+        return True, 1.0, "Quality ranges OK"
+
+    def check_enhanced_metadata(
+        self, enhanced_meta: dict[str, Any] | None
+    ) -> tuple[bool, float, str]:
+        """Validate all enhanced metadata fields.
+
+        Args:
+            enhanced_meta: Enhanced metadata dict (from sample["enhanced_meta"])
+
+        Returns:
+            (is_valid, score, reason)
+        """
+        checks = [
+            self.check_motion_style_ranges(enhanced_meta),
+            self.check_temporal_metadata(enhanced_meta),
+            self.check_quality_ranges(enhanced_meta),
+        ]
+
+        for is_valid, score, reason in checks:
+            if not is_valid:
+                return is_valid, score, reason
+
+        return True, 1.0, "Enhanced metadata OK"
+
     def validate(self, sample: dict[str, Any]) -> tuple[bool, float, str]:
         """
         Validate a generated sample.
 
         Args:
             sample: Dictionary containing 'motion', 'physics', etc.
+                    Optionally contains 'environment_type' for environment-aware validation.
+                    Optionally contains 'enhanced_meta' for metadata validation.
 
         Returns:
             (is_valid, score, reason)
         """
-        physics_ok, phys_score, phys_reason = self.check_physics_consistency(
-            sample["physics"]
-        )
-        if not physics_ok:
-            return False, phys_score, phys_reason
+        # Temporarily adjust thresholds if sample has environment metadata
+        sample_env = sample.get("environment_type")
+        original_env = self.environment_type
+        if sample_env and sample_env != self.environment_type:
+            self.set_environment(sample_env)
 
-        skel_ok, skel_score, skel_reason = self.check_skeleton_consistency(
-            sample["motion"]
-        )
-        if not skel_ok:
-            return False, skel_score, skel_reason
+        try:
+            physics_ok, phys_score, phys_reason = self.check_physics_consistency(
+                sample["physics"]
+            )
+            if not physics_ok:
+                return False, phys_score, phys_reason
 
-        # Combined score (average if both valid)
-        final_score = (phys_score + skel_score) / 2.0
-        return True, final_score, "Valid"
+            skel_ok, skel_score, skel_reason = self.check_skeleton_consistency(
+                sample["motion"]
+            )
+            if not skel_ok:
+                return False, skel_score, skel_reason
+
+            # Validate enhanced metadata if present
+            enhanced_meta = sample.get("enhanced_meta")
+            if enhanced_meta is not None:
+                meta_ok, meta_score, meta_reason = self.check_enhanced_metadata(
+                    enhanced_meta
+                )
+                if not meta_ok:
+                    return False, meta_score, meta_reason
+                # Include metadata score in average
+                final_score = (phys_score + skel_score + meta_score) / 3.0
+            else:
+                # Combined score (average if both valid)
+                final_score = (phys_score + skel_score) / 2.0
+
+            return True, final_score, "Valid"
+        finally:
+            # Restore original environment
+            if sample_env and sample_env != original_env:
+                self.set_environment(original_env)

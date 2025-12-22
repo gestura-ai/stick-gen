@@ -14,8 +14,16 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("100style_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/100style/canonical.pt"
 
 
 def _load_100style_txt(
@@ -150,6 +158,15 @@ def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, An
 
     physics = compute_basic_physics(motion, fps=fps)
 
+    # Build enhanced metadata
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,  # 100STYLE is at native fps
+        original_num_frames=T,
+    )
+
     sample: dict[str, Any] = {
         "description": description,
         "motion": motion,
@@ -163,18 +180,22 @@ def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, An
             "sequence_idx": item.get("sequence_idx"),
             "frame_range": item.get("frame_range"),
         },
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
     return sample
 
 
 def convert_100style_canonical(
     style_dir: str = "data/100Style",
-    output_path: str = "data/motions_processed/100style/canonical.pt",
+    output_path: str = None,
     target_frames: int = 250,
     fps: int = 25,
     max_sequences: int = 500,
 ) -> list[dict[str, Any]]:
     """Convert 100STYLE into the canonical schema and save to disk."""
+    
+    if output_path is None:
+        output_path = DEFAULT_OUTPUT_PATH
     sequences = _load_100style_txt(style_dir, target_frames, max_sequences)
     validator = DataValidator(fps=fps)
 
@@ -205,7 +226,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default="data/motions_processed/100style/canonical.pt",
+        default=DEFAULT_OUTPUT_PATH,
     )
     parser.add_argument("--target-frames", type=int, default=250)
     parser.add_argument("--fps", type=int, default=25)

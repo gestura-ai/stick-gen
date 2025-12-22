@@ -6,8 +6,17 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
+
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("ntu_rgbd_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/ntu_rgbd/canonical.pt"
 
 NTU_ACTION_LABELS: dict[int, str] = {
     # Official NTU RGB+D 60 action names (1-indexed). We only use them
@@ -179,10 +188,20 @@ def _build_canonical_sample(
     action_id = meta["action_id"]
     action_enum = _action_to_enum(action_id)
     action_idx = ACTION_TO_IDX[action_enum]
-    actions = torch.full((motion.shape[0],), action_idx, dtype=torch.long)
+    T = motion.shape[0]
+    actions = torch.full((T,), action_idx, dtype=torch.long)
 
     label = NTU_ACTION_LABELS.get(action_id, f"action {action_id}")
     description = f"A person performing the NTU RGB+D action: {label}."
+
+    # Build enhanced metadata
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,  # NTU RGB+D is at native fps
+        original_num_frames=T,
+    )
 
     sample = {
         "description": description,
@@ -192,15 +211,47 @@ def _build_canonical_sample(
         "camera": None,
         "source": "ntu_rgbd",
         "meta": meta,
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
     return sample
 
 
 def convert_ntu_rgbd(
     root_dir: str, output_path: str, fps: int = 30, max_files: int = -1
-) -> None:
-    pattern = os.path.join(root_dir, "nturgb+d_skeletons", "S*.skeleton")
-    paths = sorted(glob.glob(pattern))
+) -> list[dict[str, Any]]:
+    """Convert NTU RGB+D dataset to canonical format.
+
+    Handles various directory structures:
+    - root_dir/nturgb+d_skeletons/S*.skeleton
+    - root_dir/ntu-rgbd/nturgb+d_skeletons/S*.skeleton
+    - root_dir/ntu-rgbd-v2/nturgb+d_skeletons/S*.skeleton
+
+    Returns:
+        List of converted samples
+    """
+    # Try multiple possible paths for the skeleton files
+    possible_patterns = [
+        os.path.join(root_dir, "nturgb+d_skeletons", "S*.skeleton"),
+        os.path.join(root_dir, "ntu-rgbd", "nturgb+d_skeletons", "S*.skeleton"),
+        os.path.join(root_dir, "ntu-rgbd-v2", "nturgb+d_skeletons", "S*.skeleton"),
+    ]
+
+    paths = []
+    for pattern in possible_patterns:
+        found = sorted(glob.glob(pattern))
+        if found:
+            paths.extend(found)
+            print(f"[NTU-RGB+D] Found {len(found)} skeleton files at: {os.path.dirname(pattern)}")
+
+    if not paths:
+        print(f"[NTU-RGB+D] No skeleton files found in {root_dir}")
+        print(f"[NTU-RGB+D] Tried patterns: {possible_patterns}")
+        return []
+
+    # Remove duplicates while preserving order
+    paths = list(dict.fromkeys(paths))
+    print(f"[NTU-RGB+D] Total unique skeleton files: {len(paths)}")
+
     if max_files > 0:
         paths = paths[:max_files]
 
@@ -227,8 +278,11 @@ def convert_ntu_rgbd(
             continue
         samples.append(sample)
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     torch.save(samples, output_path)
+    print(f"[NTU-RGB+D] Saved {len(samples)} samples to {output_path}")
+
+    return samples
 
 
 def main() -> None:

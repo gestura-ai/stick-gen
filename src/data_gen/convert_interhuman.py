@@ -7,9 +7,18 @@ import numpy as np
 import torch
 
 from .convert_amass import AMASSConverter, compute_basic_physics
+from .metadata_extractors import build_enhanced_metadata, compute_interaction_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
+
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("interhuman_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/interhuman/canonical.pt"
 
 def _person_dict_to_motion(
     person: dict[str, Any], converter: AMASSConverter
@@ -25,7 +34,22 @@ def _person_dict_to_motion(
 
     We reuse the SMPL-X model and stick-figure mapping from ``AMASSConverter``
     to obtain 3D joints and then 2D stick segments.
+
+    Raises:
+        ValueError: If person dict is None or missing required fields
+        RuntimeError: If SMPL-X model is not available
     """
+    # Validate person dict
+    if person is None:
+        raise ValueError("Person data is None")
+    if not isinstance(person, dict):
+        raise ValueError(f"Person data is not a dict: {type(person)}")
+
+    # Check required fields
+    required_fields = ["trans", "root_orient", "pose_body"]
+    for field in required_fields:
+        if field not in person or person[field] is None:
+            raise ValueError(f"Missing required field '{field}' in person data")
 
     # Ensure SMPL-X model is loaded (will no-op if already present)
     converter._load_smpl_model("smplx")
@@ -47,40 +71,65 @@ def _person_dict_to_motion(
     betas = person.get("betas")
     if betas is None:
         betas = np.zeros(10, dtype=np.float32)
-    betas_tensor_1 = torch.tensor(betas[:10], dtype=torch.float32).unsqueeze(
-        0
-    )  # [1, 10]
+    betas_1 = torch.tensor(betas[:10], dtype=torch.float32).unsqueeze(0)  # [1, 10]
 
-    # Single-frame hand poses from the model's default parameters. The current
-    # smplx version in this environment does not reliably handle batched
-    # sequences when some pose components use learned defaults, so we run the
-    # model one frame at a time.
-    if hasattr(model, "left_hand_pose"):
-        left_hand_pose_1 = model.left_hand_pose.clone()  # [1, 45]
-    else:
-        left_hand_pose_1 = torch.zeros(1, 45, dtype=torch.float32)
+    # Get default poses from model (single frame templates)
+    left_hand_1 = (
+        model.left_hand_pose.clone()
+        if hasattr(model, "left_hand_pose")
+        else torch.zeros(1, 45, dtype=torch.float32)
+    )
+    right_hand_1 = (
+        model.right_hand_pose.clone()
+        if hasattr(model, "right_hand_pose")
+        else torch.zeros(1, 45, dtype=torch.float32)
+    )
+    jaw_1 = (
+        model.jaw_pose.clone()
+        if hasattr(model, "jaw_pose")
+        else torch.zeros(1, 3, dtype=torch.float32)
+    )
+    leye_1 = (
+        model.leye_pose.clone()
+        if hasattr(model, "leye_pose")
+        else torch.zeros(1, 3, dtype=torch.float32)
+    )
+    reye_1 = (
+        model.reye_pose.clone()
+        if hasattr(model, "reye_pose")
+        else torch.zeros(1, 3, dtype=torch.float32)
+    )
+    expression_1 = (
+        model.expression.clone()
+        if hasattr(model, "expression")
+        else torch.zeros(1, 10, dtype=torch.float32)
+    )
 
-    if hasattr(model, "right_hand_pose"):
-        right_hand_pose_1 = model.right_hand_pose.clone()  # [1, 45]
-    else:
-        right_hand_pose_1 = torch.zeros(1, 45, dtype=torch.float32)
-
+    # Batched SMPL-X forward pass with chunking for memory efficiency
+    # Process in chunks to avoid OOM on very long sequences
+    # 512 frames balances throughput vs memory (most clips are <500 frames)
+    CHUNK_SIZE = 512
     joints_list = []
-    with torch.no_grad():
-        for i in range(T):
-            trans_i = trans[i : i + 1]
-            root_i = root_orient[i : i + 1]
-            body_i = body_pose[i : i + 1]
 
+    with torch.no_grad():
+        for start in range(0, T, CHUNK_SIZE):
+            end = min(start + CHUNK_SIZE, T)
+            chunk_size = end - start
+
+            # Repeat static tensors to match chunk size
             output = model(
-                body_pose=body_i,
-                global_orient=root_i,
-                transl=trans_i,
-                left_hand_pose=left_hand_pose_1,
-                right_hand_pose=right_hand_pose_1,
-                betas=betas_tensor_1,
+                body_pose=body_pose[start:end],
+                global_orient=root_orient[start:end],
+                transl=trans[start:end],
+                left_hand_pose=left_hand_1.repeat(chunk_size, 1),
+                right_hand_pose=right_hand_1.repeat(chunk_size, 1),
+                jaw_pose=jaw_1.repeat(chunk_size, 1),
+                leye_pose=leye_1.repeat(chunk_size, 1),
+                reye_pose=reye_1.repeat(chunk_size, 1),
+                expression=expression_1.repeat(chunk_size, 1),
+                betas=betas_1.repeat(chunk_size, 1),
             )
-            joints_list.append(output.joints[:, :22, :].cpu().numpy())  # [1, 22, 3]
+            joints_list.append(output.joints[:, :22, :].cpu().numpy())  # [chunk, 22, 3]
 
     joints = np.concatenate(joints_list, axis=0)  # [T, 22, 3]
 
@@ -92,9 +141,25 @@ def _person_dict_to_motion(
 def _load_motion_pair_from_pkl(
     pkl_path: str, converter: AMASSConverter
 ) -> torch.Tensor:
-    """Load an InterHuman motion .pkl and pack two actors into [T, 2, 20]."""
+    """Load an InterHuman motion .pkl and pack two actors into [T, 2, 20].
+
+    Raises:
+        ValueError: If pickle data is malformed or missing person data
+    """
     with open(pkl_path, "rb") as f:
         obj = pickle.load(f)
+
+    if obj is None:
+        raise ValueError(f"Pickle file contains None: {pkl_path}")
+    if not isinstance(obj, dict):
+        raise ValueError(f"Pickle file does not contain a dict: {pkl_path}")
+
+    # Check for required person fields
+    if "person1" not in obj or obj["person1"] is None:
+        raise ValueError(f"Missing 'person1' data in {pkl_path}")
+    if "person2" not in obj or obj["person2"] is None:
+        raise ValueError(f"Missing 'person2' data in {pkl_path}")
+
     person1 = obj["person1"]
     person2 = obj["person2"]
 
@@ -143,6 +208,18 @@ def _build_sample(
         texts[0] if texts else "Two people interacting in the InterHuman dataset."
     )
 
+    # Build enhanced metadata with interaction info
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,
+        original_num_frames=T,
+        is_multi_actor=True,
+    )
+    # Compute interaction-specific metadata
+    enhanced_meta.interaction = compute_interaction_metadata(motion)
+
     return {
         "description": description,
         "motion": motion,
@@ -151,12 +228,17 @@ def _build_sample(
         "camera": None,
         "source": "interhuman",
         "meta": meta,
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
 
 
 def convert_interhuman(
-    data_root: str, output_path: str, fps: int = 30, max_clips: int = -1
-) -> None:
+    data_root: str,
+    output_path: str,
+    fps: int = 30,
+    max_clips: int = -1,
+    verbose: bool = False,
+) -> list[dict[str, Any]]:
     """Convert InterHuman motions into canonical schema.
 
     Supports the official InterHuman release layout under ``data_root``:
@@ -164,7 +246,20 @@ def convert_interhuman(
       - motions/*.pkl              (per-clip SMPL-style parameters)
       - annots/*.txt               (per-clip text descriptions)
       - split/train.txt, val.txt, test.txt (optional)
+
+    Args:
+        data_root: Root directory of InterHuman dataset
+        output_path: Output .pt file path
+        fps: Target frame rate
+        max_clips: Maximum clips to process (-1 for all)
+        verbose: If True, print each skipped/error file
+
+    Returns:
+        List of converted samples
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     motions_dir = os.path.join(data_root, "motions")
     annots_dir = os.path.join(data_root, "annots")
@@ -176,41 +271,85 @@ def convert_interhuman(
     validator = DataValidator(fps=fps)
     converter = AMASSConverter()  # Reuse SMPL-X + stick-figure utilities
     samples: list[dict[str, Any]] = []
+    num_errors = 0
+    num_physics_skipped = 0
 
-    for motion_path in motion_files:
+    total_files = len(motion_files)
+    logger.info(f"[InterHuman] Processing {total_files} motion files...")
+
+    for i, motion_path in enumerate(motion_files):
+        # Progress logging every 500 files
+        if i % 500 == 0:
+            logger.info(f"[InterHuman] Processing {i}/{total_files} ({100*i/total_files:.1f}%)...")
         clip_id = os.path.splitext(os.path.basename(motion_path))[0]
-        # Load metadata once to retrieve mocap framerate for physics
-        with open(motion_path, "rb") as f:
-            obj = pickle.load(f)
-        mocap_fps = obj.get("mocap_framerate", fps)
+
         try:
-            fps_clip = int(round(float(mocap_fps)))
-        except Exception:
-            fps_clip = fps
+            # Load metadata once to retrieve mocap framerate for physics
+            with open(motion_path, "rb") as f:
+                obj = pickle.load(f)
 
-        motion = _load_motion_pair_from_pkl(motion_path, converter)  # [T, 2, 20]
-        texts = _load_texts(annots_dir, clip_id)
-        meta = {
-            "clip_id": clip_id,
-            "motion_path": os.path.relpath(motion_path, data_root),
-            "mocap_framerate": mocap_fps,
-            "frames": obj.get("frames"),
-        }
-        sample = _build_sample(motion, texts, meta, fps=fps_clip)
-        # Multi-actor motions already satisfy a structural layout; here we only
-        # enforce basic physics bounds to avoid discarding valid interactions
-        # due to 2D projection artifacts.
-        ok, score, reason = validator.check_physics_consistency(sample["physics"])
-        if not ok:
+            # Handle None or non-dict pickle data
+            if obj is None or not isinstance(obj, dict):
+                if verbose:
+                    logger.warning(f"Skipping {clip_id}: invalid pickle data")
+                num_errors += 1
+                continue
+
+            mocap_fps = obj.get("mocap_framerate", fps)
+            try:
+                fps_clip = int(round(float(mocap_fps)))
+            except (ValueError, TypeError):
+                fps_clip = fps
+
+            motion = _load_motion_pair_from_pkl(motion_path, converter)  # [T, 2, 20]
+            texts = _load_texts(annots_dir, clip_id)
+            meta = {
+                "clip_id": clip_id,
+                "motion_path": os.path.relpath(motion_path, data_root),
+                "mocap_framerate": mocap_fps,
+                "frames": obj.get("frames"),
+            }
+            sample = _build_sample(motion, texts, meta, fps=fps_clip)
+
+            # Multi-actor motions already satisfy a structural layout; here we only
+            # enforce basic physics bounds to avoid discarding valid interactions
+            # due to 2D projection artifacts.
+            ok, score, reason = validator.check_physics_consistency(sample["physics"])
+            if not ok:
+                if verbose:
+                    logger.debug(f"Skipping {clip_id}: {reason}")
+                num_physics_skipped += 1
+                continue
+
+            samples.append(sample)
+
+        except Exception as e:
+            if verbose:
+                logger.warning(f"Error processing {clip_id}: {e}")
+            num_errors += 1
             continue
-        samples.append(sample)
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # Summary logging
+    total = len(motion_files)
+    logger.info(
+        f"[InterHuman] Conversion complete:\n"
+        f"  - Valid samples: {len(samples)}/{total}\n"
+        f"  - Physics skipped: {num_physics_skipped}\n"
+        f"  - Errors: {num_errors}"
+    )
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     torch.save(samples, output_path)
+    logger.info(f"  - Output: {output_path}")
+
+    return samples
 
 
 def main() -> None:
     import argparse
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser(
         description="Convert InterHuman to canonical schema"
@@ -226,10 +365,20 @@ def main() -> None:
     )
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--max-clips", type=int, default=-1)
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Print each skipped/error file",
+    )
     args = parser.parse_args()
 
     convert_interhuman(
-        args.data_root, args.output, fps=args.fps, max_clips=args.max_clips
+        args.data_root,
+        args.output,
+        fps=args.fps,
+        max_clips=args.max_clips,
+        verbose=args.verbose,
     )
 
 

@@ -1,3 +1,12 @@
+
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("humanml3d_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/humanml3d/canonical.pt"
+
 """Convert HumanML3D dataset to Stick-Gen canonical format.
 
 HumanML3D Feature Layout (263 dimensions per frame):
@@ -21,6 +30,7 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
@@ -139,6 +149,43 @@ def _denorm(arr: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
     return arr * stats["std"] + stats["mean"]
 
 
+def _parse_text_content(content: str) -> list[str]:
+    """Parse text annotation content into list of descriptions.
+
+    Each line may have format: "text#start#end" or just "text"
+    """
+    lines = []
+    for line in content.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # Extract just the text description (before any # delimiters)
+        parts = line.split("#")
+        if parts[0].strip():
+            lines.append(parts[0].strip())
+    return lines
+
+
+def _load_texts_from_dir(texts_dir: str) -> dict[str, list[str]]:
+    """Load HumanML3D texts from a directory of .txt files."""
+    mapping: dict[str, list[str]] = {}
+    if not os.path.isdir(texts_dir):
+        return mapping
+
+    for txt_file in glob.glob(os.path.join(texts_dir, "*.txt")):
+        clip_id = os.path.splitext(os.path.basename(txt_file))[0]
+        try:
+            with open(txt_file, encoding="utf-8") as f:
+                content = f.read()
+                lines = _parse_text_content(content)
+                if lines:
+                    mapping[clip_id] = lines
+        except Exception as e:
+            logger.debug(f"Failed to read {txt_file}: {e}")
+
+    return mapping
+
+
 def _load_texts_from_zip(zip_path: str) -> dict[str, list[str]]:
     """Load HumanML3D texts.zip into {clip_id: [lines...]}.
 
@@ -159,23 +206,34 @@ def _load_texts_from_zip(zip_path: str) -> dict[str, list[str]]:
                 try:
                     with zf.open(name) as f:
                         content = f.read().decode("utf-8")
-                        # Parse annotations - each line may have format: "text#start#end"
-                        lines = []
-                        for line in content.strip().split("\n"):
-                            line = line.strip()
-                            if not line:
-                                continue
-                            # Extract just the text description (before any # delimiters)
-                            parts = line.split("#")
-                            if parts[0].strip():
-                                lines.append(parts[0].strip())
-                        mapping[clip_id] = lines
+                        lines = _parse_text_content(content)
+                        if lines:
+                            mapping[clip_id] = lines
                 except Exception as e:
                     logger.debug(f"Failed to read {name}: {e}")
     except Exception as e:
         logger.error(f"Failed to open texts.zip: {e}")
 
     return mapping
+
+
+def _load_texts(root_dir: str) -> dict[str, list[str]]:
+    """Load text annotations from either texts/ directory or texts.zip.
+
+    Prefers texts/ directory if it exists (more common in unpacked datasets).
+    """
+    texts_dir = os.path.join(root_dir, "texts")
+    if os.path.isdir(texts_dir):
+        logger.info(f"Loading texts from directory: {texts_dir}")
+        return _load_texts_from_dir(texts_dir)
+
+    texts_zip = os.path.join(root_dir, "texts.zip")
+    if os.path.exists(texts_zip):
+        logger.info(f"Loading texts from zip: {texts_zip}")
+        return _load_texts_from_zip(texts_zip)
+
+    logger.warning(f"No texts found in {root_dir} (checked texts/ and texts.zip)")
+    return {}
 
 
 def _infer_action_from_text(texts: list[str]) -> ActionType:
@@ -361,6 +419,15 @@ def _build_sample(
     # Generate camera if requested
     camera = _generate_camera_from_motion(motion) if include_camera else None
 
+    # Build enhanced metadata (HumanML3D uses 20 FPS consistently)
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=stats_fps,
+        description=description,
+        original_fps=stats_fps,  # HumanML3D is already at native fps
+        original_num_frames=T,
+    )
+
     return {
         "description": description,
         "all_descriptions": texts,  # Keep all text annotations
@@ -376,6 +443,7 @@ def _build_sample(
             "num_frames": T,
             "feature_dim": feats.shape[1] if len(feats.shape) > 1 else 0,
         },
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
 
 
@@ -462,9 +530,8 @@ def convert_humanml3d(
     if stats is None:
         raise ValueError(f"Could not load normalization stats from {root_dir}")
 
-    # Load text annotations
-    texts_zip = os.path.join(root_dir, "texts.zip")
-    text_map = _load_texts_from_zip(texts_zip)
+    # Load text annotations (supports both texts/ directory and texts.zip)
+    text_map = _load_texts(root_dir)
     logger.info(f"Loaded {len(text_map)} text annotations")
 
     # Find feature files

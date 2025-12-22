@@ -7,6 +7,7 @@ import torch
 
 from .convert_amass import compute_basic_physics
 from .convert_ntu_rgbd import NTU_ACTION_LABELS, _action_to_enum, joints_to_stick
+from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX
 from .validator import DataValidator
 
@@ -126,6 +127,15 @@ def _build_canonical_sample_from_joints(
         f"Sequence length {T} frames."
     )
 
+    # Build enhanced metadata
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,  # LSMB19 is at native fps
+        original_num_frames=T,
+    )
+
     sample = {
         "description": description,
         "motion": motion,
@@ -134,6 +144,7 @@ def _build_canonical_sample_from_joints(
         "camera": None,
         "source": "lsmb19",
         "meta": meta,
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
     return sample
 

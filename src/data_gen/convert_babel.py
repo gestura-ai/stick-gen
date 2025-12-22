@@ -1,3 +1,12 @@
+
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("babel_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/babel/canonical.pt"
+
 """Convert BABEL dataset to Stick-Gen canonical format.
 
 BABEL (Bodies, Action and Behavior with English Labels) provides dense
@@ -20,6 +29,7 @@ from typing import Any
 import torch
 
 from .convert_amass import AMASSConverter, compute_basic_physics
+from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
@@ -150,41 +160,52 @@ def _get_segment_actions(
 
     seq_annots = annotations[seq_name]
 
+    # Handle None or malformed annotation entries
+    if seq_annots is None:
+        return actions, ["idle"], "Motion sequence from BABEL dataset."
+
     # BABEL has frame_ann (per-frame) and seq_ann (sequence-level)
-    frame_ann = seq_annots.get("frame_ann", {})
-    seq_ann = seq_annots.get("seq_ann", {})
+    # These can be None in some entries, so we need to handle that
+    frame_ann = seq_annots.get("frame_ann") if isinstance(seq_annots, dict) else None
+    seq_ann = seq_annots.get("seq_ann") if isinstance(seq_annots, dict) else None
 
     # Process frame-level annotations (segments)
-    labels = frame_ann.get("labels", [])
-    for segment in labels:
-        act_cat = segment.get("act_cat", [])
-        raw_label = segment.get("raw_label", "")
-        start_t = segment.get("start_t", 0)
-        end_t = segment.get("end_t", 0)
+    if frame_ann is not None and isinstance(frame_ann, dict):
+        labels = frame_ann.get("labels") or []
+        for segment in labels:
+            if segment is None or not isinstance(segment, dict):
+                continue
+            act_cat = segment.get("act_cat", [])
+            raw_label = segment.get("raw_label", "")
+            start_t = segment.get("start_t", 0)
+            end_t = segment.get("end_t", 0)
 
-        # Convert time to frames
-        start_frame = int(start_t * fps)
-        end_frame = min(int(end_t * fps), num_frames)
+            # Convert time to frames
+            start_frame = int(start_t * fps)
+            end_frame = min(int(end_t * fps), num_frames)
 
-        # Use first action category if available
-        if act_cat:
-            action_str = act_cat[0] if isinstance(act_cat, list) else act_cat
-            action_type = _map_babel_action(action_str)
-            action_idx = ACTION_TO_IDX[action_type]
+            # Use first action category if available
+            if act_cat:
+                action_str = act_cat[0] if isinstance(act_cat, list) else act_cat
+                action_type = _map_babel_action(action_str)
+                action_idx = ACTION_TO_IDX[action_type]
 
-            # Assign to frame range
-            actions[start_frame:end_frame] = action_idx
-            action_labels.append(action_type.value)
+                # Assign to frame range
+                actions[start_frame:end_frame] = action_idx
+                action_labels.append(action_type.value)
 
-        if raw_label:
-            descriptions.append(raw_label)
+            if raw_label:
+                descriptions.append(raw_label)
 
     # Also get sequence-level description
-    seq_labels = seq_ann.get("labels", [])
-    for label in seq_labels:
-        raw = label.get("raw_label", "")
-        if raw:
-            descriptions.append(raw)
+    if seq_ann is not None and isinstance(seq_ann, dict):
+        seq_labels = seq_ann.get("labels") or []
+        for label in seq_labels:
+            if label is None or not isinstance(label, dict):
+                continue
+            raw = label.get("raw_label", "")
+            if raw:
+                descriptions.append(raw)
 
     # Build primary description
     if descriptions:
@@ -205,6 +226,8 @@ def _build_sample(
     description: str,
     seq_name: str,
     fps: int = 30,
+    original_fps: int | None = None,
+    original_num_frames: int | None = None,
 ) -> dict[str, Any]:
     """Build canonical sample from BABEL data."""
     physics = compute_basic_physics(motion, fps=fps)
@@ -215,6 +238,15 @@ def _build_sample(
         dominant_action = list(ActionType)[mode_idx].value
     else:
         dominant_action = "idle"
+
+    # Build enhanced metadata
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=original_fps,
+        original_num_frames=original_num_frames,
+    )
 
     return {
         "description": description,
@@ -231,6 +263,7 @@ def _build_sample(
             "fps": fps,
             "num_frames": motion.shape[0],
         },
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
 
 
@@ -281,7 +314,23 @@ def convert_babel(
         try:
             # Parse sequence path from BABEL annotation
             seq_info = annotations[seq_name]
+
+            # Handle None or malformed annotation entries
+            if seq_info is None:
+                logger.debug(f"Skipping {seq_name}: annotation entry is None")
+                skipped += 1
+                continue
+
+            if not isinstance(seq_info, dict):
+                logger.debug(f"Skipping {seq_name}: annotation entry is not a dict")
+                skipped += 1
+                continue
+
             feat_p = seq_info.get("feat_p", "")
+            if not feat_p:
+                logger.debug(f"Skipping {seq_name}: no feat_p path in annotation")
+                skipped += 1
+                continue
 
             # Construct AMASS path
             npz_path = os.path.join(amass_root, feat_p)

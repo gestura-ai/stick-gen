@@ -1,3 +1,12 @@
+
+
+# Import centralized paths config
+try:
+    from ..config.paths import get_path
+    DEFAULT_OUTPUT_PATH = str(get_path("beat_canonical"))
+except ImportError:
+    DEFAULT_OUTPUT_PATH = "data/motions_processed/beat/canonical.pt"
+
 """Convert BEAT dataset to Stick-Gen canonical format.
 
 BEAT (Body-Expression-Audio-Text) provides synchronized gesture, speech,
@@ -27,7 +36,8 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
-from .schema import ACTION_TO_IDX, ActionType
+from .metadata_extractors import build_enhanced_metadata
+from .schema import ACTION_TO_IDX, ActionType, EmotionMetadata
 from .validator import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -57,6 +67,11 @@ def _parse_bvh_to_stick(bvh_path: str, target_fps: int = 30) -> torch.Tensor | N
     try:
         with open(bvh_path) as f:
             content = f.read()
+
+        # Check for Git LFS pointer (files not actually downloaded)
+        if content.startswith("version https://git-lfs.github.com"):
+            logger.debug(f"Skipping Git LFS pointer: {bvh_path}")
+            return None
 
         # Parse BVH header and motion data
         lines = content.strip().split("\n")
@@ -186,6 +201,21 @@ def _build_sample(
     else:
         description = f"Conversational gesture with {emotion} emotion."
 
+    # Build enhanced metadata with emotion info
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,  # BEAT is at native fps
+        original_num_frames=T,
+    )
+    # Add emotion metadata specific to BEAT (ground truth from dataset)
+    enhanced_meta.emotion = EmotionMetadata(
+        emotion_label=emotion.lower(),
+        valence=None,  # Could be inferred from emotion label
+        arousal=None,
+    )
+
     return {
         "description": description,
         "all_descriptions": texts,
@@ -202,6 +232,7 @@ def _build_sample(
             "num_frames": T,
             "has_speech": len(texts) > 0,
         },
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
 
 
@@ -289,6 +320,20 @@ def convert_beat(
             skipped += 1
 
     logger.info(f"Converted {len(samples)}/{len(bvh_files)} clips ({skipped} skipped)")
+
+    # Check if all files were skipped - likely Git LFS issue
+    if len(samples) == 0 and len(bvh_files) > 0:
+        # Check if first file is a Git LFS pointer
+        first_bvh = str(bvh_files[0])
+        with open(first_bvh) as f:
+            first_line = f.readline()
+        if "git-lfs" in first_line:
+            logger.warning(
+                "All BVH files appear to be Git LFS pointers, not actual data. "
+                "Please run 'git lfs pull' in the BEAT data directory to download "
+                "the actual BVH files."
+            )
+
     logger.info(f"Emotion distribution: {emotion_counts}")
 
     # Report action distribution

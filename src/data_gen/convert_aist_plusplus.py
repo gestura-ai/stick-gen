@@ -7,7 +7,8 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
-from .schema import ACTION_TO_IDX, ActionType
+from .metadata_extractors import build_enhanced_metadata
+from .schema import ACTION_TO_IDX, ActionType, MusicMetadata
 from .validator import DataValidator
 
 # Very lightweight AIST++ converter that uses keypoints3d_optim to avoid
@@ -76,6 +77,63 @@ def _infer_camera_feature(seq_name: str) -> torch.Tensor:
     return torch.tensor([cam_scalar, 0.0, 0.0], dtype=torch.float32)
 
 
+def _parse_aist_sequence_name(seq_name: str) -> dict[str, str | None]:
+    """Parse AIST++ sequence name for music and dance metadata.
+
+    AIST++ sequence names follow the format:
+        gBR_sBM_c01_d04_mBR0_ch01
+        |   |   |   |   |    |
+        |   |   |   |   |    +-- choreography ID
+        |   |   |   |   +------- music ID (e.g., mBR0 = break music 0)
+        |   |   |   +----------- dancer ID
+        |   |   +--------------- camera ID
+        |   +------------------- dance setting (BM=basic, FM=freestyle, etc.)
+        +----------------------- genre (BR=break, PO=pop, etc.)
+
+    Returns:
+        Dict with parsed metadata fields
+    """
+    parts = seq_name.split("_")
+    result: dict[str, str | None] = {
+        "genre": None,
+        "setting": None,
+        "camera_id": None,
+        "dancer_id": None,
+        "music_id": None,
+        "choreo_id": None,
+    }
+
+    if len(parts) >= 1:
+        result["genre"] = parts[0][1:] if parts[0].startswith("g") else parts[0]
+    if len(parts) >= 2:
+        result["setting"] = parts[1][1:] if parts[1].startswith("s") else parts[1]
+    if len(parts) >= 3:
+        result["camera_id"] = parts[2]
+    if len(parts) >= 4:
+        result["dancer_id"] = parts[3]
+    if len(parts) >= 5:
+        result["music_id"] = parts[4]
+    if len(parts) >= 6:
+        result["choreo_id"] = parts[5]
+
+    return result
+
+
+# AIST++ genre abbreviations to full names
+AIST_GENRE_MAP = {
+    "BR": "break",
+    "PO": "pop",
+    "LO": "lock",
+    "MH": "middle_hip_hop",
+    "LH": "LA_hip_hop",
+    "HO": "house",
+    "WA": "waack",
+    "KR": "krump",
+    "JS": "street_jazz",
+    "JB": "ballet_jazz",
+}
+
+
 def _build_sample(
     keypoints: np.ndarray, seq_name: str, meta: dict[str, Any], fps: int = 60
 ) -> dict[str, Any]:
@@ -92,7 +150,27 @@ def _build_sample(
     cam_feat = _infer_camera_feature(seq_name)
     camera = cam_feat.unsqueeze(0).expand(T, -1)
 
-    description = f"A person dancing in the AIST++ dataset, sequence {seq_name}."
+    # Parse sequence name for music metadata
+    parsed = _parse_aist_sequence_name(seq_name)
+    genre_abbr = parsed.get("genre")
+    genre = AIST_GENRE_MAP.get(genre_abbr, genre_abbr) if genre_abbr else None
+
+    description = f"A person dancing {genre or 'a dance'} in the AIST++ dataset."
+
+    # Build enhanced metadata with music info
+    enhanced_meta = build_enhanced_metadata(
+        motion=motion,
+        fps=fps,
+        description=description,
+        original_fps=fps,  # AIST++ is at native fps
+        original_num_frames=T,
+    )
+    # Add music metadata specific to AIST++
+    enhanced_meta.music = MusicMetadata(
+        bpm=None,  # Would require loading music annotation files
+        beat_frames=None,  # Would require loading beat annotations
+        genre=genre,
+    )
 
     return {
         "description": description,
@@ -101,7 +179,8 @@ def _build_sample(
         "actions": actions,
         "camera": camera,
         "source": "aist_plusplus",
-        "meta": meta,
+        "meta": {**meta, "parsed_name": parsed},
+        "enhanced_meta": enhanced_meta.model_dump(),
     }
 
 
