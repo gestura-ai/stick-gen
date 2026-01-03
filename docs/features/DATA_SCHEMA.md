@@ -12,8 +12,9 @@ containing a **list of Python dicts**. Each dict is a *scene-level sample* with 
 
 - `"description"` (str): Natural-language description of the motion/scene.
 - `"motion"` (torch.FloatTensor):
-  - Shape: `[T, 20]` for single-actor (flattened 5 line segments × (x1, y1, x2, y2)).
-  - Optionally `[T, A, 20]` for multi-actor sources (e.g. InterHuman).
+  - Shape: `[T, 48]` for single-actor (flattened 12 line segments × (x1, y1, x2, y2)) in the **v3 canonical schema**.
+  - Optionally `[T, A, 48]` for multi-actor sources (e.g. InterHuman).
+  - Legacy/export pipelines may still derive a `[T, 20]` / `[T, A, 20]` **v1 renderer schema** (5 segments × 4 coords) from this canonical representation for `.motion` files.
 - `"actions"` (torch.LongTensor):
   - Shape: `[T]` (single-actor) or `[T, A]` (multi-actor).
   - Values are indices into `schema.ActionType` via `ACTION_TO_IDX`.
@@ -36,7 +37,8 @@ All tensors are **single-precision** (`torch.float32` for motion/physics/camera,
 All canonical samples must pass `src/data_gen/validator.py::DataValidator` before being written:
 
 - `check_physics_consistency(physics)` now accepts `[T, 6]` and `[T, A, 6]`.
-- `check_skeleton_consistency(motion)` now accepts `[T, 20]` and `[T, A, 20]`.
+- `check_skeleton_consistency(motion)` now accepts `[T, D]` and `[T, A, D]` for any `D` where `D % 4 == 0`.
+  - Canonical training uses `D = 48` (v3 schema). Legacy renderer/export paths may still use `D = 20` (v1-only renderer/export schema).
 
 Converters are responsible for:
 
@@ -50,7 +52,7 @@ Converters are responsible for:
 Training uses `StickFigureDataset`, which expects per-sample dicts with **embeddings**:
 
 - `"description"` (str)
-- `"motion"` (FloatTensor `[T, 20]`)
+- `"motion"` (FloatTensor `[T, 48]` in the v3 canonical schema)
 - `"actions"` (LongTensor `[T]`)
 - `"physics"` (FloatTensor `[T, 6]`)
 - `"camera"` (FloatTensor `[T, 3]`)
@@ -337,7 +339,7 @@ from src.model.diffusion import (
 
 # Create conditioned UNet
 unet = PoseRefinementUNet(
-    pose_dim=20,
+    pose_dim=48,  # v3 canonical 12-segment schema
     use_style_conditioning=True,  # Enable style conditioning
     style_emb_dim=128,
 )

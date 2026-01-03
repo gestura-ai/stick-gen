@@ -1,5 +1,7 @@
+import numpy as np
 import torch
 
+from src.data_gen.joint_utils import joints_to_v3_segments_2d
 from src.eval.metrics import (
     compute_camera_metrics,
     compute_dataset_fid_statistics,
@@ -142,6 +144,98 @@ def test_compute_synthetic_artifact_score_static():
 
     # Completely static motion should have static_ratio = 1.0
     assert result["static_ratio"] == 1.0
+
+
+def _build_canonical_joints_v3(T: int = 16) -> dict[str, np.ndarray]:
+	    """Build an upright canonical joint set compatible with v3 utilities.
+
+	    This mirrors the synthetic pose used in ``test_joint_utils_v3`` so that
+	    connectivity and basic limb geometry are well behaved.
+	    """
+
+	    dtype = np.float32
+
+	    pelvis_center = np.array([0.0, 0.0], dtype=dtype)
+	    chest = np.array([0.0, 1.0], dtype=dtype)
+	    neck = np.array([0.0, 1.5], dtype=dtype)
+	    head_center = np.array([0.0, 2.0], dtype=dtype)
+
+	    l_hip = np.array([-0.5, 0.0], dtype=dtype)
+	    r_hip = np.array([0.5, 0.0], dtype=dtype)
+
+	    l_knee = np.array([-0.5, -1.0], dtype=dtype)
+	    r_knee = np.array([0.5, -1.0], dtype=dtype)
+	    l_ankle = np.array([-0.5, -2.0], dtype=dtype)
+	    r_ankle = np.array([0.5, -2.0], dtype=dtype)
+
+	    l_shoulder = np.array([-0.5, 1.2], dtype=dtype)
+	    r_shoulder = np.array([0.5, 1.2], dtype=dtype)
+	    l_elbow = np.array([-0.9, 0.8], dtype=dtype)
+	    r_elbow = np.array([0.9, 0.8], dtype=dtype)
+	    l_wrist = np.array([-1.2, 0.4], dtype=dtype)
+	    r_wrist = np.array([1.2, 0.4], dtype=dtype)
+
+	    base = {
+	        "pelvis_center": pelvis_center,
+	        "chest": chest,
+	        "neck": neck,
+	        "head_center": head_center,
+	        "l_shoulder": l_shoulder,
+	        "r_shoulder": r_shoulder,
+	        "l_elbow": l_elbow,
+	        "r_elbow": r_elbow,
+	        "l_wrist": l_wrist,
+	        "r_wrist": r_wrist,
+	        "l_hip": l_hip,
+	        "r_hip": r_hip,
+	        "l_knee": l_knee,
+	        "r_knee": r_knee,
+	        "l_ankle": l_ankle,
+	        "r_ankle": r_ankle,
+	    }
+
+	    return {name: np.broadcast_to(coord, (T, 2)).copy() for name, coord in base.items()}
+
+
+def test_compute_synthetic_artifact_score_v3_includes_foot_skate_keys():
+	    """v3 motion should expose foot-skate metrics without large penalties.
+
+	    A perfectly static upright pose has zero ankle drift, so the foot-skate
+	    score should be near zero even though the generic static_ratio is high.
+	    """
+
+	    joints = _build_canonical_joints_v3(T=32)
+	    segments = joints_to_v3_segments_2d(joints)  # [T, 48]
+	    motion = torch.from_numpy(segments)
+
+	    result = compute_synthetic_artifact_score(motion)
+
+	    assert "foot_skate_score" in result
+	    assert "foot_contact_ratio" in result
+	    assert result["foot_skate_score"] == 0.0 or result["foot_skate_score"] < 1e-4
+
+
+def test_compute_synthetic_artifact_score_v3_detects_sliding_feet():
+	    """Deliberate ankle drift during contact should increase foot-skate score."""
+
+	    T = 32
+	    joints = _build_canonical_joints_v3(T=T)
+
+	    # Introduce sliding in the left leg while keeping overall connectivity.
+	    # Move the entire left leg gradually along +x over time.
+	    drift_per_frame = 0.1
+	    for t in range(T):
+	        dx = drift_per_frame * t
+	        for name in ("l_hip", "l_knee", "l_ankle"):
+	            joints[name][t, 0] += dx
+
+	    segments_sliding = joints_to_v3_segments_2d(joints)
+	    motion_sliding = torch.from_numpy(segments_sliding)
+
+	    result_sliding = compute_synthetic_artifact_score(motion_sliding)
+
+	    # Sliding motion should have a strictly positive foot-skate score.
+	    assert result_sliding["foot_skate_score"] > 0.0
 
 
 def test_compute_motion_realism_score_range():

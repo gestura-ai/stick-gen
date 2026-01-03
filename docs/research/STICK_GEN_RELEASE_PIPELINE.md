@@ -214,21 +214,27 @@ data:
 
 ### 4.2 Canonical Data Format
 
-All datasets are converted to a unified 20-dimensional motion representation:
+All datasets are converted to a unified **v3 48-dimensional motion representation**:
 
 ```python
-# Motion tensor: [T, 20] or [T, A, 20] for multi-actor
-# 5 body segments × 4 coordinates (x1, y1, x2, y2)
-# Segments: head, torso, left_arm, right_arm, legs
+# Motion tensor: [T, 48] or [T, A, 48] for multi-actor
+# 12 body segments × 4 coordinates (x1, y1, x2, y2)
+# Canonical segments: pelvis_center→chest, chest→neck, neck→head_center,
+# left/right upper arm, left/right forearm, left/right thigh, left/right shin,
+# left/right ankle/foot
 
 sample = {
-    "motion": torch.Tensor,      # [T, D_motion] stick-figure poses
+    "motion": torch.Tensor,      # [T, D_motion] stick-figure poses (D_motion=48 for v3)
     "embedding": torch.Tensor,   # [1024] BAAI/bge-large-en-v1.5 text embedding
     "actions": torch.Tensor,     # [T] integer action labels (optional)
     "physics": torch.Tensor,     # [T, 6] physics features (optional)
     "camera": torch.Tensor,      # [T, 3] camera parameters (x, y, zoom)
 }
 ```
+
+Legacy `.motion` exports for the web renderer may still use a 20-dimensional,
+5-segment schema derived from this v3 representation. See
+`docs/architecture/RENDERING.md` for details on the export format.
 
 ### 4.3 Data Preparation Commands
 

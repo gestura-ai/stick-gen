@@ -25,11 +25,11 @@ metadata:
 # Model Architecture (full size)
 # Uses modern LLM architecture: RMSNorm + SwiGLU + Pre-Norm
 model:
-  input_dim: 20
+  input_dim: 48           # v3 canonical: 12 segments × 4 coords (x1, y1, x2, y2)
   d_model: 512            # Larger model for GPU (44.6M motion-only, 71.3M multimodal)
   nhead: 16               # More attention heads
   num_layers: 10          # Deeper network
-  output_dim: 20
+  output_dim: 48          # Same as input_dim (v3 canonical motion schema)
   embedding_dim: 1024
   dropout: 0.1
   num_actions: 64

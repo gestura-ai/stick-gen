@@ -20,11 +20,11 @@ metadata:
 
 # Model Architecture (matches large.yaml)
 model:
-  input_dim: 20
+  input_dim: 48           # v3 canonical: 12 segments x 4 coords (x1, y1, x2, y2)
   d_model: 512
   nhead: 16
   num_layers: 10
-  output_dim: 20
+  output_dim: 48          # Same as input_dim (v3 canonical motion schema)
   embedding_dim: 1024
   dropout: 0.1
   num_actions: 64

@@ -1,0 +1,61 @@
+
+============================================================
+Sample 000000 - Source: lsmb19 - Shape: torch.Size([48, 20])
+============================================================
+LEGACY 20D FORMAT
+  Neck:    [ 0, 1] = (-0.0855, -0.2900)
+  Pelvis:  [ 2, 3] = (-0.0579,  0.0164)
+  L_Knee?: [ 4, 5] = (-0.0654,  0.3664)
+  L_Ankle: [ 6, 7] = ( 0.1163,  0.4730)
+  R_Knee?: [ 8, 9] = (-0.0654,  0.3664)
+  R_Ankle: [10,11] = ( 0.1989, -0.0088)
+
+  L/R Knee Distance: 0.0000 <-- DEGENERATE!
+
+============================================================
+Sample 000001 - Source: ntu_rgbd - Shape: (41, 48)
+============================================================
+V3 48D FORMAT
+  Body Center (Pelvis): (-0.5921, -0.2730)
+
+  Joint Distances from Pelvis:
+    Neck        :  0.428
+    Head        :  0.522
+    Chest       :  0.375
+    Pelvis      :  0.000
+    L_Shoulder  :  0.369
+    L_Elbow     :  0.238
+    L_Wrist     :  0.146
+    R_Shoulder  :  0.347
+    R_Elbow     :  0.192
+    R_Wrist     :  0.148
+    L_Knee      :  0.243
+    L_Ankle     :  0.477
+    R_Knee      :  0.267
+    R_Ankle     :  0.490
+    L_Hip       :  0.040
+    R_Hip       :  0.040
+
+============================================================
+Sample 000011 - Source: babel - Shape: (300, 48)
+============================================================
+V3 48D FORMAT
+  Body Center (Pelvis): (0.2451, 0.3570)
+
+  Joint Distances from Pelvis:
+    Neck        :  0.325
+    Head        :  0.208
+    Chest       :  0.189
+    Pelvis      :  0.000
+    L_Shoulder  :  0.754
+    L_Elbow     :  1.371
+    L_Wrist     :  1.730
+    R_Shoulder  :  0.595
+    R_Elbow     :  1.239
+    R_Wrist     :  1.612
+    L_Knee      :  0.857
+    L_Ankle     :  0.919
+    R_Knee      :  0.860
+    R_Ankle     :  0.947
+    L_Hip       :  0.214
+    R_Hip       :  0.214

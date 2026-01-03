@@ -126,7 +126,7 @@ Each head operates on `d_model / num_heads` dimensions.
 ```mermaid
 flowchart LR
     subgraph INPUTS["Inputs"]
-        P["🦴 Pose Sequence<br/>20-dim × T frames"]
+        P["🦴 Pose Sequence<br/>48-dim × T frames (v3 canonical)"]
         T["📝 Text Embedding<br/>1024-dim (BGE)"]
         A["🎬 Action Labels<br/>60 classes"]
         C["📷 Camera State<br/>(x, y, zoom)"]
@@ -140,7 +140,7 @@ flowchart LR
     end
 
     subgraph OUTPUTS["Decoder Heads"]
-        H1["🦴 Pose (20-dim)"]
+        H1["🦴 Pose (48-dim)"]
         H2["📍 Position (2-dim)"]
         H3["⚡ Velocity (2-dim)"]
         H4["🏷️ Action (60 classes)"]

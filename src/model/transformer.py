@@ -283,11 +283,11 @@ class StickFigureTransformer(nn.Module):
 
     def __init__(
         self,
-        input_dim: int = 20,
+        input_dim: int = 48,
         d_model: int = 384,
         nhead: int = 12,
         num_layers: int = 8,
-        output_dim: int = 20,
+        output_dim: int = 48,
         embedding_dim: int = 1024,
         dropout: float = 0.1,
         num_actions: int = 60,
@@ -300,13 +300,16 @@ class StickFigureTransformer(nn.Module):
         """Initialize the Transformer.
 
         Args:
-            input_dim: Input motion dimension. Default 20 for the canonical
-                stick-figure schema (5 segments × 4 coordinates). Legacy
-                configs may use 10 (5 joints × 2 coords).
+            input_dim: Input motion dimension. Default 48 for the canonical
+                v3 stick-figure schema (12 line segments × 4 coordinates:
+                ``x1, y1, x2, y2``). Legacy or export-only pipelines may
+                still use 20 (5 coarse segments × 4 coords) or other values
+                explicitly.
             d_model: Transformer model dimension (256/384/512 for small/medium/large).
             nhead: Number of attention heads.
             num_layers: Number of Transformer encoder layers.
             output_dim: Output motion dimension (usually equal to ``input_dim``).
+                For canonical training, this is also 48 (v3 schema).
             embedding_dim: Text embedding dimension
                 (1024 for BAAI/bge-large-en-v1.5).
             dropout: Dropout rate.

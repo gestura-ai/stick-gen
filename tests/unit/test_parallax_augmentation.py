@@ -15,6 +15,13 @@ from src.data_gen.schema import ACTION_TO_IDX, ActionType  # noqa: E402
 
 
 def test_export_actor_motion_to_file_writes_expected_motion(tmp_path: Path) -> None:
+    """Exporter should write legacy 20D renderer motion correctly.
+
+    This test intentionally uses the v1 20-dimensional schema to validate the
+    JSON format consumed by the Three.js front-end. Canonical training uses
+    the v3 48D schema; this is a backwards-compatibility check.
+    """
+
     T, A, D = 4, 1, 20
     motion = torch.zeros(T, A, D, dtype=torch.float32)
     walk_idx = ACTION_TO_IDX[ActionType.WALK]
@@ -41,9 +48,17 @@ def test_export_actor_motion_to_file_writes_expected_motion(tmp_path: Path) -> N
 def test_generate_parallax_for_dataset_passes_expected_args(
     mock_run, _mock_has_node, tmp_path: Path
 ) -> None:
-    # One sample, one actor
+    """Node invocation should receive expected arguments (legacy 20D input).
+
+    This test uses the v1 20-dimensional renderer format and only verifies
+    that we call the Node.js script with the correct CLI arguments. It does
+    not render real images.
+    """
+
+    # One sample, one actor in legacy 20D renderer format. Use non-zero motion
+    # so the parallax pipeline does not treat it as corrupted/all-zero data.
     T, A, D = 3, 1, 20
-    motion = torch.zeros(T, A, D, dtype=torch.float32)
+    motion = torch.ones(T, A, D, dtype=torch.float32)
     actions = torch.zeros(T, A, dtype=torch.long)
     sample = {"motion": motion, "actions": actions, "description": "desc"}
     dataset_path = tmp_path / "dataset.pt"

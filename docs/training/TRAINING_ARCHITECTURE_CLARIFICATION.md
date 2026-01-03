@@ -14,7 +14,7 @@ The stick-gen model with facial expressions can and should be trained in a **sin
 
 **Rationale:**
 1. Facial expressions are implemented at the **rendering/data level**, not the model level
-2. The transformer learns a **unified pose representation** [250, 20]
+2. The transformer learns a **unified pose representation** `[250, 48]` in the v3 canonical schema
 3. All features (actions, physics, facial expressions) are **implicitly encoded** in the pose tensor
 4. Multi-task learning is already configured for joint optimization
 5. No architectural changes required for facial expressions
@@ -29,18 +29,18 @@ The StickFigureTransformer is a **unified multi-task model**:
 
 ```
 Input:
-  - Motion sequence: [seq_len, batch, 20]  (5 lines × 4 coords)
+  - Motion sequence: [seq_len, batch, 48]  (12 segments × 4 coords; v3 canonical)
   - Text embedding: [batch, 1024]          (semantic description)
   - Action sequence: [seq_len, batch]      (per-frame action labels)
 
 Architecture:
   - Text projection: 1024 → 384
-  - Motion embedding: 20 → 384
+  - Motion embedding: 48 → 384
   - Action embedding: 60 → 64 → 384
   - Transformer encoder: 8 layers, 12 heads, d_model=384
   
 Output Heads (Multi-Task):
-  - Pose decoder: 384 → 20           (main task: joint positions)
+  - Pose decoder: 384 → 48           (main task: joint positions; v3 schema)
   - Position decoder: 384 → 2        (auxiliary: global position)
   - Velocity decoder: 384 → 2        (auxiliary: movement speed)
   - Action predictor: 384 → 60       (auxiliary: action classification)
@@ -73,7 +73,7 @@ Facial expressions are **NOT part of the model architecture**. They are implemen
 - Automatic expression assignment based on actions
 
 **Critical Point:** The transformer model **never sees facial expression labels**. It only predicts:
-- Pose tensor [250, 20]: 5 stick figure lines (head, torso, arms, legs)
+- Pose tensor `[250, 48]`: 12 stick-figure segments in the v3 canonical schema
 - Action labels [250]: per-frame action classification
 
 Facial expressions are **derived from actions at rendering time**, not predicted by the model.
@@ -88,17 +88,17 @@ Facial expressions are **derived from actions at rendering time**, not predicted
    - Generate scene with actions
    - Assign facial expressions based on actions (automatic)
    - Render frames with facial features
-   - Extract pose tensor [250, 20] from rendered frames
+   - Extract pose tensor `[250, 48]` from rendered frames (v3 canonical)
    - Store: {description, motion, actions, physics, embedding}
 
 2. Training:
-   - Model receives: motion [250, 20], embedding [1024], actions [250]
-   - Model predicts: pose [250, 20], position [2], velocity [2], actions [60], physics [6]
+   - Model receives: motion `[250, 48]`, embedding `[1024]`, actions `[250]`
+   - Model predicts: pose `[250, 48]`, position `[2]`, velocity `[2]`, actions `[60]`, physics `[6]`
    - Loss computed on: pose (MSE), actions (CrossEntropy), physics (custom)
    - Facial expressions are NOT in the loss function
 
 3. Inference:
-   - Model predicts: pose [250, 20], actions [250]
+   - Model predicts: pose `[250, 48]`, actions `[250]`
    - Renderer uses actions to determine facial expressions
    - Renderer draws facial features based on expressions
    - Output: video with facial expressions

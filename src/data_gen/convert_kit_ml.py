@@ -64,22 +64,26 @@ def _denorm(arr: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
 
 
 def _features_to_stick(feats: np.ndarray) -> np.ndarray:
-    """Map KIT-ML features to stick figure [T, 20].
+    """Map KIT-ML features to v3 stick figure ``[T, 48]``.
 
-    KIT-ML has 251 dimensions, similar structure to HumanML3D.
-    We use the HumanML3D converter for compatible feature layouts.
+    KIT-ML has 251 dimensions with a layout similar to HumanML3D. When at
+    least the joint-position slice is present (``D >= 67``) we delegate to the
+    HumanML3D feature mapper, which builds the canonical v3 12-segment
+    skeleton. For smaller feature vectors we retain as much information as
+    possible and pad/trim to 48 dims.
     """
+
     T, D = feats.shape
 
-    # KIT-ML has similar structure - use HumanML3D converter if dimensions match
+    # KIT-ML has similar structure - use HumanML3D converter when possible.
     if D >= 67:
         return humanml3d_features_to_stick(feats)
 
-    # Fallback for non-standard dimensions
-    if D >= 20:
-        arr = feats[:, :20]
+    # Fallback for non-standard dimensions: keep data but ensure 48 dims.
+    if D >= 48:
+        arr = feats[:, :48]
     else:
-        pad = np.zeros((T, 20 - D), dtype=feats.dtype)
+        pad = np.zeros((T, 48 - D), dtype=feats.dtype)
         arr = np.concatenate([feats, pad], axis=1)
     return arr.astype(np.float32)
 
@@ -210,6 +214,10 @@ def convert_kit_ml(
 
     samples: list[dict[str, Any]] = []
     skipped = 0
+    skip_reasons: dict[str, int] = {}
+
+    def _record_skip(reason: str) -> None:
+        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
     for i, path in enumerate(paths):
         if i % 200 == 0:
@@ -220,8 +228,14 @@ def convert_kit_ml(
         try:
             feats = np.load(path).astype(np.float32)
 
-            if len(feats.shape) != 2 or feats.shape[0] < 10:
+            if len(feats.shape) != 2:
                 skipped += 1
+                _record_skip("invalid_shape")
+                continue
+
+            if feats.shape[0] < 10:
+                skipped += 1
+                _record_skip("too_few_frames")
                 continue
 
             feats_denorm = _denorm(feats, stats)
@@ -232,15 +246,24 @@ def convert_kit_ml(
             if not ok:
                 logger.debug(f"Skipping {clip_id}: {reason}")
                 skipped += 1
+                if "Velocity limit exceeded" in reason:
+                    _record_skip("physics_velocity")
+                elif "Acceleration limit exceeded" in reason:
+                    _record_skip("physics_acceleration")
+                else:
+                    _record_skip("physics_other")
                 continue
 
             samples.append(sample)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error processing {clip_id}: {e}")
             skipped += 1
+            _record_skip("exception")
 
     logger.info(f"Converted {len(samples)}/{len(paths)} clips ({skipped} skipped)")
+    if skipped > 0:
+        logger.info(f"Skip reasons: {skip_reasons}")
 
     # Report action distribution
     action_counts: dict[str, int] = {}

@@ -290,6 +290,7 @@ def convert_babel(
     Returns:
         List of converted samples
     """
+
     logger.info(f"Loading BABEL annotations from {babel_path}")
     annotations = _load_babel_annotations(babel_path)
     logger.info(f"Found {len(annotations)} annotated sequences")
@@ -302,6 +303,10 @@ def convert_babel(
 
     samples: list[dict[str, Any]] = []
     skipped = 0
+    skip_reasons: dict[str, int] = {}
+
+    def _record_skip(reason: str) -> None:
+        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
     seq_names = list(annotations.keys())
     if max_sequences > 0:
@@ -319,17 +324,20 @@ def convert_babel(
             if seq_info is None:
                 logger.debug(f"Skipping {seq_name}: annotation entry is None")
                 skipped += 1
+                _record_skip("annotation_none")
                 continue
 
             if not isinstance(seq_info, dict):
                 logger.debug(f"Skipping {seq_name}: annotation entry is not a dict")
                 skipped += 1
+                _record_skip("annotation_not_dict")
                 continue
 
             feat_p = seq_info.get("feat_p", "")
             if not feat_p:
                 logger.debug(f"Skipping {seq_name}: no feat_p path in annotation")
                 skipped += 1
+                _record_skip("missing_feat_p")
                 continue
 
             # Construct AMASS path
@@ -337,12 +345,18 @@ def convert_babel(
             if not os.path.exists(npz_path):
                 logger.debug(f"AMASS file not found: {npz_path}")
                 skipped += 1
+                _record_skip("missing_amass_file")
                 continue
 
             # Convert AMASS to stick figure
             motion = converter.convert_sequence(npz_path, target_fps=fps)
-            if motion is None or motion.shape[0] < 25:
+            if motion is None:
                 skipped += 1
+                _record_skip("motion_conversion_failed")
+                continue
+            if motion.shape[0] < 25:
+                skipped += 1
+                _record_skip("too_few_frames")
                 continue
 
             # Get BABEL actions
@@ -360,17 +374,26 @@ def convert_babel(
             if not ok:
                 logger.debug(f"Skipping {seq_name}: {reason}")
                 skipped += 1
+                if "Velocity limit exceeded" in reason:
+                    _record_skip("physics_velocity")
+                elif "Acceleration limit exceeded" in reason:
+                    _record_skip("physics_acceleration")
+                else:
+                    _record_skip("physics_other")
                 continue
 
             samples.append(sample)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Error processing {seq_name}: {e}")
             skipped += 1
+            _record_skip("exception")
 
     logger.info(
         f"Converted {len(samples)}/{len(seq_names)} sequences ({skipped} skipped)"
     )
+    if skipped > 0:
+        logger.info(f"Skip reasons: {skip_reasons}")
 
     # Report action distribution
     action_counts: dict[str, int] = {}

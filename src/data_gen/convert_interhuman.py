@@ -23,7 +23,7 @@ except ImportError:
 def _person_dict_to_motion(
     person: dict[str, Any], converter: AMASSConverter
 ) -> torch.Tensor:
-    """Convert a single person's SMPL-like parameters into [T, 20] stick motion.
+    """Convert a single person's SMPL-like parameters into v3 stick motion.
 
     The InterHuman motions store SMPL-style parameters per person:
 
@@ -32,8 +32,9 @@ def _person_dict_to_motion(
       - pose_body: [T, 63]
       - betas: [10]
 
-    We reuse the SMPL-X model and stick-figure mapping from ``AMASSConverter``
-    to obtain 3D joints and then 2D stick segments.
+    We reuse the SMPL-X model and v3 stick-figure mapping from
+    :class:`AMASSConverter` to obtain 3D joints and then 2D v3 segments with
+    12 connected limbs (48 float coordinates per frame).
 
     Raises:
         ValueError: If person dict is None or missing required fields
@@ -133,15 +134,17 @@ def _person_dict_to_motion(
 
     joints = np.concatenate(joints_list, axis=0)  # [T, 22, 3]
 
-    stick = converter.smpl_to_stick_figure(joints)  # [T, 5, 4]
-    motion = torch.from_numpy(stick.reshape(T, 20).astype(np.float32))
+    # Use the v3 12-segment mapping from the AMASS converter to obtain a
+    # fully connected stick-figure representation.
+    segments = converter.smpl_to_v3_segments_2d(joints)  # [T, 48]
+    motion = torch.from_numpy(segments.astype(np.float32))  # [T, 48]
     return motion
 
 
 def _load_motion_pair_from_pkl(
     pkl_path: str, converter: AMASSConverter
 ) -> torch.Tensor:
-    """Load an InterHuman motion .pkl and pack two actors into [T, 2, 20].
+    """Load an InterHuman motion .pkl and pack two actors into ``[T, 2, 48]``.
 
     Raises:
         ValueError: If pickle data is malformed or missing person data
@@ -163,8 +166,8 @@ def _load_motion_pair_from_pkl(
     person1 = obj["person1"]
     person2 = obj["person2"]
 
-    m1 = _person_dict_to_motion(person1, converter)
-    m2 = _person_dict_to_motion(person2, converter)
+    m1 = _person_dict_to_motion(person1, converter)  # [T1, 48]
+    m2 = _person_dict_to_motion(person2, converter)  # [T2, 48]
 
     # Ensure equal length (clip to shortest if needed)
     T = min(m1.shape[0], m2.shape[0])
@@ -173,7 +176,7 @@ def _load_motion_pair_from_pkl(
     if m2.shape[0] != T:
         m2 = m2[:T]
 
-    stacked = torch.stack([m1, m2], dim=1)  # [T, 2, 20]
+    stacked = torch.stack([m1, m2], dim=1)  # [T, 2, 48]
     return stacked
 
 
@@ -195,7 +198,7 @@ def _load_texts(annots_dir: str, clip_id: str) -> list[str]:
 def _build_sample(
     motion: torch.Tensor, texts: list[str], meta: dict[str, Any], fps: int = 30
 ) -> dict[str, Any]:
-    # motion: [T, 2, 20]
+    # motion: [T, 2, 48] in v3 12-segment schema
     physics = compute_basic_physics(motion, fps=fps)  # [T, 2, 6]
 
     # For now treat all InterHuman clips as generic interactions.
@@ -257,16 +260,35 @@ def convert_interhuman(
     Returns:
         List of converted samples
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
+    import sys
 
     motions_dir = os.path.join(data_root, "motions")
     annots_dir = os.path.join(data_root, "annots")
 
+    # Check if motions directory exists
+    if not os.path.isdir(motions_dir):
+        print(f"[InterHuman] ERROR: Motions directory not found: {motions_dir}")
+        print(f"[InterHuman] Checked data_root: {data_root}")
+        return []
+
     motion_files = sorted(glob.glob(os.path.join(motions_dir, "*.pkl")))
     if max_clips > 0:
         motion_files = motion_files[:max_clips]
+
+    total_files = len(motion_files)
+
+    # Early exit if no files found
+    if total_files == 0:
+        print(f"[InterHuman] WARNING: No .pkl files found in {motions_dir}")
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        torch.save([], output_path)
+        print(f"[InterHuman] Saved empty dataset to {output_path}")
+        return []
+
+    print(f"[InterHuman] Processing {total_files} motion files...")
+    print(f"[InterHuman] Motions dir: {motions_dir}")
+    print(f"[InterHuman] Annotations dir: {annots_dir}")
+    sys.stdout.flush()
 
     validator = DataValidator(fps=fps)
     converter = AMASSConverter()  # Reuse SMPL-X + stick-figure utilities
@@ -274,13 +296,13 @@ def convert_interhuman(
     num_errors = 0
     num_physics_skipped = 0
 
-    total_files = len(motion_files)
-    logger.info(f"[InterHuman] Processing {total_files} motion files...")
-
     for i, motion_path in enumerate(motion_files):
-        # Progress logging every 500 files
-        if i % 500 == 0:
-            logger.info(f"[InterHuman] Processing {i}/{total_files} ({100*i/total_files:.1f}%)...")
+        # Progress logging: first file, then every 100 files for better visibility
+        if i == 0 or i % 100 == 0 or i == total_files - 1:
+            pct = 100 * i / total_files if total_files > 0 else 0
+            print(f"[InterHuman] Processing {i}/{total_files} ({pct:.1f}%)...")
+            sys.stdout.flush()
+
         clip_id = os.path.splitext(os.path.basename(motion_path))[0]
 
         try:
@@ -291,7 +313,7 @@ def convert_interhuman(
             # Handle None or non-dict pickle data
             if obj is None or not isinstance(obj, dict):
                 if verbose:
-                    logger.warning(f"Skipping {clip_id}: invalid pickle data")
+                    print(f"[InterHuman] Skipping {clip_id}: invalid pickle data")
                 num_errors += 1
                 continue
 
@@ -317,7 +339,7 @@ def convert_interhuman(
             ok, score, reason = validator.check_physics_consistency(sample["physics"])
             if not ok:
                 if verbose:
-                    logger.debug(f"Skipping {clip_id}: {reason}")
+                    print(f"[InterHuman] Skipping {clip_id}: {reason}")
                 num_physics_skipped += 1
                 continue
 
@@ -325,13 +347,13 @@ def convert_interhuman(
 
         except Exception as e:
             if verbose:
-                logger.warning(f"Error processing {clip_id}: {e}")
+                print(f"[InterHuman] Error processing {clip_id}: {e}")
             num_errors += 1
             continue
 
-    # Summary logging
+    # Summary output
     total = len(motion_files)
-    logger.info(
+    print(
         f"[InterHuman] Conversion complete:\n"
         f"  - Valid samples: {len(samples)}/{total}\n"
         f"  - Physics skipped: {num_physics_skipped}\n"
@@ -340,7 +362,7 @@ def convert_interhuman(
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     torch.save(samples, output_path)
-    logger.info(f"  - Output: {output_path}")
+    print(f"[InterHuman] Output: {output_path}")
 
     return samples
 

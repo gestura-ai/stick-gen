@@ -6,6 +6,11 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .joint_utils import (
+    CanonicalJoints2D,
+    joints_to_v3_segments_2d,
+    validate_v3_connectivity,
+)
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -137,7 +142,12 @@ def _read_skeleton_file(path: str) -> np.ndarray:
 # We approximate torso/head and limb endpoints.
 NTU_TO_STICK = {
     "head": 3,  # Head
-    "torso": 1,  # SpineBase
+    "neck": 2,  # Neck (SpineShoulder)
+    "torso": 1,  # SpineBase (pelvis/hip)
+    "left_shoulder": 4,  # ShoulderLeft
+    "right_shoulder": 8,  # ShoulderRight
+    "left_hip": 12,  # HipLeft
+    "right_hip": 16,  # HipRight
     "left_hand": 7,  # HandLeft
     "right_hand": 11,  # HandRight
     "left_foot": 19,  # FootLeft
@@ -146,22 +156,107 @@ NTU_TO_STICK = {
 
 
 def joints_to_stick(joints: np.ndarray) -> np.ndarray:
-    """Convert [T, 25, 3] joints to [T, 20] stick lines (5 segments)."""
+    """Convert [T, 25, 3] joints to [T, 20] stick lines (5 segments).
+
+    Canonical segment format (matches src/inference/exporter.py):
+        Segment 0: Torso - neck → hip (SpineShoulder → SpineBase)
+        Segment 1: Left Leg - hip_center → left_foot
+        Segment 2: Right Leg - hip_center → right_foot
+        Segment 3: Left Arm - neck → left_hand
+        Segment 4: Right Arm - neck → right_hand
+
+    Each segment: 4 values (x1, y1, x2, y2) = 20 total per frame.
+    """
     T = joints.shape[0]
     out = np.zeros((T, 5, 4), dtype=np.float32)
-    head = joints[:, NTU_TO_STICK["head"], :2]
-    torso = joints[:, NTU_TO_STICK["torso"], :2]
+
+    # Extract joint positions (2D projection, ignoring z depth)
+    neck = joints[:, NTU_TO_STICK["neck"], :2]
+    torso = joints[:, NTU_TO_STICK["torso"], :2]  # SpineBase/pelvis
+    l_hip = joints[:, NTU_TO_STICK["left_hip"], :2]
+    r_hip = joints[:, NTU_TO_STICK["right_hip"], :2]
     lh = joints[:, NTU_TO_STICK["left_hand"], :2]
     rh = joints[:, NTU_TO_STICK["right_hand"], :2]
     lf = joints[:, NTU_TO_STICK["left_foot"], :2]
     rf = joints[:, NTU_TO_STICK["right_foot"], :2]
 
-    out[:, 0] = np.concatenate([head, torso], axis=-1)
-    out[:, 1] = np.concatenate([torso, lh], axis=-1)
-    out[:, 2] = np.concatenate([torso, rh], axis=-1)
-    out[:, 3] = np.concatenate([torso, lf], axis=-1)
-    out[:, 4] = np.concatenate([torso, rf], axis=-1)
+    # Compute hip center for leg attachment
+    hip_center = (l_hip + r_hip) / 2
+
+    # Canonical segment ordering:
+    # Seg 0: Torso (neck → hip)
+    out[:, 0] = np.concatenate([neck, torso], axis=-1)
+    # Seg 1: Left Leg (hip → left foot)
+    out[:, 1] = np.concatenate([hip_center, lf], axis=-1)
+    # Seg 2: Right Leg (hip → right foot)
+    out[:, 2] = np.concatenate([hip_center, rf], axis=-1)
+    # Seg 3: Left Arm (neck → left hand)
+    out[:, 3] = np.concatenate([neck, lh], axis=-1)
+    # Seg 4: Right Arm (neck → right hand)
+    out[:, 4] = np.concatenate([neck, rh], axis=-1)
+
     return out.reshape(T, 20)
+
+
+def joints_to_v3_segments(joints: np.ndarray) -> np.ndarray:
+    """Convert [T, 25, 3] joints to v3 12-segment [T, 48] representation.
+
+    This uses the canonical v3 joint set and enforces strict connectivity via
+    :func:`validate_v3_connectivity`.
+    """
+
+    if joints.ndim != 3 or joints.shape[1] < 21 or joints.shape[2] < 2:
+        raise ValueError(
+            "Expected joints shape [T, 25, 3] with at least 21 joints; "
+            f"got {joints.shape}"
+        )
+
+    joints_2d = joints[:, :, :2].astype(np.float32)
+
+    # Use hips to define pelvis_center so it is exactly the midpoint of the
+    # pelvis_width segment, matching :func:`validate_v3_connectivity`.
+    l_hip = joints_2d[:, 12]
+    r_hip = joints_2d[:, 16]
+    pelvis_center = 0.5 * (l_hip + r_hip)
+
+    chest = joints_2d[:, 20]
+    neck = joints_2d[:, 2]
+    head_center = joints_2d[:, 3]
+
+    l_shoulder = joints_2d[:, 4]
+    l_elbow = joints_2d[:, 5]
+    l_wrist = joints_2d[:, 6]
+    r_shoulder = joints_2d[:, 8]
+    r_elbow = joints_2d[:, 9]
+    r_wrist = joints_2d[:, 10]
+
+    l_knee = joints_2d[:, 13]
+    l_ankle = joints_2d[:, 14]
+    r_knee = joints_2d[:, 17]
+    r_ankle = joints_2d[:, 18]
+
+    canonical_joints: CanonicalJoints2D = {
+        "pelvis_center": pelvis_center,
+        "chest": chest,
+        "neck": neck,
+        "head_center": head_center,
+        "l_shoulder": l_shoulder,
+        "r_shoulder": r_shoulder,
+        "l_elbow": l_elbow,
+        "r_elbow": r_elbow,
+        "l_wrist": l_wrist,
+        "r_wrist": r_wrist,
+        "l_hip": l_hip,
+        "r_hip": r_hip,
+        "l_knee": l_knee,
+        "r_knee": r_knee,
+        "l_ankle": l_ankle,
+        "r_ankle": r_ankle,
+    }
+
+    segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
+    validate_v3_connectivity(segments)
+    return segments.astype(np.float32)
 
 
 def _action_to_enum(action_id: int) -> ActionType:
@@ -181,7 +276,7 @@ def _action_to_enum(action_id: int) -> ActionType:
 def _build_canonical_sample(
     joints: np.ndarray, meta: dict[str, Any], fps: int = 30
 ) -> dict[str, Any]:
-    motion_np = joints_to_stick(joints)  # [T, 20]
+    motion_np = joints_to_v3_segments(joints)  # [T, 48]
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
 

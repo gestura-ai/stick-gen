@@ -1,0 +1,8 @@
+
+--- Sample 000011 Positions ---
+Neck:   (-0.0754, 0.4137)
+Head:   (0.0557, 0.4436)
+Pelvis: (0.2451, 0.3570)
+Pelvis projection on Spine: 0.0000 (0=Pelvis, 0.3255=Neck)
+Head projection on Spine: 0.2015 (0=Pelvis, 0.3255=Neck)
+Neck projection on Spine: 0.3255 (0=Pelvis, 0.3255=Neck)

@@ -362,6 +362,19 @@ class MotionConditionedSampleGenerator:
 
     This class loads motion clips from a canonical dataset and generates
     new samples by applying augmentations and generating matching descriptions.
+    Optionally uses Grok LLM to generate richer, more natural descriptions.
+
+    LLM Configuration:
+        LLM settings are read from config file under `data_generation.llm`:
+        - use_mock: true/false (true = template-based, false = use Grok)
+        - llm_ratio: float (ratio of samples to use LLM descriptions)
+
+        Environment variable overrides (same as procedural generation):
+        - DISABLE_MOCK_LLM=true or USE_REAL_LLM=true: forces real LLM
+        - GROK_API_KEY set: automatically uses real LLM (unless FORCE_MOCK_LLM=true)
+
+        CLI override:
+        - use_llm_override parameter can force LLM on/off regardless of config
     """
 
     AUGMENTATION_TYPES = ["speed", "position", "scale", "mirror", "noise", "time_shift"]
@@ -369,33 +382,382 @@ class MotionConditionedSampleGenerator:
     def __init__(
         self,
         motion_source_path: str,
+        config_path: str = "configs/base.yaml",
         target_frames: int = 250,
         max_actors: int = 4,
         augmentations_per_sample: int = 2,
         cache_size: int = 1000,
+        use_llm_override: Optional[bool] = None,
+        verbose: bool = True,
     ):
         """
         Initialize the motion-conditioned generator.
 
         Args:
             motion_source_path: Path to merged canonical .pt dataset
+            config_path: Path to YAML configuration file for LLM settings
             target_frames: Target number of frames per sample
             max_actors: Maximum actors per sample
             augmentations_per_sample: Number of augmentations to apply per sample
             cache_size: Number of source samples to cache in memory
+            use_llm_override: Override config LLM setting (None = use config,
+                True = force LLM on, False = force LLM off)
+            verbose: Whether to print verbose logging
         """
         self.motion_source_path = motion_source_path
+        self.config_path = config_path
         self.target_frames = target_frames
         self.max_actors = max_actors
         self.augmentations_per_sample = augmentations_per_sample
         self.cache_size = cache_size
+        self.verbose = verbose
+
+        # Load LLM settings from config with env var overrides
+        self.use_llm = self._resolve_llm_setting(use_llm_override)
 
         # Load source data
         self._source_samples: list[dict] = []
         self._load_source_data()
 
         # Initialize prompt generator for creating descriptions
-        self.prompt_generator = ScenePromptGenerator()
+        self.prompt_generator = ScenePromptGenerator(verbose=verbose)
+
+        # Initialize Grok client if LLM is enabled
+        self._grok_client = None
+        if self.use_llm:
+            self._init_grok_client()
+
+    def _resolve_llm_setting(self, use_llm_override: Optional[bool]) -> bool:
+        """
+        Resolve whether to use LLM based on config, env vars, and CLI override.
+
+        Priority (highest to lowest):
+        1. use_llm_override parameter (CLI --use-llm flag)
+        2. Environment variables (DISABLE_MOCK_LLM, USE_REAL_LLM, GROK_API_KEY)
+        3. Config file setting (data_generation.llm.use_mock)
+
+        Returns:
+            True if LLM should be used, False for template-based generation
+        """
+        # Load config
+        config = load_config(self.config_path)
+        gen_config = config.get("data_generation", {})
+        llm_config = gen_config.get("llm", {})
+
+        # Start with config file setting (inverted: use_mock=true means NO LLM)
+        use_mock_llm = llm_config.get("use_mock", True)
+
+        # Apply environment variable overrides (same logic as generate_dataset)
+        if os.getenv("DISABLE_MOCK_LLM", "").lower() in ("true", "1", "yes"):
+            use_mock_llm = False
+        if os.getenv("USE_REAL_LLM", "").lower() in ("true", "1", "yes"):
+            use_mock_llm = False
+        # If GROK_API_KEY is set, automatically use real LLM
+        if os.getenv("GROK_API_KEY") and os.getenv("FORCE_MOCK_LLM", "").lower() not in (
+            "true", "1", "yes"
+        ):
+            use_mock_llm = False
+
+        # Apply CLI override (highest priority)
+        if use_llm_override is not None:
+            use_llm = use_llm_override
+        else:
+            use_llm = not use_mock_llm  # Invert: use_mock=False means use_llm=True
+
+        if self.verbose:
+            source = "CLI override" if use_llm_override is not None else (
+                "env var" if os.getenv("GROK_API_KEY") or os.getenv("USE_REAL_LLM") else "config"
+            )
+            print(f"[MotionConditioned] LLM setting: {'enabled' if use_llm else 'disabled'} (from {source})")
+
+        return use_llm
+
+    def _init_grok_client(self) -> None:
+        """Initialize Grok API client for LLM-based description generation."""
+        try:
+            from openai import OpenAI
+            api_key = os.getenv("GROK_API_KEY")
+            if not api_key:
+                if self.verbose:
+                    print("[MotionConditioned] WARNING: GROK_API_KEY not set, disabling LLM")
+                self.use_llm = False
+                return
+
+            self._grok_client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.x.ai/v1"
+            )
+            if self.verbose:
+                print(f"[MotionConditioned] Grok LLM enabled (API key: {api_key[:8]}...)")
+        except ImportError:
+            if self.verbose:
+                print("[MotionConditioned] WARNING: openai package not installed, disabling LLM")
+            self.use_llm = False
+        except Exception as e:
+            if self.verbose:
+                print(f"[MotionConditioned] WARNING: Failed to init Grok: {e}, disabling LLM")
+            self.use_llm = False
+
+    # Banned phrases that make descriptions sound robotic/technical
+    BANNED_PHRASES = [
+        "the figure", "a figure", "subtle jitter", "jittery", "mirrored symmetry",
+        "temporal", "oscillation", "pendulation", "amplitude", "laterality",
+        "positional", "off-center", "scaled up", "scaled down", "shifted stance",
+        "with subtle", "noise-induced", "micro-adjustments", "weight transfers",
+    ]
+
+    # Diverse sentence starters to encourage variety
+    SENTENCE_STARTERS = [
+        "Arms", "Hands", "Stepping", "Moving", "Reaching", "Turning", "Leaning",
+        "Swinging", "Lifting", "Lowering", "Extending", "Bending", "Twisting",
+        "Swaying", "Shifting", "Gliding", "Striding", "Walking", "Running",
+        "Jumping", "Crouching", "Rising", "Falling", "Spinning", "Pivoting",
+    ]
+
+    def _extract_motion_metadata(
+        self, source_sample: dict, augmentations: list[str]
+    ) -> dict:
+        """
+        Extract metadata from a motion sample for Grok description generation.
+
+        Builds a structured dict with motion characteristics that Grok can use
+        to generate natural, varied descriptions. Focuses on human-readable
+        motion qualities rather than technical augmentation details.
+
+        Args:
+            source_sample: Source motion sample dict
+            augmentations: List of augmentation types applied
+
+        Returns:
+            Dict with motion metadata for Grok
+        """
+        action_label = source_sample.get("action_label", "motion")
+        original_desc = source_sample.get("description", "")
+
+        # Get enhanced metadata if available
+        enhanced = source_sample.get("enhanced_metadata", {})
+        if hasattr(enhanced, "model_dump"):
+            enhanced = enhanced.model_dump()
+        elif hasattr(enhanced, "__dict__"):
+            enhanced = enhanced.__dict__
+
+        # Map action labels to natural descriptions
+        action_mapping = {
+            "walk": "walking",
+            "run": "running",
+            "jump": "jumping",
+            "sit": "sitting down",
+            "stand": "standing up",
+            "wave": "waving",
+            "punch": "punching",
+            "kick": "kicking",
+            "dance": "dancing",
+            "gesture": "gesturing",
+            "idle": "standing still",
+            "motion": "moving",
+        }
+        natural_action = action_mapping.get(
+            action_label.lower() if action_label else "motion",
+            action_label or "moving"
+        )
+
+        # Translate augmentations to natural motion qualities (not technical terms)
+        motion_qualities = []
+        for aug in augmentations:
+            if aug == "speed":
+                motion_qualities.append(
+                    random.choice(["at a varied pace", "with changing tempo", "rhythmically"])
+                )
+            elif aug == "mirror":
+                motion_qualities.append(
+                    random.choice(["with balanced movement", "symmetrically", "evenly"])
+                )
+            elif aug == "scale":
+                motion_qualities.append(
+                    random.choice(["with exaggerated motion", "with compact gestures", "expressively"])
+                )
+            elif aug == "noise":
+                motion_qualities.append(
+                    random.choice(["with natural variation", "organically", "with lifelike imperfection"])
+                )
+            elif aug == "time_shift":
+                motion_qualities.append(
+                    random.choice(["from a different starting point", "mid-action", "in progress"])
+                )
+            elif aug == "position":
+                motion_qualities.append(
+                    random.choice(["from an offset position", "slightly displaced", "off to one side"])
+                )
+
+        # Build motion characteristics - focus on natural language
+        motion_info = {
+            "action": natural_action,
+            "motion_qualities": motion_qualities[:2] if motion_qualities else ["naturally"],
+        }
+
+        # Add velocity description if available
+        if isinstance(enhanced, dict) and "statistics" in enhanced:
+            stats = enhanced["statistics"]
+            if hasattr(stats, "model_dump"):
+                stats = stats.model_dump()
+            avg_vel = stats.get("avg_velocity") if isinstance(stats, dict) else getattr(stats, "avg_velocity", None)
+            if avg_vel is not None:
+                if avg_vel < 0.5:
+                    motion_info["pace"] = "slow and deliberate"
+                elif avg_vel < 1.5:
+                    motion_info["pace"] = "moderate"
+                else:
+                    motion_info["pace"] = "quick and energetic"
+
+        # Add original description if meaningful
+        if original_desc and len(original_desc) > 15 and "motion" not in original_desc.lower():
+            motion_info["reference"] = original_desc[:100]
+
+        # Suggest a random sentence starter for variety
+        motion_info["suggested_start"] = random.choice(self.SENTENCE_STARTERS)
+
+        return motion_info
+
+    def _filter_description(self, description: str) -> tuple[bool, str]:
+        """
+        Filter and clean a generated description.
+
+        Args:
+            description: Raw description from Grok
+
+        Returns:
+            Tuple of (is_valid, cleaned_description)
+        """
+        # Remove quotes
+        desc = description.strip()
+        if desc.startswith('"') and desc.endswith('"'):
+            desc = desc[1:-1]
+        if desc.startswith("'") and desc.endswith("'"):
+            desc = desc[1:-1]
+
+        # Check for banned phrases
+        desc_lower = desc.lower()
+        for banned in self.BANNED_PHRASES:
+            if banned.lower() in desc_lower:
+                return False, desc
+
+        # Check word count
+        word_count = len(desc.split())
+        if word_count < 10 or word_count > 35:
+            return False, desc
+
+        return True, desc
+
+    def _generate_description_with_grok(
+        self, source_sample: dict, augmentations: list[str]
+    ) -> str:
+        """
+        Generate a natural description using Grok LLM.
+
+        Includes retry logic and post-processing to ensure high-quality,
+        varied descriptions without technical jargon.
+
+        Args:
+            source_sample: Source motion sample dict
+            augmentations: List of augmentation types applied
+
+        Returns:
+            Natural language description generated by Grok
+        """
+        import json
+
+        metadata = self._extract_motion_metadata(source_sample, augmentations)
+
+        system_prompt = """You are a motion caption writer creating training data for AI.
+Write ONE natural sentence (15-25 words) describing human body movement.
+
+CRITICAL RULES:
+1. Start with the suggested word or a body part (Arms, Hands, Legs, etc.)
+2. Describe WHAT the body does, not technical terms
+3. Use everyday language a person would use to describe movement
+4. NO quotes around your response
+
+BANNED WORDS (never use these):
+- figure, subtle, jittery, mirrored, temporal, oscillation
+- amplitude, positional, scaled, shifted, noise, micro-adjustments
+
+GOOD examples:
+- "Arms sweep upward in a wide arc as the body rises onto tiptoes"
+- "Stepping forward with purpose, weight shifts smoothly from heel to toe"
+- "Hands reach out and grasp, then pull back toward the chest"
+- "Turning sharply to the left, momentum carries through the hips"
+- "Crouching low, then springing upward with arms extended overhead"
+
+BAD examples (avoid these patterns):
+- "The figure maintains subtle oscillations" (too technical)
+- "A mirrored, jittery motion sequence" (uses banned words)
+- "Smooth, steady movement with temporal shifts" (robotic)"""
+
+        user_prompt = f"""Describe this motion naturally:
+Action: {metadata.get('action', 'moving')}
+Qualities: {', '.join(metadata.get('motion_qualities', ['naturally']))}
+Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self._grok_client.chat.completions.create(
+                    model="grok-4-1-fast",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_tokens=60,
+                    temperature=0.85 + (attempt * 0.05),  # Increase temp on retries
+                )
+
+                result = response.choices[0].message.content.strip()
+                is_valid, cleaned = self._filter_description(result)
+
+                if is_valid:
+                    if self.verbose:
+                        print(f"[MotionConditioned] Grok: {cleaned[:50]}...")
+                    return cleaned
+
+                if self.verbose and attempt < max_retries - 1:
+                    print(f"[MotionConditioned] Retry {attempt + 1}: filtered '{result[:30]}...'")
+
+            except Exception as e:
+                if self.verbose:
+                    print(f"[MotionConditioned] Grok error attempt {attempt + 1}: {e}")
+
+        # Fallback to template if all retries fail
+        if self.verbose:
+            print("[MotionConditioned] All Grok retries failed, using template")
+        return self._generate_description_template(source_sample, augmentations)
+
+    def _generate_description_template(
+        self, source_sample: dict, augmentations: list[str]
+    ) -> str:
+        """Generate description using templates (fallback when Grok unavailable)."""
+        original_desc = source_sample.get("description", "")
+        action_label = source_sample.get("action_label", "motion")
+
+        # Build augmentation description
+        aug_phrases = []
+        if "speed" in augmentations:
+            aug_phrases.append(random.choice(["with varied tempo", "at different speed"]))
+        if "mirror" in augmentations:
+            aug_phrases.append(random.choice(["mirrored", "reflected"]))
+        if "scale" in augmentations:
+            aug_phrases.append(random.choice(["with adjusted scale", "resized"]))
+
+        # Generate description
+        if original_desc and len(original_desc) > 10:
+            desc = original_desc
+            if aug_phrases:
+                desc = f"{desc} ({', '.join(aug_phrases)})"
+        else:
+            desc = f"A figure performing {action_label} motion"
+            if aug_phrases:
+                desc = f"{desc} {', '.join(aug_phrases)}"
+
+        return desc
 
     def _load_source_data(self) -> None:
         """Load source motion samples from canonical dataset."""
@@ -497,33 +859,13 @@ class MotionConditionedSampleGenerator:
         return motion
 
     def _generate_description(self, source_sample: dict, augmentations: list[str]) -> str:
-        """Generate a new description for the augmented sample."""
-        original_desc = source_sample.get("description", "")
-        action_label = source_sample.get("action_label", "motion")
-        source = source_sample.get("source", "unknown")
+        """Generate a new description for the augmented sample.
 
-        # Build augmentation description
-        aug_phrases = []
-        if "speed" in augmentations:
-            aug_phrases.append(random.choice(["with varied tempo", "at different speed"]))
-        if "mirror" in augmentations:
-            aug_phrases.append(random.choice(["mirrored", "reflected"]))
-        if "scale" in augmentations:
-            aug_phrases.append(random.choice(["with adjusted scale", "resized"]))
-
-        # Generate description using prompt generator patterns
-        if original_desc and len(original_desc) > 10:
-            # Use original as base
-            desc = original_desc
-            if aug_phrases:
-                desc = f"{desc} ({', '.join(aug_phrases)})"
-        else:
-            # Generate new description from action
-            desc = f"A figure performing {action_label} motion"
-            if aug_phrases:
-                desc = f"{desc} {', '.join(aug_phrases)}"
-
-        return desc
+        Uses Grok LLM if enabled, otherwise falls back to template-based generation.
+        """
+        if self.use_llm and self._grok_client is not None:
+            return self._generate_description_with_grok(source_sample, augmentations)
+        return self._generate_description_template(source_sample, augmentations)
 
     def generate_conditioned_sample(self) -> Optional[dict]:
         """
@@ -1407,7 +1749,7 @@ async def generate_dataset_async(
     num_samples: int = 1000,
     output_dir: str = "data/samples_async",
     resource_limits: Optional[ResourceLimits] = None,
-    use_llm: bool = False,
+    use_llm_override: Optional[bool] = None,
     llm_ratio: float = 0.2,
     augment: bool = True,
     compress: bool = False,
@@ -1424,12 +1766,18 @@ async def generate_dataset_async(
     - Queue-based async I/O for sample writing
     - Optional motion conditioning from existing datasets
 
+    LLM Configuration:
+        LLM settings are read from config file under `data_generation.llm`.
+        Environment variables and CLI flags can override the config.
+        See MotionConditionedSampleGenerator for full override priority.
+
     Args:
         config_path: Path to YAML configuration file
         num_samples: Number of samples to generate
         output_dir: Output directory for samples
         resource_limits: Optional resource limits (auto-detected if None)
-        use_llm: Whether to use real LLM (vs mock)
+        use_llm_override: Override config LLM setting (None = use config,
+            True = force LLM on, False = force LLM off). For CLI --use-llm flag.
         llm_ratio: Ratio of samples to use LLM for scene generation
         augment: Whether to apply augmentation
         compress: Whether to compress output files
@@ -1453,11 +1801,12 @@ async def generate_dataset_async(
             output_dir="data/train_async",
         ))
 
-        # Motion-conditioned generation (augments real motion data)
+        # Motion-conditioned generation with LLM descriptions
         stats = asyncio.run(generate_dataset_async(
             num_samples=5000,
             output_dir="data/train_async",
             motion_source_path="data/merged_canonical.pt",
+            use_llm_override=True,  # Force LLM on via CLI
         ))
         ```
     """
@@ -1479,14 +1828,19 @@ async def generate_dataset_async(
 
     if use_motion_conditioning:
         # Create motion-conditioned generator
+        # LLM setting resolved inside the generator from config + env vars + override
         print(f"[ASYNC] Using motion-conditioned generation")
         print(f"[ASYNC] Motion source: {motion_source_path}")
+        print(f"[ASYNC] Config: {config_path}")
 
         conditioned_gen = MotionConditionedSampleGenerator(
             motion_source_path=motion_source_path,
+            config_path=config_path,
             target_frames=target_frames,
             max_actors=max_actors,
             augmentations_per_sample=2,
+            use_llm_override=use_llm_override,
+            verbose=True,
         )
 
         # For motion-conditioned, scene generator just returns a dummy

@@ -206,20 +206,32 @@ class TestStickFigureTransformerIntegration:
 
     def test_forward_pass_basic(self):
         """Basic forward pass should work"""
-        model = StickFigureTransformer(d_model=256, nhead=8, num_layers=4)
+        model = StickFigureTransformer(
+            input_dim=48,
+            d_model=256,
+            nhead=8,
+            num_layers=4,
+            output_dim=48,
+        )
         model.eval()
-        motion = torch.randn(32, 4, 20)
+        motion = torch.randn(32, 4, 48)
         text_emb = torch.randn(4, 1024)
         with torch.no_grad():
             out = model(motion, text_emb)
-        assert out.shape == (32, 4, 20), f"Expected (32, 4, 20), got {out.shape}"
+        assert out.shape == (32, 4, 48), f"Expected (32, 4, 48), got {out.shape}"
         print("✓ StickFigureTransformer basic forward pass test passed")
 
     def test_forward_pass_all_outputs(self):
         """Forward pass with all outputs should work"""
-        model = StickFigureTransformer(d_model=256, nhead=8, num_layers=4)
+        model = StickFigureTransformer(
+            input_dim=48,
+            d_model=256,
+            nhead=8,
+            num_layers=4,
+            output_dim=48,
+        )
         model.eval()
-        motion = torch.randn(32, 4, 20)
+        motion = torch.randn(32, 4, 48)
         text_emb = torch.randn(4, 1024)
         with torch.no_grad():
             outputs = model(motion, text_emb, return_all_outputs=True)
@@ -237,10 +249,16 @@ class TestStickFigureTransformerIntegration:
 
     def test_forward_with_conditioning(self):
         """Forward pass with action and camera conditioning should work"""
-        model = StickFigureTransformer(d_model=256, nhead=8, num_layers=4)
+        model = StickFigureTransformer(
+            input_dim=48,
+            d_model=256,
+            nhead=8,
+            num_layers=4,
+            output_dim=48,
+        )
         model.eval()
         seq_len, batch = 32, 4
-        motion = torch.randn(seq_len, batch, 20)
+        motion = torch.randn(seq_len, batch, 48)
         text_emb = torch.randn(batch, 1024)
         action_seq = torch.randint(0, 60, (seq_len, batch))
         camera_data = torch.randn(seq_len, batch, 3)
@@ -248,17 +266,23 @@ class TestStickFigureTransformerIntegration:
             out = model(
                 motion, text_emb, action_sequence=action_seq, camera_data=camera_data
             )
-        assert out.shape == (seq_len, batch, 20)
+        assert out.shape == (seq_len, batch, 48)
         print("✓ StickFigureTransformer conditioning test passed")
 
     def test_training_step(self):
         """Model should be trainable"""
-        model = StickFigureTransformer(d_model=128, nhead=4, num_layers=2)
+        model = StickFigureTransformer(
+            input_dim=48,
+            d_model=128,
+            nhead=4,
+            num_layers=2,
+            output_dim=48,
+        )
         model.train()
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-        motion = torch.randn(16, 2, 20)
+        motion = torch.randn(16, 2, 48)
         text_emb = torch.randn(2, 1024)
-        target = torch.randn(16, 2, 20)
+        target = torch.randn(16, 2, 48)
         out = model(motion, text_emb)
         loss = nn.functional.mse_loss(out, target)
         loss.backward()

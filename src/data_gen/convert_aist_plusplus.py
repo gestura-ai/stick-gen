@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import pickle
 from typing import Any
@@ -7,9 +8,13 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .joint_utils import CanonicalJoints2D, joints_to_v3_segments_2d, validate_v3_connectivity
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType, MusicMetadata
 from .validator import DataValidator
+
+logger = logging.getLogger(__name__)
+
 
 # Very lightweight AIST++ converter that uses keypoints3d_optim to avoid
 # depending on SMPL models. We approximate our 5-line stick figure from 3D
@@ -45,6 +50,102 @@ def keypoints3d_to_stick(keypoints: np.ndarray) -> np.ndarray:
     out[:, 3] = np.concatenate([torso, lf], axis=-1)
     out[:, 4] = np.concatenate([torso, rf], axis=-1)
     return out.reshape(T, 20)
+
+
+def keypoints3d_to_v3_segments(
+    keypoints: np.ndarray,
+    *,
+    flatten: bool = True,
+) -> np.ndarray:
+    """Convert AIST++ keypoints to v3 12-segment, 48D stick-figure.
+
+    This helper maps the 3D AIST++ keypoints to the canonical 2D joint set
+    used throughout Stick-Gen and then constructs the v3 12-segment skeleton
+    via :func:`joints_to_v3_segments_2d`.
+
+    The mapping deliberately relies only on a stable subset of joints
+    (head, pelvis, hands, feet) and derives shoulders, elbows, hips, and
+    knees using simple geometric heuristics. The goal is to produce a
+    topologically valid v3 skeleton; exact anthropometrics are less
+    important for downstream training.
+
+    Args:
+        keypoints: Array of shape ``[T, 17, 3]`` with AIST++ 3D keypoints.
+        flatten: If ``True``, return shape ``[T, 48]``; otherwise ``[T, 12, 4]``.
+
+    Returns:
+        Numpy array containing v3 stick-figure segments.
+
+    Raises:
+        ValueError: If the input does not have shape ``[T, 17, 3]``.
+    """
+
+    if keypoints.ndim != 3 or keypoints.shape[1] != 17 or keypoints.shape[2] != 3:
+        raise ValueError(
+            f"Expected keypoints with shape [T, 17, 3], got {tuple(keypoints.shape)}"
+        )
+
+    T = keypoints.shape[0]
+
+    # Project to 2D by dropping the Z dimension.
+    head = keypoints[:, AIST_TO_STICK["head"], :2]
+    pelvis = keypoints[:, AIST_TO_STICK["torso"], :2]
+    l_wrist = keypoints[:, AIST_TO_STICK["left_hand"], :2]
+    r_wrist = keypoints[:, AIST_TO_STICK["right_hand"], :2]
+    l_ankle = keypoints[:, AIST_TO_STICK["left_foot"], :2]
+    r_ankle = keypoints[:, AIST_TO_STICK["right_foot"], :2]
+
+    # Derive torso joints along the pelvis->head direction.
+    root_to_head = head - pelvis
+    chest = pelvis + 0.5 * root_to_head
+    neck = pelvis + 0.8 * root_to_head
+    head_center = head
+
+    # Place shoulders symmetrically around the chest on the horizontal axis.
+    shoulder_offset = np.stack(
+        [np.full(T, 0.1, dtype=np.float32), np.zeros(T, dtype=np.float32)], axis=-1
+    )
+    l_shoulder = chest - shoulder_offset
+    r_shoulder = chest + shoulder_offset
+
+    # Elbows are midpoints between shoulders and wrists.
+    l_elbow = 0.5 * (l_shoulder + l_wrist)
+    r_elbow = 0.5 * (r_shoulder + r_wrist)
+
+    # Hips start from the pelvis and move slightly outward horizontally.
+    hip_offset = np.stack(
+        [np.full(T, 0.08, dtype=np.float32), np.zeros(T, dtype=np.float32)], axis=-1
+    )
+    l_hip = pelvis - hip_offset
+    r_hip = pelvis + hip_offset
+
+    # Knees are midpoints between hips and ankles.
+    l_knee = 0.5 * (l_hip + l_ankle)
+    r_knee = 0.5 * (r_hip + r_ankle)
+
+    canonical_joints: CanonicalJoints2D = {
+        "pelvis_center": pelvis,
+        "chest": chest,
+        "neck": neck,
+        "head_center": head_center,
+        "l_shoulder": l_shoulder,
+        "r_shoulder": r_shoulder,
+        "l_elbow": l_elbow,
+        "r_elbow": r_elbow,
+        "l_wrist": l_wrist,
+        "r_wrist": r_wrist,
+        "l_hip": l_hip,
+        "r_hip": r_hip,
+        "l_knee": l_knee,
+        "r_knee": r_knee,
+        "l_ankle": l_ankle,
+        "r_ankle": r_ankle,
+    }
+
+    segments = joints_to_v3_segments_2d(canonical_joints, flatten=flatten)
+    # Ensure connectivity invariants hold; this is cheap and catches mapping bugs.
+    validate_v3_connectivity(segments)
+    return segments
 
 
 def _load_aist_keypoints(path: str) -> np.ndarray:
@@ -137,7 +238,7 @@ AIST_GENRE_MAP = {
 def _build_sample(
     keypoints: np.ndarray, seq_name: str, meta: dict[str, Any], fps: int = 60
 ) -> dict[str, Any]:
-    motion_np = keypoints3d_to_stick(keypoints)
+    motion_np = keypoints3d_to_v3_segments(keypoints)
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
 
@@ -207,25 +308,51 @@ def convert_aist_plusplus(
     validator.max_velocity = 300.0
     validator.max_acceleration = 6000.0
     samples: list[dict[str, Any]] = []
+    skipped = 0
+    skip_reasons: dict[str, int] = {}
+
+    def _record_skip(reason: str) -> None:
+        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
     for path in paths:
         seq_name = os.path.splitext(os.path.basename(path))[0]
-        keypoints = _load_aist_keypoints(path)
-        meta = {
-            "sequence": seq_name,
-            "keypoints_path": os.path.relpath(path, root_dir),
-            "fps": fps,
-        }
-        sample = _build_sample(keypoints, seq_name, meta, fps=fps)
-        # Allow some limb-length variability due to 3D->2D projection and
-        # keypoint noise; enforce only physics constraints here.
-        ok, score, reason = validator.check_physics_consistency(sample["physics"])
-        if not ok:
-            continue
-        samples.append(sample)
+        try:
+            keypoints = _load_aist_keypoints(path)
+            meta = {
+                "sequence": seq_name,
+                "keypoints_path": os.path.relpath(path, root_dir),
+                "fps": fps,
+            }
+            sample = _build_sample(keypoints, seq_name, meta, fps=fps)
+            # Allow some limb-length variability due to 3D->2D projection and
+            # keypoint noise; enforce only physics constraints here.
+            ok, _, reason = validator.check_physics_consistency(sample["physics"])
+            if not ok:
+                if "Velocity limit exceeded" in reason:
+                    _record_skip("physics_velocity")
+                elif "Acceleration limit exceeded" in reason:
+                    _record_skip("physics_acceleration")
+                else:
+                    _record_skip("physics_other")
+                skipped += 1
+                logger.debug("Skipping %s: %s", seq_name, reason)
+                continue
+            samples.append(sample)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Error processing %s: %s", seq_name, exc)
+            _record_skip("exception")
+            skipped += 1
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     torch.save(samples, output_path)
+    logger.info(
+        "Converted %d/%d AIST++ sequences (%d skipped)",
+        len(samples),
+        len(paths),
+        skipped,
+    )
+    if skipped > 0:
+        logger.info("Skip reasons: %s", skip_reasons)
 
 
 def main() -> None:

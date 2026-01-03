@@ -15,11 +15,11 @@ metadata:
 
 # Model Architecture (using medium as default)
 model:
-  input_dim: 20           # 10 joints × 2 coords
+  input_dim: 48           # v3 canonical: 12 segments × 4 coords (x1, y1, x2, y2)
   d_model: 384            # Transformer hidden dimension
   nhead: 12               # Number of attention heads
   num_layers: 8           # Number of transformer layers
-  output_dim: 20          # Same as input_dim
+  output_dim: 48          # Same as input_dim (v3 canonical motion schema)
   embedding_dim: 1024     # Text embedding dimension (BAAI/bge-large-en-v1.5)
   dropout: 0.1            # Dropout rate
   num_actions: 64         # Number of action classes
@@ -85,6 +85,12 @@ data_generation:
   llm:
     use_mock: true             # Use mock LLM (set false to enable real Grok API)
     llm_ratio: 0.2             # Ratio of LLM-generated scenes (0.0 to 1.0)
+  parallax:
+    enabled: true              # Auto-trigger parallax generation in async_data_prep
+    views_per_motion: 250      # Number of camera trajectories per actor motion
+    frames_per_view: 4         # Frames rendered per camera trajectory
+    node_script: "src/data_gen/renderers/threejs_parallax_renderer.js"
+    max_samples: null          # Limit samples for debugging (null = all)
 
 # Data Curation Settings
 data_curation:

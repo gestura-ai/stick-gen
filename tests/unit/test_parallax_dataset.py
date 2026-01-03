@@ -13,7 +13,7 @@ from src.train.parallax_dataset import MultimodalParallaxDataset
 
 
 def _make_motion_dataset(tmp_path: Path) -> Path:
-    T, A, D = 3, 1, 20
+    T, A, D = 3, 1, 48
     motion = torch.arange(T * A * D, dtype=torch.float32).view(T, A, D)
     actions = torch.zeros(T, A, dtype=torch.long)
     sample = {"motion": motion, "actions": actions, "description": "test sample"}
@@ -76,7 +76,7 @@ def test_dataset_init_and_getitem_pil(tmp_path: Path) -> None:
 
     assert image.shape == (3, 16, 16)
     assert torch.is_floating_point(image)
-    assert motion_frame.shape == (20,)
+    assert motion_frame.shape == (48,)
     assert camera_pose.shape == (7,)
     assert isinstance(text, str) and text == "test sample"
     assert isinstance(action, torch.Tensor) and action.dtype == torch.long

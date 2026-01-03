@@ -38,7 +38,9 @@ All real motion datasets are first converted into the **canonical format**
 
 ### 1.5 KIT-ML
 - **Type:** Text-to-motion dataset (processed similarly to HumanML3D).
-- **Canonicalization:** Features mapped to canonical 20-dim pose; text descriptions retained.
+- **Canonicalization:** Features mapped into the v3 12-segment, 48-dimensional
+  stick-figure schema; text descriptions retained. Older versions used a
+  20-dimensional pose layout, which has been superseded by v3.
 - **Role:** High-quality **text-motion alignment** for core semantic understanding.
 
 ### 1.6 BABEL
@@ -74,6 +76,11 @@ All real motion datasets are first converted into the **canonical format**
 Curation (`src/data_gen/curation.py`) applies strict filters to build the Pretrain and SFT splits.
 
 ### 3.1 Filtering Criteria
+Before any thresholds are applied, **canonical single-actor v3 motion** (`[T, 48]`)
+is first **height-normalized and lightly smoothed** in canonical joint space. This
+ensures connectivity is preserved while reducing scale variance and high-frequency
+noise before physics checks and quality scoring.
+
 1.  **Physics Validity**: `DataValidator` rejects physically impossible poses.
 2.  **Sequence Length**: Only sequences between **25 and 500 frames** are kept.
 3.  **Artifact Threshold**: Samples with `max_artifact_score > 0.5` are dropped.

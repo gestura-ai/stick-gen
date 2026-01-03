@@ -193,13 +193,13 @@ model_path = hf_hub_download(
     filename="pytorch_model.bin"
 )
 
-# Load model
+# Load model (v3 canonical: 48-D motion)
 model = StickFigureTransformer(
-    input_dim=20,
+    input_dim=48,
     d_model=384,
     nhead=12,
     num_layers=8,
-    output_dim=20,
+    output_dim=48,
     embedding_dim=1024,
     num_actions=64
 )
@@ -215,11 +215,11 @@ embedding = embedding_model.encode(prompt, convert_to_tensor=True)
 
 with torch.no_grad():
     outputs = model(
-        src=torch.zeros(250, 1, 20),  # Initial pose
+        src=torch.zeros(250, 1, 48),  # Initial pose in v3 schema
         text_embedding=embedding.unsqueeze(0),
         return_all_outputs=True
     )
-    motion = outputs['pose']  # [250, 1, 20]
+    motion = outputs['pose']  # [250, 1, 48]
 
 # Render to video (requires additional rendering code)
 # See: https://github.com/gestura-ai/stick-gen/blob/main/src/inference/generator.py
@@ -256,10 +256,10 @@ This model uses a **transformer encoder architecture** with multi-head self-atte
 
 | Component | Dimension | Description |
 |-----------|-----------|-------------|
-| **Input (Motion)** | 20 | 10 joints × 2 coordinates (x, y) |
+| **Input (Motion)** | 48 | v3 canonical: 12 stick-figure segments × 4 coords (x1, y1, x2, y2) |
 | **Text Embedding** | 1024 | BAAI/bge-large-en-v1.5 embeddings |
 | **Action Classes** | 64 | Discrete action conditioning |
-| **Output (Pose)** | 20 | Predicted joint positions per frame |
+| **Output (Pose)** | 48 | Predicted joint positions per frame in v3 schema |
 | **Sequence Length** | 250 | Frames (10 seconds @ 25fps) |
 
 ### Multi-Task Learning Heads
@@ -268,7 +268,7 @@ The model uses 6 specialized decoder heads for comprehensive motion generation:
 
 | Head | Output Dim | Description |
 |------|------------|-------------|
-| **Pose Decoder** | 20 per frame | Joint position prediction (main task) |
+| **Pose Decoder** | 48 per frame | Joint position prediction (main task, v3 schema) |
 | **Position Decoder** | 2 | Global scene position (x, y) |
 | **Velocity Decoder** | 2 | Movement speed prediction |
 | **Action Predictor** | 64 | Action classification logits |

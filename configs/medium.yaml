@@ -25,11 +25,11 @@ metadata:
 # Model Architecture
 # Uses modern LLM architecture: RMSNorm + SwiGLU + Pre-Norm
 model:
-  input_dim: 20           # 10 joints × 2 coords
+  input_dim: 48           # v3 canonical: 12 segments × 4 coords (x1, y1, x2, y2)
   d_model: 384            # Transformer hidden dimension (20.6M motion-only, 25.1M multimodal)
   nhead: 12               # Number of attention heads
   num_layers: 8           # Number of transformer layers
-  output_dim: 20          # Same as input_dim
+  output_dim: 48          # Same as input_dim (v3 canonical motion schema)
   embedding_dim: 1024     # Text embedding dimension (BAAI/bge-large-en-v1.5)
   dropout: 0.1            # Dropout rate
   num_actions: 64         # Number of action classes

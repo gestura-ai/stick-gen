@@ -1,0 +1,12 @@
+
+--- Sample 000001 (GOOD) ---
+Spine Vector: (-0.0348, 0.4261) | Len: 0.4275
+Neck->L_Shoulder: (-0.0947, -0.0805)
+Shoulder Offset: Width=0.1009, Height=-0.0726 (Height relative to Neck)
+Ratio Width/Spine: 0.2360
+
+--- Sample 000011 (BAD) ---
+Spine Vector: (-0.3205, 0.0567) | Len: 0.3255
+Neck->L_Shoulder: (0.1872, 0.6850)
+Shoulder Offset: Width=-0.7071, Height=-0.0651 (Height relative to Neck)
+Ratio Width/Spine: -2.1728

@@ -10,129 +10,71 @@ const { PNG } = require("pngjs");
 const THREE = require("three");
 const createGL = require("gl");
 
-// Environment-specific parallax layer configurations
-// Each environment defines color schemes for foreground, midground, and background layers
-const ENVIRONMENT_PARALLAX_CONFIGS = {
-  // Earth environments
-  earth_normal: [
-    { depth: -12, top: 0x87ceeb, bottom: 0x4682b4 }, // sky blue
-    { depth: -24, top: 0x228b22, bottom: 0x006400 }, // forest green
-    { depth: -48, top: 0x2f4f4f, bottom: 0x1a1a2e }, // dark slate
-  ],
-  underwater: [
-    { depth: -12, top: 0x00bfff, bottom: 0x006994 }, // deep blue
-    { depth: -24, top: 0x004080, bottom: 0x001a33 }, // ocean depths
-    { depth: -48, top: 0x000d1a, bottom: 0x000000 }, // abyss
-  ],
-  space: [
-    { depth: -12, top: 0x0a0a20, bottom: 0x050510 }, // near space
-    { depth: -24, top: 0x030308, bottom: 0x010104 }, // deep space
-    { depth: -48, top: 0x000000, bottom: 0x000000 }, // void
-  ],
-  moon: [
-    { depth: -12, top: 0x2a2a2a, bottom: 0x1a1a1a }, // lunar surface
-    { depth: -24, top: 0x101010, bottom: 0x080808 }, // lunar shadows
-    { depth: -48, top: 0x000000, bottom: 0x000000 }, // space backdrop
-  ],
-  forest: [
-    { depth: -12, top: 0x90ee90, bottom: 0x228b22 }, // light green canopy
-    { depth: -24, top: 0x006400, bottom: 0x003300 }, // deep forest
-    { depth: -48, top: 0x1a2f1a, bottom: 0x0d1a0d }, // forest floor
-  ],
-  desert: [
-    { depth: -12, top: 0xffd700, bottom: 0xdaa520 }, // golden sand
-    { depth: -24, top: 0xcd853f, bottom: 0x8b4513 }, // dunes
-    { depth: -48, top: 0x654321, bottom: 0x3d2314 }, // distant mountains
-  ],
-  arctic: [
-    { depth: -12, top: 0xf0ffff, bottom: 0xe0f0ff }, // ice white
-    { depth: -24, top: 0xb0c4de, bottom: 0x87ceeb }, // frozen blue
-    { depth: -48, top: 0x4682b4, bottom: 0x2f4f4f }, // arctic depths
-  ],
-  volcanic: [
-    { depth: -12, top: 0xff4500, bottom: 0xcc3700 }, // lava glow
-    { depth: -24, top: 0x8b0000, bottom: 0x4a0000 }, // molten rock
-    { depth: -48, top: 0x1a0a0a, bottom: 0x0a0505 }, // ash clouds
-  ],
-  urban: [
-    { depth: -12, top: 0x708090, bottom: 0x4a5568 }, // city haze
-    { depth: -24, top: 0x2d3748, bottom: 0x1a202c }, // buildings
-    { depth: -48, top: 0x0d1117, bottom: 0x050505 }, // night sky
-  ],
-  cyberpunk: [
-    { depth: -12, top: 0xff00ff, bottom: 0x8b008b }, // neon pink
-    { depth: -24, top: 0x00ffff, bottom: 0x008b8b }, // cyan glow
-    { depth: -48, top: 0x1a0a2e, bottom: 0x0a0514 }, // dark purple
-  ],
-  fantasy: [
-    { depth: -12, top: 0xffe0f7, bottom: 0xff80c0 }, // magical pink
-    { depth: -24, top: 0x80d0ff, bottom: 0x4080c0 }, // enchanted blue
-    { depth: -48, top: 0x2a1a4a, bottom: 0x0a0520 }, // mystical purple
-  ],
-  horror: [
-    { depth: -12, top: 0x4a0000, bottom: 0x2a0000 }, // blood red
-    { depth: -24, top: 0x1a0a0a, bottom: 0x0a0505 }, // dark crimson
-    { depth: -48, top: 0x050202, bottom: 0x000000 }, // void
-  ],
-  sunset: [
-    { depth: -12, top: 0xff7f50, bottom: 0xff4500 }, // coral orange
-    { depth: -24, top: 0xdc143c, bottom: 0x8b0000 }, // crimson
-    { depth: -48, top: 0x4b0082, bottom: 0x1a0a2e }, // indigo night
-  ],
-  sunrise: [
-    { depth: -12, top: 0xffd700, bottom: 0xffa500 }, // golden
-    { depth: -24, top: 0xff8c00, bottom: 0xff6347 }, // orange
-    { depth: -48, top: 0x4169e1, bottom: 0x191970 }, // royal blue
-  ],
-  storm: [
-    { depth: -12, top: 0x4a5568, bottom: 0x2d3748 }, // storm gray
-    { depth: -24, top: 0x1a202c, bottom: 0x0d1117 }, // dark clouds
-    { depth: -48, top: 0x050505, bottom: 0x000000 }, // black sky
-  ],
-  cave: [
-    { depth: -12, top: 0x3d3d3d, bottom: 0x2a2a2a }, // cave entrance
-    { depth: -24, top: 0x1a1a1a, bottom: 0x0d0d0d }, // deep cave
-    { depth: -48, top: 0x050505, bottom: 0x000000 }, // darkness
-  ],
-  beach: [
-    { depth: -12, top: 0x87ceeb, bottom: 0x00bfff }, // sky blue
-    { depth: -24, top: 0xf4a460, bottom: 0xdeb887 }, // sandy
-    { depth: -48, top: 0x006994, bottom: 0x004080 }, // ocean
-  ],
-  mountain: [
-    { depth: -12, top: 0x87ceeb, bottom: 0x4682b4 }, // sky
-    { depth: -24, top: 0x696969, bottom: 0x4a4a4a }, // rock gray
-    { depth: -48, top: 0x2f4f4f, bottom: 0x1a1a2e }, // distant peaks
-  ],
-  swamp: [
-    { depth: -12, top: 0x6b8e23, bottom: 0x556b2f }, // olive green
-    { depth: -24, top: 0x3d5c3d, bottom: 0x2f4f2f }, // murky green
-    { depth: -48, top: 0x1a2f1a, bottom: 0x0d1a0d }, // swamp depths
-  ],
-  jungle: [
-    { depth: -12, top: 0x32cd32, bottom: 0x228b22 }, // lime green
-    { depth: -24, top: 0x006400, bottom: 0x004d00 }, // deep jungle
-    { depth: -48, top: 0x002600, bottom: 0x001300 }, // jungle floor
-  ],
-  // Default fallback
-  default: [
-    { depth: -12, top: 0xffe0f7, bottom: 0xff80c0 }, // foreground candy sky
-    { depth: -24, top: 0x80d0ff, bottom: 0x2040a0 }, // midground city
-    { depth: -48, top: 0x101020, bottom: 0x050509 }, // deep space
-  ],
+// =============================================================================
+// JOINT-BASED Z-DEPTHS
+// =============================================================================
+// Each joint has a consistent z-depth so that connected segments meet in 3D.
+
+const JOINT_Z_DEPTHS = {
+  // Axial chain (centered)
+  head_center: 0.0,
+  neck: 0.0,
+  chest: 0.0,
+  pelvis_center: 0.0,
+  // Left side (negative z = towards camera left)
+  l_shoulder: -0.12,
+  l_elbow: -0.18,
+  l_wrist: -0.22,
+  l_hip: -0.08,
+  l_knee: -0.12,
+  l_ankle: -0.14,
+  // Right side (positive z = towards camera right)
+  r_shoulder: 0.12,
+  r_elbow: 0.18,
+  r_wrist: 0.22,
+  r_hip: 0.08,
+  r_knee: 0.12,
+  r_ankle: 0.14,
 };
 
-// Environment-specific camera behavior modifiers
-const ENVIRONMENT_CAMERA_MODIFIERS = {
-  underwater: { radiusScale: 0.8, heightScale: 0.7, fovOffset: 5, movementScale: 0.5 },
-  space: { radiusScale: 1.5, heightScale: 1.2, fovOffset: -10, movementScale: 0.3 },
-  moon: { radiusScale: 1.3, heightScale: 1.0, fovOffset: -5, movementScale: 0.4 },
-  cave: { radiusScale: 0.6, heightScale: 0.5, fovOffset: 10, movementScale: 0.6 },
-  forest: { radiusScale: 0.9, heightScale: 0.8, fovOffset: 5, movementScale: 0.8 },
-  urban: { radiusScale: 1.0, heightScale: 1.2, fovOffset: 0, movementScale: 1.0 },
-  cyberpunk: { radiusScale: 1.0, heightScale: 1.1, fovOffset: 5, movementScale: 1.2 },
-  storm: { radiusScale: 1.1, heightScale: 0.9, fovOffset: 0, movementScale: 1.5 },
-  default: { radiusScale: 1.0, heightScale: 1.0, fovOffset: 0, movementScale: 1.0 },
+// V3 segment definitions: [segmentIndex, startJoint, endJoint]
+// These define the TOPOLOGY. We draw lines between these SHARED joints.
+const V3_SEGMENT_TOPOLOGY = [
+  { start: "neck", end: "head_center" },       // head
+  { start: "neck", end: "chest" },             // upper_torso
+  { start: "chest", end: "pelvis_center" },    // lower_torso
+  { start: "l_shoulder", end: "l_elbow" },     // l_upper_arm
+  { start: "l_elbow", end: "l_wrist" },        // l_forearm
+  { start: "r_shoulder", end: "r_elbow" },     // r_upper_arm
+  { start: "r_elbow", end: "r_wrist" },        // r_forearm
+  { start: "l_hip", end: "l_knee" },           // l_thigh
+  { start: "l_knee", end: "l_ankle" },         // l_shin
+  { start: "r_hip", end: "r_knee" },           // r_thigh
+  { start: "r_knee", end: "r_ankle" },         // r_shin
+  { start: "l_hip", end: "r_hip" },            // pelvis_width
+];
+
+// Visual-only connections to fix "floating limbs" look
+// These are rendered but not part of the underlying data format.
+const VISUAL_CONNECTIONS = [
+  { start: "neck", end: "l_shoulder" },       // Left clavicle
+  { start: "neck", end: "r_shoulder" },       // Right clavicle
+  { start: "pelvis_center", end: "l_hip" },   // Left pelvic strut
+  { start: "pelvis_center", end: "r_hip" },   // Right pelvic strut
+];
+
+// Combine them into a single render topology
+const FULL_RENDER_TOPOLOGY = [...V3_SEGMENT_TOPOLOGY, ...VISUAL_CONNECTIONS];
+
+
+// Environment-specific parallax layer configurations (kept minimal for --minimal mode)
+const ENVIRONMENT_PARALLAX_CONFIGS = {
+  default: [
+    { depth: -15, color: 0x1a1a2e },
+  ],
+  minimal: [
+    { depth: -20, color: 0x0a0a0a },
+  ],
 };
 
 function parseArgs(argv) {
@@ -167,6 +109,372 @@ function loadMotion(motionPath) {
   return { meta, skel, frames, actions: raw.actions || [] };
 }
 
+function getSkeletonInfo(skel) {
+  const inputDim = skel.input_dim || 20;
+  const segments = Array.isArray(skel.segments) ? skel.segments : [];
+  let numSegments = segments.length;
+  if (!numSegments && inputDim > 0) {
+    numSegments = Math.floor(inputDim / 4);
+  }
+  const type = skel.type || "stick_figure_5_segment";
+  const isV3 =
+    inputDim === 48 &&
+    numSegments === 12 &&
+    typeof type === "string" &&
+    type.indexOf("12_segment_v3") !== -1;
+
+  return {
+    inputDim,
+    segments,
+    numSegments,
+    type,
+    isV3,
+  };
+}
+
+// Helper: Apply strict anthropometric clamping relative to PARENT JOINTS
+function applyAnthropometricClamping(joints) {
+  const neck = joints.neck;
+  const pelvis = joints.pelvis_center;
+
+  if (!neck || !pelvis) return joints;
+
+  // Calculate Torso Length (Spine)
+  const dx = neck.x - pelvis.x;
+  const dy = neck.y - pelvis.y;
+  let torsoLen = Math.sqrt(dx * dx + dy * dy);
+  if (torsoLen < 0.01) torsoLen = 0.3; // Safety floor
+
+  // RATIOS (Relative to Parent):
+  // Shoulders (vs Neck): Max 0.6x Torso (Clavicle width)
+  // Arms (Shoulder->Wrist): Max 1.3x Torso (Human arm is longer than torso)
+  // Legs (Hip->Ankle): Max 1.5x Torso
+  const MAX_SHOULDER_RATIO = 0.6;
+  const MAX_ARM_RATIO = 1.3;
+  const MAX_LEG_RATIO = 1.5;
+
+  const clamp = (joint, ratio, origin) => {
+    if (!joint || !origin) return joint;
+    const maxDist = torsoLen * ratio;
+    const jdx = joint.x - origin.x;
+    const jdy = joint.y - origin.y;
+    const dist = Math.sqrt(jdx * jdx + jdy * jdy);
+    if (dist > maxDist) {
+      const scale = maxDist / dist;
+      return { x: origin.x + jdx * scale, y: origin.y + jdy * scale };
+    }
+    return joint;
+  };
+
+  // Clamp Shoulders relative to Neck
+  joints.l_shoulder = clamp(joints.l_shoulder, MAX_SHOULDER_RATIO, neck);
+  joints.r_shoulder = clamp(joints.r_shoulder, MAX_SHOULDER_RATIO, neck);
+
+  // Clamp Arms relative to Shoulders (Crucial for symmetry)
+  joints.l_wrist = clamp(joints.l_wrist, MAX_ARM_RATIO, joints.l_shoulder);
+  joints.r_wrist = clamp(joints.r_wrist, MAX_ARM_RATIO, joints.r_shoulder);
+  joints.l_elbow = clamp(joints.l_elbow, MAX_ARM_RATIO * 0.6, joints.l_shoulder); // Elbow halfway
+  joints.r_elbow = clamp(joints.r_elbow, MAX_ARM_RATIO * 0.6, joints.r_shoulder);
+
+  // Clamp Legs relative to Hips
+  joints.l_ankle = clamp(joints.l_ankle, MAX_LEG_RATIO, joints.l_hip);
+  joints.r_ankle = clamp(joints.r_ankle, MAX_LEG_RATIO, joints.r_hip);
+  joints.l_knee = clamp(joints.l_knee, MAX_LEG_RATIO * 0.6, joints.l_hip);
+  joints.r_knee = clamp(joints.r_knee, MAX_LEG_RATIO * 0.6, joints.r_hip);
+
+  // Head Rectification:
+  // After alignment, Neck is strictly above Pelvis (Frame Up).
+  // Head must be above Neck. If data puts Head below Neck (e.g. in Chest), force it up.
+  const head = joints.head_center;
+  if (head) {
+    // We expect Head.y > Neck.y
+    // And ideally vertical alignment since it's a stick figure T-pose-ish
+    const minHeadHeight = torsoLen * 0.2; // Head ~ 20% of torso size
+
+    // Project Head onto Spine Axis (which is now Y-axis after alignment)
+    // If Head is too low, snap it up.
+    if (head.y < neck.y + minHeadHeight) {
+      // Force Head Position
+      // Keep original X offset if reasonable, else center it
+      let hx = head.x;
+      if (Math.abs(hx - neck.x) > torsoLen * 0.3) hx = neck.x; // Center if straying too far
+
+      joints.head_center = {
+        x: hx,
+        y: neck.y + minHeadHeight
+      };
+    }
+  }
+
+  return joints;
+}
+
+// Helper: Align skeleton so spine points strictly UP (0, 1)
+// This resolves sideways, upside-down, and arbitrary rotation issues.
+function alignSkeletonToUpright(joints) {
+  const neck = joints.neck;
+  const pelvis = joints.pelvis_center;
+
+  if (!neck || !pelvis) return joints;
+
+  // Pivot around Pelvis
+  // Current Spine Vector
+  const dx = neck.x - pelvis.x;
+  const dy = neck.y - pelvis.y;
+  const currentAngle = Math.atan2(dy, dx);
+
+  // Target Angle: +PI/2 (Up in 2D Euclidean, which maps to Up in Y-Up 3D)
+  const targetAngle = Math.PI / 2;
+  const rotation = targetAngle - currentAngle;
+
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  // Rotate point p around origin o
+  const rotatePoint = (p, o) => {
+    const tx = p.x - o.x;
+    const ty = p.y - o.y;
+    return {
+      x: o.x + (tx * cos - ty * sin),
+      y: o.y + (tx * sin + ty * cos)
+    };
+  };
+
+  // Apply to all joints
+  Object.keys(joints).forEach(key => {
+    if (key === 'pelvis_center') return; // Pivot point stays put
+    joints[key] = rotatePoint(joints[key], pelvis);
+  });
+
+  return joints;
+}
+
+/**
+ * Data Quality Fix: Separate degenerate paired joints.
+ * When L/R joints are nearly identical, force separation using body axis.
+ */
+function separateDegenerateJoints(joints, rx, ry) {
+  const DEGENERATE_THRESHOLD = 0.05;
+  const FORCED_OFFSET = 0.15;
+
+  // Check knee degeneracy
+  const l_knee = joints.l_knee;
+  const r_knee = joints.r_knee;
+  if (l_knee && r_knee) {
+    const dx = l_knee.x - r_knee.x;
+    const dy = l_knee.y - r_knee.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < DEGENERATE_THRESHOLD) {
+      // Both knees are at same point - treat as center, force separation
+      const centerX = (l_knee.x + r_knee.x) / 2;
+      const centerY = (l_knee.y + r_knee.y) / 2;
+      joints.l_knee = { x: centerX - rx * FORCED_OFFSET, y: centerY - ry * FORCED_OFFSET };
+      joints.r_knee = { x: centerX + rx * FORCED_OFFSET, y: centerY + ry * FORCED_OFFSET };
+    }
+  }
+
+  return joints;
+}
+
+/**
+ * Data Quality Fix: Clamp outlier joints to reasonable bounds.
+ * Prevents chaotic appearance from extreme joint positions.
+ */
+function clampOutlierJoints(joints) {
+  const MAX_LIMB_DISTANCE = 1.2;
+  const pelvis = joints.pelvis_center;
+
+  if (!pelvis) return joints;
+
+  // List of limb extremities to check
+  const limbJoints = [
+    'l_wrist', 'r_wrist', 'l_ankle', 'r_ankle',
+    'l_elbow', 'r_elbow', 'l_knee', 'r_knee',
+    'l_shoulder', 'r_shoulder', 'l_hip', 'r_hip'
+  ];
+
+  limbJoints.forEach(name => {
+    const joint = joints[name];
+    if (!joint) return;
+
+    const dx = joint.x - pelvis.x;
+    const dy = joint.y - pelvis.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > MAX_LIMB_DISTANCE) {
+      // Clamp to max distance, preserve direction
+      const scale = MAX_LIMB_DISTANCE / dist;
+      joints[name] = {
+        x: pelvis.x + dx * scale,
+        y: pelvis.y + dy * scale
+      };
+    }
+  });
+
+  return joints;
+}
+
+/**
+ * Extract canonical joints from a v3 48D frame.
+ */
+function extractJointsFromV3Frame(frame) {
+  const joints = {
+    neck: { x: frame[0], y: frame[1] },
+    head_center: { x: frame[2], y: frame[3] },
+    chest: { x: frame[6], y: frame[7] },
+    pelvis_center: { x: frame[10], y: frame[11] },
+    l_shoulder: { x: frame[12], y: frame[13] },
+    l_elbow: { x: frame[14], y: frame[15] },
+    l_wrist: { x: frame[18], y: frame[19] },
+    r_shoulder: { x: frame[20], y: frame[21] },
+    r_elbow: { x: frame[22], y: frame[23] },
+    r_wrist: { x: frame[26], y: frame[27] },
+    l_hip: { x: frame[44], y: frame[45] },
+    r_hip: { x: frame[46], y: frame[47] },
+    l_knee: { x: frame[30], y: frame[31] },
+    l_ankle: { x: frame[34], y: frame[35] },
+    r_knee: { x: frame[38], y: frame[39] },
+    r_ankle: { x: frame[42], y: frame[43] },
+  };
+
+  // Apply data quality fixes
+  const neck = joints.neck;
+  const pelvis = joints.pelvis_center;
+  let dx = neck.x - pelvis.x;
+  let dy = neck.y - pelvis.y;
+  let len = Math.sqrt(dx * dx + dy * dy);
+  let rx = 1, ry = 0;
+  if (len > 0.0001) {
+    rx = dy / len;
+    ry = -dx / len;
+  }
+
+  separateDegenerateJoints(joints, rx, ry);
+
+  // 1. Align to Upright (Fixes rotation/upside-down)
+  alignSkeletonToUpright(joints);
+
+  // 2. Strict Anthropometric Clamping (Fixes exploded limbs)
+  applyAnthropometricClamping(joints);
+
+  return joints;
+}
+
+/**
+ * Extract joints from legacy 20D frame (10 Keypoints).
+ * "Inflates" the skeleton to full V3 joints by inferring Shoulders/Hips,
+ * but uses EXPLICIT Knees/Elbows from the data.
+ */
+function extractJointsFromLegacyFrame(frame) {
+  // Legacy 20D Mapping Analysis:
+  // 0,1: Neck
+  // 2,3: Pelvis 
+  // 4,5: L_Knee (Explicit in data)
+  // 6,7: L_Ankle
+  // 8,9: R_Knee (Explicit in data)
+  // 10,11: R_Ankle
+  // 12,13: L_Arm_Start (Collapses to Neck) -> IGNORE
+  // 14,15: L_Wrist
+  // 16,17: R_Arm_Start (Collapses to Neck) -> IGNORE
+  // 18,19: R_Wrist
+
+  // NOTE: Previous "Inversion Detection" removed.
+  // alignSkeletonToUpright() now handles all rotations (upside-down, sideways, etc).
+
+  // Read raw points (No scaleY)
+  const getPt = (idx) => ({ x: frame[idx], y: frame[idx + 1] });
+
+  const neck = getPt(0);
+  const pelvis = getPt(2);
+  let l_knee_explicit = getPt(4);
+  let l_ankle = getPt(6);
+  let r_knee_explicit = getPt(8);
+  let r_ankle = getPt(10);
+  let l_wrist = getPt(14);
+  let r_wrist = getPt(18);
+
+  // NOTE: Early clamping removed. Final parent-relative clamping handles this better.
+
+  // Estimate Spine Vector first to get body scale
+  let dx = neck.x - pelvis.x;
+  const dy = neck.y - pelvis.y;
+  let torsoLen = Math.sqrt(dx * dx + dy * dy);
+
+  // Safety floor for torso length to prevent divide-by-zero
+  if (torsoLen < 0.01) torsoLen = 0.3;
+
+  let len = torsoLen; // Use torsoLen as the base length for axis calculation
+
+  let ux = 0, uy = 1;
+  let rx = 1, ry = 0;
+
+  if (len > 0.0001) {
+    ux = dx / len;
+    uy = dy / len;
+    rx = uy;
+    ry = -ux;
+  }
+
+  // Inflate Shoulders and Hips
+  const shoulderOffset = 0.12;
+  const pelvisOffset = 0.09;
+
+  const l_shoulder = {
+    x: neck.x - rx * shoulderOffset,
+    y: neck.y - ry * shoulderOffset
+  };
+  const r_shoulder = {
+    x: neck.x + rx * shoulderOffset,
+    y: neck.y + ry * shoulderOffset
+  };
+
+  const l_hip = {
+    x: pelvis.x - rx * pelvisOffset,
+    y: pelvis.y - ry * pelvisOffset
+  };
+  const r_hip = {
+    x: pelvis.x + rx * pelvisOffset,
+    y: pelvis.y + ry * pelvisOffset
+  };
+
+  // HYBRID LOGIC:
+  // Arms: Infer Elbows from clamped wrists
+  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+  const l_elbow = mid(l_shoulder, l_wrist);
+  const r_elbow = mid(r_shoulder, r_wrist);
+
+  // Legs: Use Explicit Knees (already clamped above)
+  const l_knee = l_knee_explicit;
+  const r_knee = r_knee_explicit;
+
+  // Infer Chest and HeadCenter
+  const chest = mid(neck, pelvis);
+  const head_center = {
+    x: neck.x + ux * 0.15,
+    y: neck.y + uy * 0.15
+  };
+
+  const joints = {
+    neck, head_center, chest, pelvis_center: pelvis,
+    l_shoulder, l_elbow, l_wrist,
+    r_shoulder, r_elbow, r_wrist,
+    l_hip, l_knee, l_ankle,
+    r_hip, r_knee, r_ankle
+  };
+
+  // Apply data quality fixes (rx, ry already computed above)
+  separateDegenerateJoints(joints, rx, ry);
+
+  // 1. Align to Upright
+  alignSkeletonToUpright(joints);
+
+  // 2. Clamping
+  applyAnthropometricClamping(joints);
+
+  return joints;
+}
+
 function createRenderer(width, height) {
   const gl = createGL(width, height, { preserveDrawingBuffer: true });
   const canvas = {
@@ -181,114 +489,115 @@ function createRenderer(width, height) {
   };
   const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: true });
   renderer.setSize(width, height, false);
-  renderer.setClearColor(0x000000, 1.0);
-  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.setClearColor(0x0a0a0a, 1.0);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   return { renderer, gl };
 }
 
+/**
+ * Create skeleton geometry.
+ */
 function createSkeleton() {
+  const segCount = FULL_RENDER_TOPOLOGY.length;
   const geom = new THREE.BufferGeometry();
-  const positions = new Float32Array(10 * 3); // 5 segments * 2 endpoints
+  const positions = new Float32Array(segCount * 2 * 3); // segments * 2 endpoints * 3 coords
   geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
   const material = new THREE.LineBasicMaterial({
     color: 0xffffff,
-    linewidth: 3,
-    transparent: true,
-    opacity: 0.95,
+    linewidth: 2,
+    transparent: false,
   });
   const lines = new THREE.LineSegments(geom, material);
-  return { lines, positions, geom };
+  return { lines, positions, geom, segmentCount: segCount };
 }
 
-function createParallaxLayers(environmentType) {
+// NOTE: createJointSpheres has been removed as requested.
+
+function createHead() {
   const group = new THREE.Group();
-  // Select environment-specific parallax configuration
-  const configs =
-    ENVIRONMENT_PARALLAX_CONFIGS[environmentType] || ENVIRONMENT_PARALLAX_CONFIGS.default;
+  const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  // Add a larger sphere for the head
+  const headGeom = new THREE.SphereGeometry(0.12, 12, 12);
+  const headMesh = new THREE.Mesh(headGeom, sphereMat);
+  headMesh.name = "head_visual";
+  group.add(headMesh);
+  return { group, mesh: headMesh };
+}
+
+function createBackground(minimal) {
+  const group = new THREE.Group();
+  const configs = minimal
+    ? ENVIRONMENT_PARALLAX_CONFIGS.minimal
+    : ENVIRONMENT_PARALLAX_CONFIGS.default;
+
   configs.forEach((cfg) => {
-    const geo = new THREE.PlaneGeometry(40, 40, 1, 1);
-    const colors = [];
-    const top = new THREE.Color(cfg.top);
-    const bottom = new THREE.Color(cfg.bottom);
-    for (let i = 0; i < 4; i += 1) {
-      const c = i < 2 ? top : bottom;
-      colors.push(c.r, c.g, c.b);
-    }
-    geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, depthWrite: false });
+    const geo = new THREE.PlaneGeometry(100, 100, 1, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      color: cfg.color,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(0, 0, cfg.depth);
     group.add(mesh);
   });
+
   return group;
 }
 
-function getCameraModifiers(environmentType) {
-  return ENVIRONMENT_CAMERA_MODIFIERS[environmentType] || ENVIRONMENT_CAMERA_MODIFIERS.default;
-}
-
-function createProps() {
-  const group = new THREE.Group();
-  const ballGeom = new THREE.SphereGeometry(0.18, 16, 16);
-  const ballMat = new THREE.MeshBasicMaterial({ color: 0xffff80 });
-  const platformGeom = new THREE.BoxGeometry(4, 0.3, 0.5);
-  const platformMat = new THREE.MeshBasicMaterial({ color: 0x303040 });
-  const trunkGeom = new THREE.BoxGeometry(0.25, 1.3, 0.25);
-  const leafGeom = new THREE.SphereGeometry(0.8, 12, 12);
-  const trunkMat = new THREE.MeshBasicMaterial({ color: 0x8b4513 });
-  const leafMat = new THREE.MeshBasicMaterial({ color: 0x2e8b57 });
-  return { group, ballGeom, ballMat, platformGeom, platformMat, trunkGeom, leafGeom, trunkMat, leafMat };
-}
-
-function computeJoints(frame) {
-  return {
-    neck: { x: frame[0], y: frame[1] },
-    hip: { x: frame[2], y: frame[3] },
-    leftHand: { x: frame[14], y: frame[15] },
-    rightHand: { x: frame[18], y: frame[19] },
-  };
-}
-
-function updateSkeleton(skel, frame) {
-  const zDepths = [0.0, -0.3, 0.3, -0.5, 0.5];
+/**
+ * Update skeleton with joint-based 3D positioning.
+ */
+function updateSkeleton(skel, frame, skelInfo, headObj) {
+  const SCALE = 3.0;
   const pos = skel.positions;
-  for (let seg = 0; seg < 5; seg += 1) {
-    const base = seg * 4;
-    const vBase = seg * 6;
-    const z = zDepths[seg] || 0;
-    const x1 = frame[base];
-    const y1 = frame[base + 1];
-    const x2 = frame[base + 2];
-    const y2 = frame[base + 3];
-    pos[vBase] = x1;
-    pos[vBase + 1] = y1;
-    pos[vBase + 2] = z;
-    pos[vBase + 3] = x2;
-    pos[vBase + 4] = y2;
-    pos[vBase + 5] = z;
-  }
-  skel.geom.attributes.position.needsUpdate = true;
-}
 
-function updateProps(props, frame) {
-  const joints = computeJoints(frame);
-  while (props.group.children.length) props.group.remove(props.group.children[0]);
-  const r = Math.random();
-  if (r < 0.33) {
-    const ball = new THREE.Mesh(props.ballGeom, props.ballMat);
-    ball.position.set(joints.rightHand.x, joints.rightHand.y, 0.25);
-    props.group.add(ball);
-  } else if (r < 0.66) {
-    const plat = new THREE.Mesh(props.platformGeom, props.platformMat);
-    plat.position.set(joints.hip.x, joints.hip.y - 1.3, 0.0);
-    props.group.add(plat);
-  } else {
-    const trunk = new THREE.Mesh(props.trunkGeom, props.trunkMat);
-    const leaves = new THREE.Mesh(props.leafGeom, props.leafMat);
-    trunk.position.set(joints.hip.x + 3.0, joints.hip.y - 0.3, -0.2);
-    leaves.position.set(joints.hip.x + 3.0, joints.hip.y + 0.6, -0.2);
-    props.group.add(trunk);
-    props.group.add(leaves);
+  // 1. Extract raw 2D joints (x,y)
+  const joints2D = skelInfo.isV3
+    ? extractJointsFromV3Frame(frame)
+    : extractJointsFromLegacyFrame(frame);
+
+  // 2. Compute 3D positions for ALL joints first.
+  const joints3D = {};
+  Object.keys(joints2D).forEach(name => {
+    const j2d = joints2D[name];
+    const z = JOINT_Z_DEPTHS[name] || 0.0;
+    joints3D[name] = {
+      x: j2d.x * SCALE,
+      y: j2d.y * SCALE,
+      z: z
+    };
+  });
+
+  // 3. Reconstruct lines using FULL topology.
+  FULL_RENDER_TOPOLOGY.forEach((segment, i) => {
+    const startJ = joints3D[segment.start];
+    const endJ = joints3D[segment.end];
+
+    if (!startJ || !endJ) return;
+
+    // Line segment start
+    const vBase = i * 6;
+    pos[vBase + 0] = startJ.x;
+    pos[vBase + 1] = startJ.y;
+    pos[vBase + 2] = startJ.z;
+
+    // Line segment end
+    pos[vBase + 3] = endJ.x;
+    pos[vBase + 4] = endJ.y;
+    pos[vBase + 5] = endJ.z;
+  });
+
+  skel.geom.attributes.position.needsUpdate = true;
+
+  // 4. Update head position
+  if (headObj && joints3D.head_center) {
+    headObj.mesh.position.set(
+      joints3D.head_center.x,
+      joints3D.head_center.y,
+      joints3D.head_center.z
+    );
   }
 }
 
@@ -312,10 +621,11 @@ function main() {
   const inputPath = args.input;
   if (!inputPath) {
     console.error(
-      "Usage: node threejs_parallax_renderer.js --input motion.motion --output-dir out --views 100 [--frames-per-view 8] [--environment-type underwater]"
+      "Usage: node threejs_parallax_renderer.js --input motion.motion --output-dir out --views 100 [--minimal]"
     );
     process.exit(1);
   }
+
   const outputDir = args.output_dir || "parallax_frames";
   const views = parseInt(args.views || "100", 10);
   const width = parseInt(args.width || "512", 10);
@@ -324,67 +634,64 @@ function main() {
   const sampleId = args.sample_id || null;
   const actorId = args.actor_id || null;
   const metadataPath = args.metadata || path.join(outputDir, "metadata.json");
-  // Environment type for environment-aware parallax and camera behavior
-  const environmentType = args.environment_type || "default";
+  const minimal = args.minimal === true || args.minimal === "true";
 
-  const { frames, meta } = loadMotion(inputPath);
+  const { frames, meta, skel } = loadMotion(inputPath);
   if (!frames.length) {
     console.error("No frames in motion file.");
     process.exit(1);
   }
 
-  // Get environment-specific camera modifiers
-  const camMod = getCameraModifiers(environmentType);
+  const skelInfo = getSkeletonInfo(skel);
 
   const { renderer, gl } = createRenderer(width, height);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-  camera.position.set(0, 2, 10);
+  camera.position.set(0, 2, 8);
   camera.lookAt(0, 1, 0);
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.7);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-  dir.position.set(5, 10, 10);
+  // Simple ambient lighting
+  const ambient = new THREE.AmbientLight(0xffffff, 1.0);
   scene.add(ambient);
-  scene.add(dir);
 
-  // Create environment-aware parallax layers
-  const parallax = createParallaxLayers(environmentType);
-  const skel = createSkeleton();
-  const props = createProps();
-  scene.add(parallax);
-  scene.add(skel.lines);
-  scene.add(props.group);
+  // Create scene elements
+  const background = createBackground(minimal);
+  const skelObj = createSkeleton();
+  const headObj = createHead();
+
+  scene.add(background);
+  scene.add(skelObj.lines);
+  scene.add(headObj.group);
 
   const metaOut = {
     sample_id: sampleId,
     actor_id: actorId,
-    environment_type: environmentType,
+    minimal_mode: minimal,
     views,
     frames_per_view: framesPerView,
     motion_total_frames: frames.length,
     fps: meta.fps || 25,
+    skeleton_type: skelInfo.isV3 ? "v3_12_segment" : "legacy_5_segment",
     frames: [],
   };
 
   for (let i = 0; i < views; i += 1) {
     const baseFrame = Math.floor(Math.random() * frames.length);
 
-    // Apply environment-specific camera modifiers
+    // Camera orbit parameters
     const baseAngle = Math.random() * Math.PI * 2;
-    const angleDelta = (Math.random() * 0.4 - 0.2) * camMod.movementScale;
-    const baseRadius = (8 + Math.random() * 4) * camMod.radiusScale;
-    const radiusDelta = (Math.random() * 0.4 - 0.2) * camMod.movementScale;
-    const baseHeight = (1 + Math.random() * 2.5) * camMod.heightScale;
-    const heightDelta = (Math.random() * 0.3 - 0.15) * camMod.movementScale;
-    const baseFov = 35 + Math.random() * 20 + camMod.fovOffset;
-    const fovDelta = (Math.random() * 6 - 3) * camMod.movementScale;
+    const angleDelta = (Math.random() * 0.3 - 0.15);
+    const baseRadius = 6 + Math.random() * 3;
+    const radiusDelta = (Math.random() * 0.3 - 0.15);
+    const baseHeight = 1.5 + Math.random() * 2;
+    const heightDelta = (Math.random() * 0.2 - 0.1);
+    const baseFov = 40 + Math.random() * 15;
+    const fovDelta = (Math.random() * 4 - 2);
 
     for (let step = 0; step < framesPerView; step += 1) {
       const motionIdx = Math.min(baseFrame + step, frames.length - 1);
       const frame = frames[motionIdx];
-      updateSkeleton(skel, frame);
-      updateProps(props, frame);
+      updateSkeleton(skelObj, frame, skelInfo, headObj);
 
       const tNorm = framesPerView > 1 ? step / (framesPerView - 1) : 0.0;
       const angle = baseAngle + angleDelta * tNorm;
@@ -395,7 +702,7 @@ function main() {
       camera.fov = fov;
       camera.updateProjectionMatrix();
       camera.position.set(Math.cos(angle) * radius, heightCam, Math.sin(angle) * radius);
-      camera.lookAt(0, 1, 0);
+      camera.lookAt(0, 1.5, 0);
 
       renderer.render(scene, camera);
       const frameName =
@@ -407,14 +714,12 @@ function main() {
 
       metaOut.frames.push({
         file: frameName,
-        view_index: i, // Deprecated alias for view_id (kept for backward compatibility)
         view_id: i,
         step_index: step,
         motion_frame_index: motionIdx,
-        environment_type: environmentType,
         camera: {
           position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-          target: { x: 0, y: 1, z: 0 },
+          target: { x: 0, y: 1.5, z: 0 },
           fov: camera.fov,
         },
       });
@@ -428,4 +733,3 @@ function main() {
 if (require.main === module) {
   main();
 }
-

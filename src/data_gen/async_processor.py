@@ -279,12 +279,19 @@ class AsyncDataGenerator:
         Returns:
             Statistics about the generation run
         """
+        import sys
+
         os.makedirs(self.output_dir, exist_ok=True)
 
         self._writer = AsyncSampleWriter(
             self.output_dir, self.limits, self._stats, self.compress
         )
         await self._writer.start()
+
+        # Track progress for periodic updates
+        self._num_samples = num_samples
+        self._last_progress_print = 0
+        self._progress_interval = max(1, num_samples // 100)  # Print ~100 times
 
         try:
             # Create generation tasks
@@ -297,8 +304,28 @@ class AsyncDataGenerator:
                 )
                 tasks.append(task)
 
+            # Start progress monitor task
+            progress_task = asyncio.create_task(
+                self._progress_monitor(num_samples)
+            )
+
             # Wait for all with concurrency limiting via semaphores
             await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Cancel progress monitor
+            progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+
+            # Final progress update
+            print(
+                f"[AsyncGen] Progress: {self._stats.samples_generated}/{num_samples} "
+                f"({100*self._stats.samples_generated/num_samples:.1f}%) - "
+                f"written: {self._stats.samples_written}, failed: {self._stats.samples_failed}"
+            )
+            sys.stdout.flush()
 
         finally:
             await self._writer.stop()
@@ -306,6 +333,35 @@ class AsyncDataGenerator:
 
         self._stats.total_time = time.time() - self._stats.start_time
         return self._stats
+
+    async def _progress_monitor(self, num_samples: int) -> None:
+        """Background task to print periodic progress updates."""
+        import sys
+
+        last_generated = 0
+        last_time = time.time()
+
+        while True:
+            await asyncio.sleep(5.0)  # Print progress every 5 seconds
+            now = time.time()
+            elapsed = now - last_time
+
+            generated = self._stats.samples_generated
+            written = self._stats.samples_written
+            failed = self._stats.samples_failed
+
+            # Calculate rate
+            rate = (generated - last_generated) / elapsed if elapsed > 0 else 0
+
+            pct = 100 * generated / num_samples if num_samples > 0 else 0
+            print(
+                f"[AsyncGen] Progress: {generated}/{num_samples} ({pct:.1f}%) - "
+                f"written: {written}, failed: {failed}, rate: {rate:.1f}/sec"
+            )
+            sys.stdout.flush()
+
+            last_generated = generated
+            last_time = now
 
     async def _generate_one(
         self,
@@ -315,11 +371,18 @@ class AsyncDataGenerator:
         progress_callback: Optional[Callable[[int, int], None]],
     ) -> None:
         """Generate a single sample with resource limits."""
+        import sys
+
         # Wait for resources
         await self._monitor.wait_for_resources()
 
         async with self._sample_semaphore:
             try:
+                # Print initial progress for first sample
+                if sample_id == 0:
+                    print("[AsyncGen] Starting first sample generation...")
+                    sys.stdout.flush()
+
                 # Generate scene (may involve LLM call)
                 scene = await self._generate_scene(scene_generator)
 
@@ -333,12 +396,18 @@ class AsyncDataGenerator:
                 await self._writer.enqueue(sample, sample_id)
                 self._stats.samples_generated += 1
 
+                # Print confirmation for first sample
+                if sample_id == 0:
+                    print("[AsyncGen] ✓ First sample generated successfully")
+                    sys.stdout.flush()
+
                 if progress_callback:
                     progress_callback(self._stats.samples_generated, sample_id + 1)
 
             except Exception as e:
                 self._stats.samples_failed += 1
                 print(f"[AsyncGen] Sample {sample_id} failed: {e}")
+                sys.stdout.flush()
 
     async def _generate_scene(self, scene_generator: Callable[[], Any]) -> Any:
         """Generate scene with LLM rate limiting."""

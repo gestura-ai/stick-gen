@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
-from pydantic import BaseModel
+import torch
+from pydantic import BaseModel, ConfigDict
 
 
 class FacialExpression(str, Enum):
@@ -1325,3 +1327,27 @@ class EnhancedSampleMetadata(BaseModel):
     temporal: TemporalMetadata | None = None
     quality: QualityMetadata | None = None
     emotion: EmotionMetadata | None = None
+
+
+class MotionSample(BaseModel):
+	"""Canonical v3 motion sample for a single actor sequence.
+
+	Motion is encoded using the v3 12-segment stick-figure schema with
+	48 floats per frame representing 12 segments of the form
+	[x1, y1, x2, y2].
+	"""
+
+	model_config = ConfigDict(arbitrary_types_allowed=True)
+
+	motion: torch.Tensor
+	physics: torch.Tensor | None = None
+	actions: torch.Tensor | None = None
+	camera: torch.Tensor | None = None
+	description: str
+	source: str
+	meta: dict[str, Any]
+	enhanced_meta: EnhancedSampleMetadata | None = None
+
+	# Schema metadata for downstream consumers (exporter, renderer, models)
+	skeleton_type: str = "stick_figure_12_segment_v3"
+	input_dim: int = 48

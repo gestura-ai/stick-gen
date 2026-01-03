@@ -93,10 +93,10 @@ This model uses a **transformer encoder architecture** with multi-head self-atte
 
 | Component | Dimension | Description |
 |-----------|-----------|-------------|
-| **Input (Motion)** | 20 | 10 joints × 2 coordinates (x, y) |
+| **Input (Motion)** | 48 | v3 canonical: 12 stick-figure segments × 4 coords (x1, y1, x2, y2) |
 | **Text Embedding** | 1024 | BAAI/bge-large-en-v1.5 embeddings |
 | **Action Classes** | 64 | Discrete action conditioning |
-| **Output (Pose)** | 20 | Predicted joint positions |
+| **Output (Pose)** | 48 | Predicted joint positions in v3 schema (projectable to 20-D `.motion`) |
 
 ### Multi-Task Learning Heads
 

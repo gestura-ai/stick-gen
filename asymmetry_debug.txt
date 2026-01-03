@@ -1,0 +1,35 @@
+
+--- Legacy Sample Index 0 ---
+Neck: (-0.0855, -0.2900)
+Pelvis: (-0.0579, 0.0164)
+Spine Len: 0.3076
+L_Wrist Dist: 0.4853 (1.58x Torso)
+R_Wrist Dist: 0.5792 (1.88x Torso)
+
+--- Legacy Sample Index 8 ---
+Neck: (-0.1340, -0.3605)
+Pelvis: (-0.0661, -0.0068)
+Spine Len: 0.3601
+L_Wrist Dist: 0.6838 (1.90x Torso)
+R_Wrist Dist: 0.6181 (1.72x Torso)
+
+--- Legacy Sample Index 14 ---
+Neck: (-0.1011, -0.2777)
+Pelvis: (-0.0449, 0.0181)
+Spine Len: 0.3011
+L_Wrist Dist: 0.5906 (1.96x Torso)
+R_Wrist Dist: 0.5273 (1.75x Torso)
+
+--- Legacy Sample Index 15 ---
+Neck: (-0.1359, -0.3447)
+Pelvis: (-0.0729, 0.0051)
+Spine Len: 0.3555
+L_Wrist Dist: 0.7715 (2.17x Torso)
+R_Wrist Dist: 0.6188 (1.74x Torso)
+
+--- Legacy Sample Index 20 ---
+Neck: (-0.1041, -0.2790)
+Pelvis: (-0.0514, -0.0021)
+Spine Len: 0.2819
+L_Wrist Dist: 0.5636 (2.00x Torso)
+R_Wrist Dist: 0.5094 (1.81x Torso)

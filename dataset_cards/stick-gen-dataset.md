@@ -25,7 +25,7 @@ A synthetic dataset for training stick-figure animation models. Generated using 
 
 This dataset contains motion sequences for stick-figure characters with:
 - **Text descriptions**: Natural language prompts describing the motion
-- **Motion tensors**: Joint positions over time `[250 frames, 3 actors, 20 coords]`
+- **Motion tensors**: Joint positions over time `[250 frames, 3 actors, 48 coords]` (v3 canonical: 12 segments × 4 coords)
 - **Action labels**: Per-frame action classification `[250 frames, 3 actors]`
 - **Physics tensors**: Velocity, acceleration, momentum `[250 frames, 3 actors, 6]`
 - **Facial expressions**: Eye/mouth states `[250 frames, 3 actors, 7]`
@@ -60,7 +60,7 @@ stick-gen-dataset/
 ```json
 {
   "description": "A blue figure walks forward while waving",
-  "motion": {"_type": "tensor", "shape": [250, 3, 20], "dtype": "torch.float32", "data": [...]},
+  "motion": {"_type": "tensor", "shape": [250, 3, 48], "dtype": "torch.float32", "data": [...]},
   "actions": {"_type": "tensor", "shape": [250, 3], "dtype": "torch.int64", "data": [...]},
   "physics": {"_type": "tensor", "shape": [250, 3, 6], "dtype": "torch.float32", "data": [...]},
   "face": {"_type": "tensor", "shape": [250, 3, 7], "dtype": "torch.float32", "data": [...]},
@@ -92,7 +92,7 @@ print(f"Loaded {len(data)} samples")
 # Access a sample
 sample = data[0]
 print(f"Description: {sample['description']}")
-print(f"Motion shape: {sample['motion'].shape}")  # [250, 3, 20]
+print(f"Motion shape: {sample['motion'].shape}")  # [250, 3, 48]
 ```
 
 ### Loading Streaming Samples
@@ -126,13 +126,25 @@ python -m src.data_gen.dataset_generator \
 
 ## Motion Representation
 
-Each frame contains 20 coordinates representing 5 body segments:
-- **Head**: (x1, y1, x2, y2) - head position and size
-- **Torso**: (x1, y1, x2, y2) - shoulder to hip
-- **Left Arm**: (x1, y1, x2, y2) - shoulder to hand
-- **Right Arm**: (x1, y1, x2, y2) - shoulder to hand
-- **Left Leg**: (x1, y1, x2, y2) - hip to foot
-- **Right Leg**: (x1, y1, x2, y2) - hip to foot
+Each frame contains **48 coordinates** representing **12 body segments** in the v3
+canonical schema (all segments are stored as `(x1, y1, x2, y2)`):
+
+- Pelvis → Chest
+- Chest → Neck
+- Neck → Head center
+- Left upper arm (shoulder → elbow)
+- Left forearm (elbow → wrist)
+- Right upper arm (shoulder → elbow)
+- Right forearm (elbow → wrist)
+- Left thigh (hip → knee)
+- Left shin (knee → ankle)
+- Right thigh (hip → knee)
+- Right shin (knee → ankle)
+- Left/right foot (ankle → toe) depending on dataset configuration
+
+Legacy `.motion` exports for the web renderer use a compact **20-coordinate,
+5-segment** layout derived from this canonical representation; see
+`docs/architecture/RENDERING.md` for details.
 
 ## License
 

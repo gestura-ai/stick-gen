@@ -1,12 +1,29 @@
-"""
-AMASS to Stick Figure Converter
+"""AMASS to Stick-Figure Converter (v3 12-segment schema).
 
-Converts AMASS motion capture data (SMPL format) to stick figure format.
-Maps 22 SMPL joints to 5 stick figure lines.
+Converts AMASS motion capture data (SMPL/SMPL-X formats) to the **v3
+12-segment, 48-dimensional stick-figure representation** used throughout
+Stick-Gen.
 
-Usage:
+The converter:
+
+* Runs SMPL-H or SMPL-X body models to obtain 3D joints (73 joints).
+* Extracts the first 22 body joints (pelvis, hips, knees, ankles, spine,
+  neck, head, shoulders, elbows, wrists).
+* Projects 3D joints to 2D and maps them to **canonical joints**
+  (``pelvis_center``, ``chest``, ``neck``, ``head_center``, shoulders,
+  elbows, wrists, hips, knees, ankles).
+* Uses :func:`src.data_gen.joint_utils.joints_to_v3_segments_2d` to
+  construct the v3 12-segment skeleton and
+  :func:`src.data_gen.joint_utils.validate_v3_connectivity` to enforce
+  exact joint connectivity.
+
+Usage::
+
     converter = AMASSConverter()
-    motion_tensor = converter.convert_sequence('path/to/amass_file.npz')
+    motion_tensor = converter.convert_sequence("path/to/amass_file.npz")
+
+The returned ``motion_tensor`` has shape ``[T, 48]`` (typically
+``T = 250`` frames at 25 FPS).
 """
 
 import os
@@ -16,6 +33,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from .joint_utils import CanonicalJoints2D, joints_to_v3_segments_2d, validate_v3_connectivity
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -30,20 +48,34 @@ except ImportError:
 
 
 class AMASSConverter:
-    """Convert AMASS SMPL data to stick figure format"""
+    """Convert AMASS SMPL data to v3 12-segment stick-figure format."""
 
-    # Map SMPL 22 joints to stick figure components
-    # SMPL joint indices: https://github.com/vchoutas/smplx
-    SMPL_TO_STICK_MAPPING = {
-        "head": 15,  # SMPL head joint
-        "left_shoulder": 16,  # Left shoulder
-        "right_shoulder": 17,  # Right shoulder
-        "left_hip": 1,  # Left hip
-        "right_hip": 2,  # Right hip
-        "left_hand": 20,  # Left wrist/hand
-        "right_hand": 21,  # Right wrist/hand
-        "left_foot": 7,  # Left ankle/foot
-        "right_foot": 8,  # Right ankle/foot
+    # SMPL/SMPL-X body joint indices for the first 22 body joints.
+    # See: https://github.com/vchoutas/smplx for canonical ordering.
+    # These indices are used to build canonical joints for the v3 schema.
+    SMPL_JOINTS = {
+        "pelvis": 0,
+        "l_hip": 1,
+        "r_hip": 2,
+        "spine1": 3,
+        "l_knee": 4,
+        "r_knee": 5,
+        "spine2": 6,
+        "l_ankle": 7,
+        "r_ankle": 8,
+        "spine3": 9,
+        "l_toe": 10,
+        "r_toe": 11,
+        "neck": 12,
+        "l_clavicle": 13,
+        "r_clavicle": 14,
+        "head": 15,
+        "l_shoulder": 16,
+        "r_shoulder": 17,
+        "l_elbow": 18,
+        "r_elbow": 19,
+        "l_wrist": 20,
+        "r_wrist": 21,
     }
 
     def __init__(self, smpl_model_path: str = "data/smpl_models"):
@@ -297,45 +329,98 @@ class AMASSConverter:
 
         return data, model_type
 
-    def smpl_to_stick_figure(self, smpl_joints: np.ndarray) -> np.ndarray:
-        """
-        Convert SMPL 22 joints to stick figure 5 lines
+    def smpl_to_v3_segments_2d(self, smpl_joints: np.ndarray) -> np.ndarray:
+        """Convert SMPL 22 joints to v3 12-segment, 48-dim stick-figure.
+
+        This function is the v3-native replacement for the legacy
+        5-segment mapping. It builds a set of canonical 2D joints from the
+        first 22 SMPL body joints and then uses
+        :func:`joints_to_v3_segments_2d` and
+        :func:`validate_v3_connectivity` to produce a fully connected
+        v3 skeleton.
 
         Args:
-            smpl_joints: [num_frames, 22, 3] - SMPL joint positions (x, y, z)
+            smpl_joints: Array of shape ``[num_frames, 22, 3]`` with SMPL
+                joint positions (x, y, z).
 
         Returns:
-            stick_lines: [num_frames, 5, 4] - 5 lines (x1, y1, x2, y2)
+            ``np.ndarray`` with shape ``[num_frames, 48]`` representing the
+            v3 12-segment stick-figure.
         """
-        num_frames = smpl_joints.shape[0]
-        stick_lines = np.zeros((num_frames, 5, 4))
+        if smpl_joints.ndim != 3 or smpl_joints.shape[1] < 22 or smpl_joints.shape[2] != 3:
+            raise ValueError(
+                f"Expected SMPL joints of shape [T, 22, 3], got {smpl_joints.shape}"
+            )
 
-        for f in range(num_frames):
-            joints = smpl_joints[f]  # [22, 3]
+        # Project 3D joints to 2D (x, y). We keep the same convention as the
+        # original v1 mapping, using the model's X/Y axes as our 2D plane.
+        joints_2d_full = smpl_joints[:, :, :2]  # [T, 22, 2]
+        T = joints_2d_full.shape[0]
 
-            # Extract 2D projection (x, y) - ignore z depth
-            head = joints[self.SMPL_TO_STICK_MAPPING["head"], :2]
-            l_shoulder = joints[self.SMPL_TO_STICK_MAPPING["left_shoulder"], :2]
-            r_shoulder = joints[self.SMPL_TO_STICK_MAPPING["right_shoulder"], :2]
-            l_hip = joints[self.SMPL_TO_STICK_MAPPING["left_hip"], :2]
-            r_hip = joints[self.SMPL_TO_STICK_MAPPING["right_hip"], :2]
-            l_hand = joints[self.SMPL_TO_STICK_MAPPING["left_hand"], :2]
-            r_hand = joints[self.SMPL_TO_STICK_MAPPING["right_hand"], :2]
-            l_foot = joints[self.SMPL_TO_STICK_MAPPING["left_foot"], :2]
-            r_foot = joints[self.SMPL_TO_STICK_MAPPING["right_foot"], :2]
+        idx = self.SMPL_JOINTS
 
-            # Compute stick figure center points
-            torso_center = (l_shoulder + r_shoulder) / 2
-            hip_center = (l_hip + r_hip) / 2
+        # Convenience slice helper
+        def j(name: str) -> np.ndarray:
+            return joints_2d_full[:, idx[name]]  # [T, 2]
 
-            # Define 5 lines (matching stick-gen schema)
-            stick_lines[f, 0] = [*head, *torso_center]  # Line 0: Head to torso
-            stick_lines[f, 1] = [*torso_center, *l_hand]  # Line 1: Left arm
-            stick_lines[f, 2] = [*torso_center, *r_hand]  # Line 2: Right arm
-            stick_lines[f, 3] = [*hip_center, *l_foot]  # Line 3: Left leg
-            stick_lines[f, 4] = [*hip_center, *r_foot]  # Line 4: Right leg
+        # Build canonical joints expected by joints_to_v3_segments_2d.
+        #
+        # pelvis_center: midpoint between left and right hip joints; this is
+        #                also the midpoint of the pelvis_width segment to
+        #                satisfy validate_v3_connectivity.
+        l_hip = j("l_hip")
+        r_hip = j("r_hip")
+        pelvis_center = 0.5 * (l_hip + r_hip)
 
-        return stick_lines
+        # Shoulders and chest. We approximate the chest as the midpoint between
+        # left and right shoulders, which yields good anatomical alignment for
+        # upper/lower torso segments.
+        l_shoulder = j("l_shoulder")
+        r_shoulder = j("r_shoulder")
+        chest = 0.5 * (l_shoulder + r_shoulder)
+
+        # Neck and head center come directly from SMPL joints.
+        neck = j("neck")
+        head_center = j("head")
+
+        # Elbows, wrists, knees, ankles from their corresponding joints.
+        l_elbow = j("l_elbow")
+        r_elbow = j("r_elbow")
+        l_wrist = j("l_wrist")
+        r_wrist = j("r_wrist")
+        l_knee = j("l_knee")
+        r_knee = j("r_knee")
+        l_ankle = j("l_ankle")
+        r_ankle = j("r_ankle")
+
+        canonical_joints: CanonicalJoints2D = {
+            "pelvis_center": pelvis_center,
+            "chest": chest,
+            "neck": neck,
+            "head_center": head_center,
+            "l_shoulder": l_shoulder,
+            "r_shoulder": r_shoulder,
+            "l_elbow": l_elbow,
+            "r_elbow": r_elbow,
+            "l_wrist": l_wrist,
+            "r_wrist": r_wrist,
+            "l_hip": l_hip,
+            "r_hip": r_hip,
+            "l_knee": l_knee,
+            "r_knee": r_knee,
+            "l_ankle": l_ankle,
+            "r_ankle": r_ankle,
+        }
+
+        segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
+
+        # Enforce joint connectivity invariants (e.g., shared joints and pelvis
+        # center vs. pelvis width midpoint).
+        validate_v3_connectivity(segments)
+
+        # Explicitly ensure dtype and shape are as expected.
+        segments = segments.astype(np.float32).reshape(T, 48)
+        return segments
 
     def convert_sequence(
         self,
@@ -358,7 +443,7 @@ class AMASSConverter:
             stability_threshold: Multiplier for stability thresholds (higher = more permissive)
 
         Returns:
-            motion_tensor: [250, 20] - stick figure motion
+            motion_tensor: [T, 48] - v3 stick-figure motion (typically T=250)
         """
         # Load AMASS data and detect format (with optional early stability check)
         data, model_type = self.load_amass_sequence(
@@ -443,30 +528,27 @@ class AMASSConverter:
         # SMPL-X has 54 joints (22 body + 30 hands + 2 jaw)
         smpl_joints = smpl_joints[:, :22, :]  # [num_frames, 22, 3]
 
-        # Convert to stick figure
-        stick_lines = self.smpl_to_stick_figure(smpl_joints)
+        # Convert to v3 stick-figure representation [T, 48]
+        segments = self.smpl_to_v3_segments_2d(smpl_joints)
 
         # Resample to target FPS and duration
         target_frames = int(target_fps * target_duration)  # 250 frames
-        current_frames = stick_lines.shape[0]
+        current_frames = segments.shape[0]
 
         if current_frames != target_frames:
-            # Resample using linear interpolation
+            # Resample using linear interpolation on the flattened [T, 48] array.
             indices = np.linspace(0, current_frames - 1, target_frames)
-            stick_lines_resampled = np.zeros((target_frames, 5, 4))
+            segments_resampled = np.zeros((target_frames, segments.shape[1]), dtype=np.float32)
 
-            for i in range(5):
-                for j in range(4):
-                    stick_lines_resampled[:, i, j] = np.interp(
-                        indices, np.arange(current_frames), stick_lines[:, i, j]
-                    )
+            for d in range(segments.shape[1]):
+                segments_resampled[:, d] = np.interp(
+                    indices, np.arange(current_frames), segments[:, d]
+                )
 
-            stick_lines = stick_lines_resampled
+            segments = segments_resampled
 
-        # Flatten to [250, 20]
-        motion_tensor = torch.tensor(
-            stick_lines.reshape(target_frames, 20), dtype=torch.float32
-        )
+        # Convert to torch tensor [T, 48]
+        motion_tensor = torch.tensor(segments, dtype=torch.float32)
 
         return motion_tensor
 
@@ -601,26 +683,37 @@ def generate_description_from_action(action: ActionType) -> str:
 def compute_basic_physics(motion: torch.Tensor, fps: int = 25) -> torch.Tensor:
     """Compute simple physics features from stick-figure motion.
 
-    Supports both single-actor ``[T, 20]`` and multi-actor ``[T, A, 20]`` shapes.
-    We approximate each actor's position as the mean of all joint endpoints
-    (10 points from 5 line segments) and derive velocity/acceleration.
+    This utility is *schema-agnostic* and supports both the legacy 5-segment
+    layout (``[T, 20]`` / ``[T, A, 20]``) and the v3 12-segment layout
+    (``[T, 48]`` / ``[T, A, 48]``), as well as any future representation whose
+    last dimension is a multiple of 4 (segments × ``(x1, y1, x2, y2)``).
+
+    The actor's 2D position is approximated as the mean of all segment
+    endpoints, and we derive velocity and acceleration from that trajectory.
     """
 
     if motion.ndim == 2:
-        # [T, 20] -> [T, 1, 20] for unified handling
+        # [T, D] -> [T, 1, D] for unified handling
         motion_reshaped = motion.unsqueeze(1)
         single_actor = True
-    elif motion.ndim == 3 and motion.shape[2] == 20:
-        # [T, A, 20]
+    elif motion.ndim == 3:
+        # [T, A, D]
         motion_reshaped = motion
         single_actor = False
     else:
         raise ValueError(
-            f"Expected motion shape [T, 20] or [T, A, 20], got {tuple(motion.shape)}"
+            f"Expected motion shape [T, D] or [T, A, D], got {tuple(motion.shape)}"
         )
 
-    T, A, _ = motion_reshaped.shape
-    coords = motion_reshaped.view(T, A, 10, 2)  # endpoints (x, y)
+    T, A, D = motion_reshaped.shape
+    if D % 4 != 0:
+        raise ValueError(
+            "compute_basic_physics expects last dimension to be a multiple of 4 "
+            f"(segments × 4 endpoints), got D={D}"
+        )
+
+    num_endpoints = (D // 4) * 2
+    coords = motion_reshaped.view(T, A, num_endpoints, 2)  # endpoints (x, y)
     pos = coords.mean(dim=2)  # [T, A, 2]
 
     vel = torch.zeros_like(pos)
@@ -669,7 +762,7 @@ def build_canonical_sample(
     and is suitable for validation + training dataset construction.
 
     Args:
-        motion: Motion tensor [T, 20]
+        motion: Motion tensor ``[T, 48]`` in the v3 12-segment schema
         npz_path: Path to source .npz file
         fps: Current frame rate
         original_fps: Original source frame rate before resampling
@@ -703,7 +796,7 @@ def build_canonical_sample(
 
     sample: dict[str, Any] = {
         "description": desc,
-        "motion": motion,  # [T, 20]
+        "motion": motion,  # [T, 48] (v3 12-segment skeleton)
         "actions": actions,  # [T]
         "physics": physics,  # [T, 6]
         "camera": torch.zeros(T, 3),  # [T, 3] (no camera in AMASS)
@@ -807,7 +900,7 @@ def convert_amass_dataset(
                 target_duration=target_duration,
                 check_stability=early_stability_check,
                 stability_threshold=stability_threshold,
-            )  # [T, 20]
+            )  # [T, 48]
 
             sample = build_canonical_sample(
                 motion,

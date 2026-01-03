@@ -24,8 +24,9 @@ def _make_synthetic_sample(T: int = 32, embedding_dim: int = 1024):
 
     This avoids depending on a pre-generated train_data_final.pt file,
     while still exercising the same model input shapes.
+    Uses the canonical v3 48D motion format (12 segments × 4 coords).
     """
-    motion = torch.zeros(T, 20)  # [T, 20] stick-figure motion
+    motion = torch.zeros(T, 48)  # [T, 48] v3 stick-figure motion
     embedding = torch.zeros(embedding_dim)  # [1024] text embedding
     actions = torch.zeros(T, dtype=torch.long)
     physics = torch.zeros(T, 6)
@@ -80,11 +81,11 @@ print(f"   ✅ DataLoader created with {len(dataset)} samples")
 # Create model
 print("\n3. Creating model...")
 model = StickFigureTransformer(
-    input_dim=20,  # 10 joints × 2 coords
+    input_dim=48,  # v3 canonical: 12 segments × 4 coords
     d_model=384,
     nhead=12,
     num_layers=8,
-    output_dim=20,  # 10 joints × 2 coords
+    output_dim=48,  # v3 canonical: 12 segments × 4 coords
     embedding_dim=1024,
     dropout=0.1,
     num_actions=60,

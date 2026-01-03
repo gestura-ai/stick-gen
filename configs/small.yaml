@@ -25,11 +25,11 @@ metadata:
 # Model Architecture (smaller for CPU)
 # Uses modern LLM architecture: RMSNorm + SwiGLU + Pre-Norm
 model:
-  input_dim: 20
+  input_dim: 48           # v3 canonical: 12 segments × 4 coords (x1, y1, x2, y2)
   d_model: 256            # Reduced from 384 (7.2M motion-only, 11.7M multimodal)
   nhead: 8                # Reduced from 12
   num_layers: 6           # Reduced from 8
-  output_dim: 20
+  output_dim: 48          # Same as input_dim (v3 canonical motion schema)
   embedding_dim: 1024
   dropout: 0.1
   num_actions: 64

@@ -16,12 +16,16 @@ except Exception:  # pragma: no cover - handled lazily
 class MultimodalParallaxDataset(Dataset):
     """Multimodal dataset for 2.5D parallax PNG frames + motion metadata.
 
-    Each item corresponds to a single rendered PNG frame and returns:
+    Each item corresponds to a single rendered PNG frame and returns::
 
-        (image_tensor, motion_frame_data, camera_pose, text_prompt, action_label, environment_type)
+        (image_tensor, motion_frame_data, camera_pose, text_prompt,
+         action_label, environment_type)
 
     - ``image_tensor``: [3, H, W] float32 in [0, 1]
-    - ``motion_frame_data``: [20] motion vector for the selected actor/frame
+    - ``motion_frame_data``: [D_motion] motion vector for the selected
+      actor/frame, where canonical training uses ``D_motion = 48`` for the
+      v3 12-segment schema (12 × 4 coords). Legacy export pipelines may still
+      use ``D_motion = 20`` for the compact 5-segment v1 renderer format.
     - ``camera_pose``: [7] (pos_x, pos_y, pos_z, tgt_x, tgt_y, tgt_z, fov)
     - ``text_prompt``: str (sample description)
     - ``action_label``: LongTensor scalar or ``None``

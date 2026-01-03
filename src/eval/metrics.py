@@ -22,6 +22,88 @@ def _as_float_tensor(x: torch.Tensor) -> torch.Tensor:
     return t
 
 
+def _compute_v3_foot_skate_metrics(
+    motion_flat: torch.Tensor,
+) -> tuple[float, float]:
+    """Compute a simple foot-skate metric for canonical v3 48D motion.
+
+    This helper expects motion laid out as ``[T, 48]`` where the last
+    dimension corresponds to the 12 v3 segments (each ``[x1, y1, x2, y2]``).
+    It returns a dimensionless score where ``0.0`` indicates no observable
+    sliding of the ankles during ground-contact frames and larger values
+    indicate more drift.
+
+    Args:
+        motion_flat: Motion tensor of shape ``[T, 48]``.
+
+    Returns:
+        (foot_skate_score, contact_ratio):
+            - foot_skate_score: Normalised mean ankle drift during stance
+              (0 = best, higher = worse).
+            - contact_ratio: Approximate fraction of frames classified as foot
+              contact (used to decide whether the score is meaningful).
+    """
+
+    m = _as_float_tensor(motion_flat)
+    if m.ndim != 2 or m.shape[1] != 48 or m.shape[0] < 2:
+        return 0.0, 0.0
+
+    T, _D = m.shape
+    segs = m.view(T, 12, 4)  # [T, S, 4]
+
+    # Reconstruct joints needed for foot-skate: head and ankles.
+    head_center = segs[:, 0, 2:4]
+    l_ankle = segs[:, 8, 2:4]
+    r_ankle = segs[:, 10, 2:4]
+
+    # Estimate body height from head to ankles to obtain a scale for
+    # normalising drift (so metric is roughly scale-invariant).
+    head_to_l = torch.linalg.norm(head_center - l_ankle, dim=-1)
+    head_to_r = torch.linalg.norm(head_center - r_ankle, dim=-1)
+    heights = torch.maximum(head_to_l, head_to_r)
+    finite_mask = torch.isfinite(heights) & (heights > 1e-6)
+    if not finite_mask.any():
+        return 0.0, 0.0
+
+    height = torch.median(heights[finite_mask])
+    if not torch.isfinite(height) or float(height.item()) <= 0.0:
+        height = torch.tensor(1.0, dtype=heights.dtype, device=heights.device)
+
+    def _foot_score(ankle: torch.Tensor) -> tuple[float, float]:
+        # ankle: [T, 2]
+        y = ankle[:, 1]
+        if not torch.isfinite(y).all():
+            return 0.0, 0.0
+
+        y_min = y.min()
+        # Treat frames near the global ankle minimum as approximate contact.
+        y_tol = 0.05 * float(height.item())
+        contact_mask = y <= (y_min + y_tol)
+
+        if T < 2:
+            return 0.0, float(contact_mask.float().mean().item())
+
+        pair_mask = contact_mask[:-1] & contact_mask[1:]
+        contact_ratio = float(contact_mask.float().mean().item())
+        if pair_mask.sum() == 0:
+            return 0.0, contact_ratio
+
+        deltas = ankle[1:] - ankle[:-1]  # [T-1, 2]
+        drift = torch.linalg.norm(deltas[pair_mask], dim=-1)
+        mean_drift = drift.mean() / (height + 1e-6)
+        return float(mean_drift.item()), contact_ratio
+
+    l_score, l_contact = _foot_score(l_ankle)
+    r_score, r_contact = _foot_score(r_ankle)
+
+    if l_contact == 0.0 and r_contact == 0.0:
+        return 0.0, 0.0
+
+    foot_score = max(l_score, r_score)
+    contact_ratio = max(l_contact, r_contact)
+    return float(foot_score), float(contact_ratio)
+
+
 def compute_motion_temporal_metrics(motion: torch.Tensor) -> dict[str, float]:
     """Temporal smoothness metrics on motion trajectories.
 
@@ -305,6 +387,7 @@ def compute_synthetic_artifact_score(motion: torch.Tensor) -> dict[str, float]:
     Returns scores where higher = more artifacts (worse quality).
     Lower scores indicate more natural motion.
     """
+
     m = _as_float_tensor(motion)
     if m.ndim == 3:
         m = m.view(m.shape[0], -1)
@@ -366,20 +449,43 @@ def compute_synthetic_artifact_score(motion: torch.Tensor) -> dict[str, float]:
     else:
         repetition_score = 0.0
 
-    # --- Overall Artifact Score ---
-    # Weighted combination (lower is better)
-    artifact_score = (
-        0.3 * min(jitter_score, 1.0)
-        + 0.2 * static_ratio
-        + 0.3 * explosion_ratio * 10  # Explosions are very bad
-        + 0.2 * repetition_score
+    # --- Foot-Skate Detection (v3-only, optional) ---
+    # When motion is in canonical v3 layout ([T, 48]), compute a simple
+    # ankle-drift metric during stance frames. For other dimensionalities the
+    # score is 0 and does not affect legacy behaviour.
+    foot_skate_score, foot_contact_ratio = _compute_v3_foot_skate_metrics(m)
+    foot_penalty = (
+        min(foot_skate_score * 5.0, 1.0) if foot_contact_ratio > 0.0 else 0.0
     )
+
+    # --- Overall Artifact Score ---
+    # Weighted combination (lower is better). For legacy 20D motion we keep the
+    # original weighting; for canonical v3 48D motion we include foot-skate as
+    # an additional penalty while keeping weights normalised.
+    if D == 48 and foot_contact_ratio > 0.0:
+        explosion_term = min(explosion_ratio * 10.0, 1.0)
+        artifact_score = (
+            0.25 * min(jitter_score, 1.0)
+            + 0.2 * static_ratio
+            + 0.25 * explosion_term
+            + 0.15 * repetition_score
+            + 0.15 * foot_penalty
+        )
+    else:
+        artifact_score = (
+            0.3 * min(jitter_score, 1.0)
+            + 0.2 * static_ratio
+            + 0.3 * explosion_ratio * 10  # Explosions are very bad
+            + 0.2 * repetition_score
+        )
 
     return {
         "jitter_score": jitter_score,
         "static_ratio": static_ratio,
         "explosion_ratio": explosion_ratio,
         "repetition_score": repetition_score,
+        "foot_skate_score": float(foot_skate_score),
+        "foot_contact_ratio": float(foot_contact_ratio),
         "artifact_score": float(artifact_score),
         "is_clean": artifact_score < 0.3,  # Threshold for "clean" motion
     }

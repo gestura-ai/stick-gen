@@ -93,10 +93,10 @@ This model uses a **transformer encoder architecture** with multi-head self-atte
 
 | Component | Dimension | Description |
 |-----------|-----------|-------------|
-| **Input (Motion)** | 20 | 10 joints × 2 coordinates (x, y) |
+| **Input (Motion)** | 48 | v3 canonical: 12 stick-figure segments × 4 coords (x1, y1, x2, y2) |
 | **Text Embedding** | 1024 | BAAI/bge-large-en-v1.5 embeddings |
 | **Action Classes** | 64 | Discrete action conditioning |
-| **Output (Pose)** | 20 | Predicted joint positions per frame |
+| **Output (Pose)** | 48 | Predicted joint positions per frame in v3 schema |
 | **Sequence Length** | 250 | Frames (10 seconds @ 25fps) |
 
 ### Multi-Task Learning Heads
@@ -105,7 +105,7 @@ The model uses 6 specialized decoder heads for comprehensive motion generation:
 
 | Head | Output Dim | Description |
 |------|------------|-------------|
-| **Pose Decoder** | 20 per frame | Joint position prediction (main task) |
+| **Pose Decoder** | 48 per frame | Joint position prediction (main task, v3 schema) |
 | **Position Decoder** | 2 | Global scene position (x, y) |
 | **Velocity Decoder** | 2 | Movement speed prediction |
 | **Action Predictor** | 64 | Action classification logits |

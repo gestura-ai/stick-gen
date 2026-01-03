@@ -1,11 +1,14 @@
-"""Canonical 100STYLE converter
+"""Canonical 100STYLE converter.
 
 Loads the text-based 100STYLE representation from ``data/100Style`` and
 exports canonical samples compatible with ``docs/features/DATA_SCHEMA.md``.
 
-This focuses on the public text format (InputTrain.txt / Tr_Va_Te_Frames.txt)
-so we do not depend on BVH parsing libraries at runtime.
+This focuses on the public text format (``InputTrain.txt`` /
+``Tr_Va_Te_Frames.txt``) so we do not depend on BVH parsing libraries at
+runtime.
 """
+
+from __future__ import annotations
 
 import os
 from typing import Any
@@ -14,15 +17,18 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .joint_utils import CanonicalJoints2D, joints_to_v3_segments_2d, validate_v3_connectivity
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
 
-# Import centralized paths config
+
 try:
+    # Centralized path configuration if available.
     from ..config.paths import get_path
+
     DEFAULT_OUTPUT_PATH = str(get_path("100style_canonical"))
-except ImportError:
+except Exception:  # pragma: no cover - fallback for standalone use
     DEFAULT_OUTPUT_PATH = "data/motions_processed/100style/canonical.pt"
 
 
@@ -37,13 +43,14 @@ def _load_100style_txt(
     ``scripts/prepare_data.py`` that only keeps the information we need
     for canonical export.
     """
+
     input_file = os.path.join(style_dir, "InputTrain.txt")
     frames_file = os.path.join(style_dir, "Tr_Va_Te_Frames.txt")
 
     if not os.path.exists(input_file):
         raise FileNotFoundError(f"InputTrain.txt not found in {style_dir}")
 
-    # Optional: frame ranges (not strictly required for fixed-length slices)
+    # Optional frame ranges (not strictly required for fixed-length slices).
     frame_ranges: list[tuple[int, int]] = []
     if os.path.exists(frames_file):
         with open(frames_file) as f:
@@ -53,20 +60,21 @@ def _load_100style_txt(
                     try:
                         start, end = int(parts[0]), int(parts[1])
                         frame_ranges.append((start, end))
-                    except ValueError:
+                    except ValueError:  # pragma: no cover - malformed line
                         continue
 
-    # Load a bounded number of rows so we do not read the full ~21GB file
+    # Load a bounded number of rows so we do not read the full ~21GB file.
     try:
         max_rows = target_frames * max_sequences
         data = np.loadtxt(input_file, dtype=np.float32, max_rows=max_rows)
-    except Exception as e:  # pragma: no cover - defensive path
-        raise RuntimeError(f"Failed to load 100STYLE InputTrain.txt: {e}") from e
+    except Exception as exc:  # pragma: no cover - defensive path
+        msg = f"Failed to load 100STYLE InputTrain.txt: {exc}"
+        raise RuntimeError(msg) from exc
 
     if data.ndim != 2 or data.shape[0] < target_frames:
         raise ValueError(f"Unexpected 100STYLE data shape: {data.shape}")
 
-    # 100STYLE format: 48 trajectory cols + remaining bone features
+    # 100STYLE format: 48 trajectory columns + remaining bone features.
     if data.shape[1] <= 48:
         raise ValueError(
             f"Expected > 48 columns (trajectory + bones), got {data.shape[1]}"
@@ -84,14 +92,15 @@ def _load_100style_txt(
         if seq.shape[0] != target_frames:
             continue
 
-        # Take first 20 features and reshape into [T, 20]
+        # Take first 20 features corresponding to the legacy 5-segment schema.
+        # These will be upgraded to the v3 12-segment schema downstream.
         if seq.shape[1] >= 20:
             motion_np = seq[:, :20].copy()
         else:  # pad
             motion_np = np.zeros((target_frames, 20), dtype=np.float32)
             motion_np[:, : seq.shape[1]] = seq
 
-        motion = torch.from_numpy(motion_np).float()  # [T, 20]
+        motion = torch.from_numpy(motion_np).float()  # [T, 20] (v1)
         sequences.append(
             {
                 "motion": motion,
@@ -120,26 +129,109 @@ _STYLE_DESCRIPTIONS: dict[str, str] = {
 
 
 def _style_to_action(style: str) -> ActionType:
-    """Map 100STYLE style labels to an ActionType.
+    """Map 100STYLE style labels to :class:`ActionType`.
 
-    100STYLE is primarily locomotion with different styles, so we treat
-    all of them as WALK for now and keep the fine-grained style in
+    100STYLE is primarily locomotion with different styles, so we treat all of
+    them as :data:`ActionType.WALK` for now and keep the fine-grained style in
     ``meta``.
     """
+
     return ActionType.WALK
 
 
+def _v1_motion_to_v3(motion: torch.Tensor) -> torch.Tensor:
+    """Convert legacy 5-segment (20D) motion to v3 12-segment (48D).
+
+    The legacy schema encodes 5 segments per frame::
+
+        0: torso         neck -> hips
+        1: left leg      hips -> left_foot
+        2: right leg     hips -> right_foot
+        3: left arm      shoulder_center -> left_hand
+        4: right arm     shoulder_center -> right_hand
+
+    We approximate the missing canonical joints (elbows, knees, pelvis width,
+    etc.) using simple geometric heuristics and then rely on the shared v3
+    conversion util for connectivity.
+    """
+
+    if motion.dim() != 2 or motion.shape[1] != 20:
+        raise ValueError(
+            f"Expected legacy motion of shape [T, 20], got {tuple(motion.shape)}"
+        )
+
+    motion_np = motion.detach().cpu().numpy().astype(np.float32)
+    T = motion_np.shape[0]
+    segs = motion_np.reshape(T, 5, 4)
+
+    torso = segs[:, 0]
+    l_leg = segs[:, 1]
+    r_leg = segs[:, 2]
+    l_arm = segs[:, 3]
+    r_arm = segs[:, 4]
+
+    neck = torso[:, 0:2]
+    pelvis_center = torso[:, 2:4]
+    shoulder_center_l = l_arm[:, 0:2]
+    shoulder_center_r = r_arm[:, 0:2]
+    shoulder_center = 0.5 * (shoulder_center_l + shoulder_center_r)
+
+    l_ankle = l_leg[:, 2:4]
+    r_ankle = r_leg[:, 2:4]
+    l_hip = pelvis_center
+    r_hip = pelvis_center
+    l_knee = 0.5 * (l_hip + l_ankle)
+    r_knee = 0.5 * (r_hip + r_ankle)
+
+    l_wrist = l_arm[:, 2:4]
+    r_wrist = r_arm[:, 2:4]
+    l_elbow = 0.5 * (shoulder_center + l_wrist)
+    r_elbow = 0.5 * (shoulder_center + r_wrist)
+
+    # Place chest at the shoulder center and head a bit above the neck.
+    chest = shoulder_center
+    head_center = neck + 0.5 * (neck - pelvis_center)
+
+    canonical_joints: CanonicalJoints2D = {
+        "pelvis_center": pelvis_center,
+        "chest": chest,
+        "neck": neck,
+        "head_center": head_center,
+        "l_shoulder": shoulder_center,
+        "r_shoulder": shoulder_center,
+        "l_elbow": l_elbow,
+        "r_elbow": r_elbow,
+        "l_wrist": l_wrist,
+        "r_wrist": r_wrist,
+        "l_hip": l_hip,
+        "r_hip": r_hip,
+        "l_knee": l_knee,
+        "r_knee": r_knee,
+        "l_ankle": l_ankle,
+        "r_ankle": r_ankle,
+    }
+
+    segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
+    validate_v3_connectivity(segments)
+    return torch.from_numpy(segments)
+
+
 def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, Any]:
+    """Build a canonical v3 sample from a raw 100STYLE txt item."""
+
     motion = item["motion"]
     if not isinstance(motion, torch.Tensor):
         motion = torch.as_tensor(motion, dtype=torch.float32)
     if motion.dim() == 1:
         motion = motion.view(-1, 20)
 
+    # Upgrade the legacy 5-segment (20D) representation to v3 12-segment (48D).
+    motion = _v1_motion_to_v3(motion)
+
     T = motion.shape[0]
     style = str(item.get("style", "neutral")).lower()
 
-    # Map numeric style labels to the description dictionary in a stable way
+    # Map numeric style labels to the description dictionary in a stable way.
     if style.startswith("style_"):
         try:
             idx = int(style.split("_")[1])
@@ -149,7 +241,8 @@ def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, An
         style = keys[idx % len(keys)]
 
     description = _STYLE_DESCRIPTIONS.get(
-        style, f"A person performing {style} movement"
+        style,
+        f"A person performing {style} movement",
     )
 
     action = _style_to_action(style)
@@ -158,57 +251,70 @@ def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, An
 
     physics = compute_basic_physics(motion, fps=fps)
 
-    # Build enhanced metadata
+    # Build enhanced metadata.
     enhanced_meta = build_enhanced_metadata(
         motion=motion,
         fps=fps,
         description=description,
-        original_fps=fps,  # 100STYLE is at native fps
+        original_fps=fps,  # 100STYLE is at native fps.
         original_num_frames=T,
     )
 
     sample: dict[str, Any] = {
         "description": description,
         "motion": motion,
-        "actions": actions,
         "physics": physics,
+        "actions": actions,
         "camera": torch.zeros(T, 3),
-        "source": "100style",
+        "source": item.get("source", "100style_txt"),
         "meta": {
+            "fps": fps,
             "style": style,
-            "raw_source": item.get("source", "100style_txt"),
             "sequence_idx": item.get("sequence_idx"),
             "frame_range": item.get("frame_range"),
         },
         "enhanced_meta": enhanced_meta.model_dump(),
     }
+
     return sample
 
 
 def convert_100style_canonical(
     style_dir: str = "data/100Style",
-    output_path: str = None,
+    output_path: str | None = None,
     target_frames: int = 250,
     fps: int = 25,
     max_sequences: int = 500,
 ) -> list[dict[str, Any]]:
-    """Convert 100STYLE into the canonical schema and save to disk."""
-    
+    """Convert 100STYLE into the canonical v3 schema and save to disk.
+
+    Args:
+        style_dir: Directory containing the 100STYLE text files.
+        output_path: Where to save the serialized samples.
+        target_frames: Number of frames per sequence.
+        fps: Frames-per-second for physics computation and metadata.
+        max_sequences: Maximum number of sequences to load.
+    """
+
     if output_path is None:
         output_path = DEFAULT_OUTPUT_PATH
+
     sequences = _load_100style_txt(style_dir, target_frames, max_sequences)
     validator = DataValidator(fps=fps)
 
     samples: list[dict[str, Any]] = []
     for item in sequences:
         sample = _build_canonical_sample(item, fps=fps)
+
         # Only enforce physics constraints at conversion time; skeleton length
         # consistency is difficult to interpret from these engineered features.
         ok, _, reason = validator.check_physics_consistency(sample["physics"])
         if not ok:
-            # Skip invalid samples but keep going
-            # (detailed reason can be printed here if needed)
+            # Skip invalid samples but keep going (log if needed).
+            # print(f"Skipping 100STYLE sample {item['sequence_idx']}: {reason}")
+            _ = reason  # silence unused variable in non-debug runs
             continue
+
         samples.append(sample)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -217,17 +323,15 @@ def convert_100style_canonical(
 
 
 def main() -> None:
+    """Entry point for CLI usage."""
+
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Convert 100STYLE (txt) to canonical schema",
+        description="Convert 100STYLE (txt) to canonical v3 schema",
     )
     parser.add_argument("--style-dir", type=str, default="data/100Style")
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=DEFAULT_OUTPUT_PATH,
-    )
+    parser.add_argument("--output", type=str, default=DEFAULT_OUTPUT_PATH)
     parser.add_argument("--target-frames", type=int, default=250)
     parser.add_argument("--fps", type=int, default=25)
     parser.add_argument("--max-sequences", type=int, default=500)
@@ -242,5 +346,5 @@ def main() -> None:
     )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - manual invocation only
     main()

@@ -2,6 +2,31 @@
 
 All notable changes to Stick Gen are documented in this file.
 
+## [2.0.1] - 2025-12-23
+
+### Fixed
+
+#### Stick Figure Anatomical Alignment
+- **Fixed segment ordering in all data converters** to match canonical format
+  - Canonical order: `[torso, l_leg, r_leg, l_arm, r_arm]` (defined in `src/inference/exporter.py`)
+  - Previously arms were at indices 1-2 and legs at 3-4 (incorrect)
+  - Now legs are at indices 1-2 and arms at 3-4 (correct canonical format)
+- **Fixed anatomical attachment points**:
+  - Legs now attach at hip center (not torso center)
+  - Arms attach at neck/shoulder center (not hip)
+- **Updated converters**:
+  - `convert_ntu_rgbd.py::joints_to_stick()` - NTU RGB+D skeleton conversion
+  - `convert_amass.py::smpl_to_stick_figure()` - AMASS/SMPL skeleton conversion
+  - `convert_humanml3d.py::_features_to_stick()` - HumanML3D feature extraction
+  - `convert_aist_plusplus.py::keypoints3d_to_stick()` - AIST++ keypoint conversion
+  - `convert_100style.py::extract_v3_segments_from_positions()` - 100STYLE BVH conversion
+- **Added tests** for canonical segment ordering validation
+- **Updated documentation** in `docs/architecture/RENDERING.md` with segment format specification
+
+### Note
+Data generated with previous versions may have incorrect anatomical alignment.
+Regenerate training data after updating to this version.
+
 ## [2.0.0] - 2025-12-08
 
 ### Major Improvements - Spatial Movement & Realism

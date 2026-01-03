@@ -30,6 +30,11 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
+from .joint_utils import (
+    CanonicalJoints2D,
+    joints_to_v3_segments_2d,
+    validate_v3_connectivity,
+)
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -259,83 +264,81 @@ def _infer_action_from_text(texts: list[str]) -> ActionType:
 
 
 def _features_to_stick(feats: np.ndarray) -> np.ndarray:
-    """Map HumanML3D 263-dim features to stick figure [T, 20].
+    """Map HumanML3D features to v3 stick figure ``[T, 48]``.
 
     HumanML3D feature layout (263 dims):
-    - [0:4]: Root velocity and height
-    - [4:67]: Local joint positions (21 joints × 3, relative to root)
-    - [67:193]: Local joint velocities (21 joints × 3) + global velocities
-    - [193:263]: Foot contact + joint rotations
 
-    We extract joint positions and convert to our 5-segment format:
-    - Segment 0: Torso (head to pelvis)
-    - Segment 1: Left arm (shoulder to wrist)
-    - Segment 2: Right arm (shoulder to wrist)
-    - Segment 3: Left leg (hip to ankle)
-    - Segment 4: Right leg (hip to ankle)
+    * ``[0:4]``: Root velocity and height.
+    * ``[4:67]``: Local joint positions for 21 joints × 3 (relative to root).
+    * Remaining dims: joint velocities, contacts, and rotations.
 
-    Each segment: 4 values (x1, y1, x2, y2) = 20 total
+    We extract the 21 joint positions, project (x, z) → 2D, build canonical
+    joints, and convert to the v3 12‑segment skeleton via
+    :func:`joints_to_v3_segments_2d`.
     """
+
     T, D = feats.shape
 
     # Handle edge cases
     if T == 0:
-        return np.zeros((1, 20), dtype=np.float32)
+        return np.zeros((1, 48), dtype=np.float32)
 
     # For standard HumanML3D (263 dims), extract joint positions
     if D >= 67:
-        # Joint positions are in dims 4:67 (21 joints × 3)
-        # We only need x and y (ignoring z for 2D stick figure)
+        # Joint positions are in dims 4:67 (21 joints × 3).
         joint_pos = feats[:, 4:67].reshape(T, 21, 3)
 
-        # Project 3D to 2D (use x and z as our x, y - y is height in SMPL)
+        # Project 3D to 2D (use x and z as our x, y - y is height in SMPL).
         joint_2d = joint_pos[:, :, [0, 2]]  # [T, 21, 2]
 
-        # Map to stick figure segments
-        # Note: Joint indices shifted by 1 since root is not in local positions
-        stick = np.zeros((T, 5, 4), dtype=np.float32)
+        # Local indices follow the HumanML3D layout *without* the root pelvis.
+        l_hip = joint_2d[:, 0]
+        r_hip = joint_2d[:, 1]
+        l_knee = joint_2d[:, 3]
+        r_knee = joint_2d[:, 4]
+        l_ankle = joint_2d[:, 6]
+        r_ankle = joint_2d[:, 7]
+        neck = joint_2d[:, 11]
+        head_center = joint_2d[:, 14]
+        l_shoulder = joint_2d[:, 15]
+        r_shoulder = joint_2d[:, 16]
+        l_elbow = joint_2d[:, 17]
+        r_elbow = joint_2d[:, 18]
+        l_wrist = joint_2d[:, 19]
+        r_wrist = joint_2d[:, 20]
 
-        # Torso: neck (index 11) to pelvis (approximated as mean of hips)
-        # In local coords, pelvis is at origin, so use spine/neck
-        neck_idx = 11  # neck in 21-joint (0-indexed after root)
-        spine_idx = 5  # spine2
-        stick[:, 0, 0:2] = joint_2d[:, neck_idx]  # head/neck
-        stick[:, 0, 2:4] = joint_2d[:, spine_idx] * 0  # pelvis at origin
+        pelvis_center = 0.5 * (l_hip + r_hip)
+        chest = 0.5 * (l_shoulder + r_shoulder)
 
-        # Left arm: shoulder (15) to wrist (19)
-        l_shoulder_idx = 15
-        l_wrist_idx = 19
-        stick[:, 1, 0:2] = joint_2d[:, l_shoulder_idx]
-        stick[:, 1, 2:4] = joint_2d[:, l_wrist_idx]
+        canonical_joints: CanonicalJoints2D = {
+            "pelvis_center": pelvis_center,
+            "chest": chest,
+            "neck": neck,
+            "head_center": head_center,
+            "l_shoulder": l_shoulder,
+            "r_shoulder": r_shoulder,
+            "l_elbow": l_elbow,
+            "r_elbow": r_elbow,
+            "l_wrist": l_wrist,
+            "r_wrist": r_wrist,
+            "l_hip": l_hip,
+            "r_hip": r_hip,
+            "l_knee": l_knee,
+            "r_knee": r_knee,
+            "l_ankle": l_ankle,
+            "r_ankle": r_ankle,
+        }
 
-        # Right arm: shoulder (16) to wrist (20)
-        r_shoulder_idx = 16
-        r_wrist_idx = 20
-        stick[:, 2, 0:2] = joint_2d[:, r_shoulder_idx]
-        stick[:, 2, 2:4] = joint_2d[:, r_wrist_idx]
+        segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
+        # Cheap safety check to catch mapping bugs early.
+        validate_v3_connectivity(segments)
+        return segments.astype(np.float32)
 
-        # Left leg: hip (0) to ankle (6)
-        l_hip_idx = 0
-        l_ankle_idx = 6
-        stick[:, 3, 0:2] = joint_2d[:, l_hip_idx]
-        stick[:, 3, 2:4] = joint_2d[:, l_ankle_idx]
-
-        # Right leg: hip (1) to ankle (7)
-        r_hip_idx = 1
-        r_ankle_idx = 7
-        stick[:, 4, 0:2] = joint_2d[:, r_hip_idx]
-        stick[:, 4, 2:4] = joint_2d[:, r_ankle_idx]
-
-        # Normalize to reasonable range (-1 to 1 ish)
-        stick = stick / (np.abs(stick).max() + 1e-8) * 2.0
-
-        return stick.reshape(T, 20).astype(np.float32)
-
-    # Fallback for non-standard feature dimensions
-    if D >= 20:
-        arr = feats[:, :20]
+    # Fallback for non-standard feature dimensions: keep data but ensure 48 dims.
+    if D >= 48:
+        arr = feats[:, :48]
     else:
-        pad = np.zeros((T, 20 - D), dtype=feats.dtype)
+        pad = np.zeros((T, 48 - D), dtype=feats.dtype)
         arr = np.concatenate([feats, pad], axis=1)
     return arr.astype(np.float32)
 
@@ -350,12 +353,19 @@ def _generate_camera_from_motion(motion: torch.Tensor) -> torch.Tensor | None:
     if T == 0:
         return None
 
-    # Reshape to [T, 5, 4] to get segments
-    motion_np = motion.numpy().reshape(T, 5, 4)
+    motion_np = motion.numpy()
+    if motion_np.shape[1] % 4 != 0:
+        raise ValueError(
+            "Camera generation expects motion with last dim as segments * 4, "
+            f"got {motion_np.shape[1]}",
+        )
 
-    # Compute center of mass (average of all joint positions)
-    all_x = np.concatenate([motion_np[:, :, 0], motion_np[:, :, 2]], axis=1)  # [T, 10]
-    all_y = np.concatenate([motion_np[:, :, 1], motion_np[:, :, 3]], axis=1)  # [T, 10]
+    num_segments = motion_np.shape[1] // 4
+    segments = motion_np.reshape(T, num_segments, 4)
+
+    # Compute center of mass (average of all segment endpoints)
+    all_x = np.concatenate([segments[:, :, 0], segments[:, :, 2]], axis=1)
+    all_y = np.concatenate([segments[:, :, 1], segments[:, :, 3]], axis=1)
 
     center_x = np.mean(all_x, axis=1)  # [T]
     center_y = np.mean(all_y, axis=1)  # [T]
@@ -449,10 +459,12 @@ def _build_sample(
 
 def _process_single_clip(
     args: tuple[str, dict[str, np.ndarray], dict[str, list[str]], int, bool, float],
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str | None]:
     """Process a single clip (for parallel processing).
 
-    Returns sample dict or None if validation fails.
+    Returns ``(sample, skip_reason)`` where ``sample`` is ``None`` when the clip
+    is skipped and ``skip_reason`` is a short category string suitable for
+    aggregation (e.g. ``"too_few_frames"``, ``"physics_velocity"``).
     """
     path, stats, text_map, fps, include_camera, physics_threshold = args
 
@@ -464,11 +476,11 @@ def _process_single_clip(
         # Validate input shape
         if len(feats.shape) != 2:
             logger.debug(f"Skipping {clip_id}: invalid shape {feats.shape}")
-            return None
+            return None, "invalid_shape"
 
         if feats.shape[0] < 10:  # Minimum 10 frames
             logger.debug(f"Skipping {clip_id}: too few frames ({feats.shape[0]})")
-            return None
+            return None, "too_few_frames"
 
         feats_denorm = _denorm(feats, stats)
         texts = text_map.get(clip_id, [])
@@ -484,16 +496,20 @@ def _process_single_clip(
         validator.max_velocity = original_max_vel * physics_threshold
         validator.max_acceleration = original_max_acc * physics_threshold
 
-        ok, score, reason = validator.check_physics_consistency(sample["physics"])
+        ok, _score, reason = validator.check_physics_consistency(sample["physics"])
         if not ok:
             logger.debug(f"Skipping {clip_id}: {reason}")
-            return None
+            if "Velocity limit exceeded" in reason:
+                return None, "physics_velocity"
+            if "Acceleration limit exceeded" in reason:
+                return None, "physics_acceleration"
+            return None, "physics_other"
 
-        return sample
+        return sample, None
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"Error processing {clip_id}: {e}")
-        return None
+        return None, "exception"
 
 
 def convert_humanml3d(
@@ -548,6 +564,12 @@ def convert_humanml3d(
 
     samples: list[dict[str, Any]] = []
     skipped = 0
+    skip_reasons: dict[str, int] = {}
+
+    def _record_skip(reason: str | None) -> None:
+        if reason is None:
+            return
+        skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
 
     if num_workers > 1:
         # Parallel processing
@@ -560,26 +582,30 @@ def convert_humanml3d(
                 for args in args_list
             }
             for future in as_completed(futures):
-                result = future.result()
+                result, reason = future.result()
                 if result is not None:
                     samples.append(result)
                 else:
                     skipped += 1
+                    _record_skip(reason)
     else:
         # Sequential processing with progress
         for i, path in enumerate(paths):
             if i % 500 == 0:
                 logger.info(f"Processing {i}/{len(paths)}...")
 
-            result = _process_single_clip(
+            result, reason = _process_single_clip(
                 (path, stats, text_map, fps, include_camera, physics_threshold)
             )
             if result is not None:
                 samples.append(result)
             else:
                 skipped += 1
+                _record_skip(reason)
 
     logger.info(f"Converted {len(samples)}/{len(paths)} clips ({skipped} skipped)")
+    if skipped > 0:
+        logger.info("Skip reasons: %s", skip_reasons)
 
     # Compute action distribution
     action_counts: dict[str, int] = {}

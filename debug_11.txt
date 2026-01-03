@@ -1,0 +1,11 @@
+
+Sample 000011 (Source: babel) - Raw V3 Frame 0:
+Neck         [ 0, 1]: (-0.0754,  0.4137)
+Pelvis       [10,11]: ( 0.2451,  0.3570)
+L_Shoulder   [12,13]: ( 0.1118,  1.0987)
+R_Shoulder   [20,21]: ( 0.0470, -0.2037)
+L_Hip        [44,45]: ( 0.2509,  0.5709)
+R_Hip        [46,47]: ( 0.2392,  0.1431)
+
+Spine Length: 0.3255
+Neck -> L_Shoulder: 0.7101 (Ratio to Spine: 2.18)

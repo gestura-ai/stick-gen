@@ -41,7 +41,9 @@ def compute_tempo(motion: Tensor | np.ndarray, fps: int = 25) -> float:
         1.0 = sprinting (~3+ Hz)
 
     Args:
-        motion: Motion tensor of shape [T, 20] or [T, A, 20]
+        motion: Motion tensor of shape ``[T, D]`` or ``[T, A, D]`` where ``D``
+            is the flattened stick-figure dimension (e.g. 20 for the legacy
+            5-segment layout or 48 for the v3 12-segment layout).
         fps: Frame rate of the motion data
 
     Returns:
@@ -96,7 +98,8 @@ def compute_energy_level(motion: Tensor | np.ndarray, fps: int = 25) -> float:
     """Compute motion energy level based on velocity and acceleration.
 
     Args:
-        motion: Motion tensor of shape [T, 20] or [T, A, 20]
+        motion: Motion tensor of shape ``[T, D]`` or ``[T, A, D]`` where ``D``
+            is the flattened stick-figure dimension.
         fps: Frame rate of the motion data
 
     Returns:
@@ -140,7 +143,7 @@ def compute_smoothness(motion: Tensor | np.ndarray, fps: int = 25) -> float:
         1.0 = extremely smooth (tai chi, slow dance)
 
     Args:
-        motion: Motion tensor of shape [T, 20] or [T, A, 20]
+        motion: Motion tensor of shape ``[T, D]`` or ``[T, A, D]``
         fps: Frame rate of the motion data
 
     Returns:
@@ -176,7 +179,7 @@ def compute_motion_style(
     """Compute all motion style metrics for a motion sequence.
 
     Args:
-        motion: Motion tensor of shape [T, 20] or [T, A, 20]
+        motion: Motion tensor of shape ``[T, D]`` or ``[T, A, D]``
         fps: Frame rate of the motion data
 
     Returns:
@@ -233,7 +236,7 @@ def compute_marker_quality(motion: Tensor | np.ndarray, fps: int = 25) -> float:
     Lower noise = higher quality. Based on high-frequency jitter detection.
 
     Args:
-        motion: Motion tensor of shape [T, 20] or [T, A, 20]
+        motion: Motion tensor of shape ``[T, D]`` or ``[T, A, D]``
         fps: Frame rate of the motion data
 
     Returns:
@@ -437,7 +440,7 @@ def infer_emotion_from_motion(
     - Contracted motion = negative valence
 
     Args:
-        motion: Motion tensor of shape [T, 20] or [T, A, 20]
+        motion: Motion tensor of shape ``[T, D]`` or ``[T, A, D]``
         fps: Frame rate
 
     Returns:
@@ -494,9 +497,11 @@ def compute_interaction_metadata(
     """Compute interaction metadata from multi-actor motion.
 
     Args:
-        motion: Multi-actor motion tensor of shape [T, A, 20] where A >= 2
-        fps: Frame rate
-        contact_threshold: Distance threshold for contact detection
+        motion: Multi-actor motion tensor of shape ``[T, A, D]`` where
+            ``A >= 2`` and ``D`` is the flattened stick-figure dimension
+            (e.g. 20 or 48).
+        contact_threshold: Distance threshold for contact detection in the
+            normalized stick-space units.
 
     Returns:
         InteractionMetadata with contact_frames, role, and type
@@ -507,15 +512,23 @@ def compute_interaction_metadata(
     if motion.dim() != 3 or motion.shape[1] < 2:
         return InteractionMetadata()
 
-    T, A, _ = motion.shape
+    T, A, D = motion.shape
 
     # Compute distance between actors (using first actor pair)
-    actor1 = motion[:, 0, :]  # [T, 20]
-    actor2 = motion[:, 1, :]  # [T, 20]
+    actor1 = motion[:, 0, :]  # [T, D]
+    actor2 = motion[:, 1, :]  # [T, D]
 
-    # Compute per-joint distances and average
-    # This is simplified - uses mean distance across all joint coords
-    distances = (actor1 - actor2).view(T, 5, 4).norm(dim=-1).mean(dim=-1)
+    if D % 4 != 0:
+        raise ValueError(
+            "compute_interaction_metadata expects last dimension to be a "
+            f"multiple of 4 (segments x 4 endpoints), got D={D}"
+        )
+
+    num_segments = D // 4
+
+    # Compute per-segment distances and average across segments. This is
+    # simplified but works for both 5-segment and 12-segment layouts.
+    distances = (actor1 - actor2).view(T, num_segments, 4).norm(dim=-1).mean(dim=-1)
 
     # Contact frames are where distance < threshold
     contact_mask = distances < contact_threshold
@@ -559,7 +572,8 @@ def build_enhanced_metadata(
     Computes all applicable metadata based on available inputs.
 
     Args:
-        motion: Motion tensor [T, 20] or [T, A, 20]
+        motion: Motion tensor ``[T, D]`` or ``[T, A, D]`` where ``D`` is the
+            flattened stick-figure dimension (20 for v1, 48 for v3, etc.).
         fps: Current frame rate
         description: Text description for emotion inference
         original_fps: Source frame rate before resampling
@@ -603,7 +617,7 @@ def build_enhanced_metadata(
     # Interaction (only for multi-actor)
     interaction = None
     if is_multi_actor and motion.dim() == 3:
-        interaction = compute_interaction_metadata(motion, fps)
+        interaction = compute_interaction_metadata(motion)
 
     return EnhancedSampleMetadata(
         motion_style=motion_style,

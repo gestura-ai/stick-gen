@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import torch
 
 from src.eval.metrics import (
@@ -27,6 +28,13 @@ from src.eval.metrics import (
     compute_synthetic_artifact_score,
 )
 
+from .joint_utils import (
+    joints_to_v3_segments_2d,
+    normalize_skeleton_height,
+    smooth_joints_over_time,
+    v3_segments_to_joints_2d,
+    validate_v3_connectivity,
+)
 from .schema import ActionType
 from .validator import DataValidator
 
@@ -59,6 +67,11 @@ class CurationConfig:
     # Filtering
     min_frames: int = 25  # Minimum sequence length (1 second at 25fps)
     max_frames: int = 500  # Maximum sequence length (20 seconds)
+
+    # v3 motion preprocessing (canonical single-actor [T, 48] segments only)
+    enable_v3_normalization: bool = True
+    target_v3_height: float = 1.0
+    v3_smoothing_window: int = 5
 
     # Source weights for quality combination
     source_weights: dict[str, float] = field(
@@ -165,6 +178,56 @@ def _get_sequence_length(sample: dict[str, Any]) -> int:
         return len(motion)
     except Exception:
         return 0
+
+
+def _maybe_normalize_and_smooth_motion(
+    sample: dict[str, Any],
+    cfg: CurationConfig,
+) -> None:
+    """In-place normalize and smooth canonical v3 motion when applicable.
+
+    Operates only on single-actor v3 motion with shape ``[T, 48]``. Other
+    shapes are left unchanged. All transforms are applied in canonical joint
+    space and connectivity is revalidated afterwards to preserve kinematic
+    structure.
+    """
+    if not cfg.enable_v3_normalization:
+        return
+
+    motion = sample.get("motion")
+    if motion is None:
+        return
+
+    try:
+        arr = np.asarray(motion, dtype=np.float32)
+    except Exception:
+        # Non-array-like motion; leave unchanged.
+        return
+
+    if arr.ndim != 2 or arr.shape[1] != 48:
+        # Only canonical single-actor v3 is supported here.
+        return
+
+    try:
+        joints = v3_segments_to_joints_2d(arr, validate=True)
+        joints = normalize_skeleton_height(
+            joints,
+            target_height=cfg.target_v3_height,
+        )
+        joints = smooth_joints_over_time(
+            joints,
+            window_size=cfg.v3_smoothing_window,
+        )
+        segs = joints_to_v3_segments_2d(joints, flatten=True)
+        validate_v3_connectivity(segs)
+    except Exception as exc:
+        logger.debug(
+            "v3 normalization/smoothing skipped for sample due to error: %s",
+            exc,
+        )
+        return
+
+    sample["motion"] = segs
 
 
 def _compute_motion_quality(sample: dict[str, Any]) -> tuple[float, float]:
@@ -320,6 +383,11 @@ def curate_samples(
 
     total = len(samples)
     working_samples = list(samples)
+
+    # Optionally normalize and smooth canonical v3 motion in-place so that
+    # all downstream metrics and validators see a consistent representation.
+    for s in working_samples:
+        _maybe_normalize_and_smooth_motion(s, cfg)
 
     # Track dropped counts
     dropped_length = 0

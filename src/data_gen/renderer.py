@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .camera import Camera
+from .joint_utils import validate_v3_connectivity, v3_segments_to_joints_2d
 from .schema import (
     ACTION_VELOCITIES,
     ActionType,
@@ -2075,6 +2076,140 @@ class Renderer:
 
             # Draw facial features (Phase 5)
             actor._draw_face(self.ax, head, t)
+
+    def render_v3_sequence(
+        self,
+        motion: np.ndarray,
+        output_path: str,
+        *,
+        fps: int = 25,
+        background_color: str = "white",
+        line_color: str = "#303030",
+        draw_joints: bool = True,
+    ) -> None:
+        """Render a v3 12-segment motion sequence to a static image.
+
+        This renderer consumes canonical v3 stick-figure motion arrays and
+        produces a high-quality 2D stick-figure image with rounded limbs and
+        joint markers. It is intentionally minimal and side-effect free so it
+        can be used for dataset inspection, debugging, and documentation
+        figures.
+
+        Currently this renders a single representative frame (the midpoint of
+        the sequence) as a PNG/JPEG; video export for v3 is handled by higher
+        level tools and is not part of this helper.
+
+        Args:
+            motion: V3 segments with shape ``[T, 48]`` or ``[T, 12, 4]``.
+            output_path: Destination image path (e.g. ``"example_v3.png"``).
+            fps: Nominal frames-per-second. Included for API symmetry but not
+                currently used to control output.
+            background_color: Matplotlib-compatible background color.
+            line_color: Limb and joint outline color.
+            draw_joints: Whether to draw circular joint markers.
+
+        Raises:
+            ValueError: If ``motion`` does not have a valid v3 shape.
+        """
+        if motion.ndim == 2:
+            T, dim = motion.shape
+            if dim != 48:
+                raise ValueError(
+                    f"Expected flattened v3 motion [T, 48], got shape {motion.shape}"
+                )
+            segments = motion.reshape(T, 12, 4)
+        elif motion.ndim == 3:
+            T, segs, dims = motion.shape
+            if segs != 12 or dims != 4:
+                raise ValueError(
+                    "Expected v3 motion with shape [T, 12, 4], "
+                    f"got shape {motion.shape}"
+                )
+            segments = motion
+        else:
+            raise ValueError(
+                "Expected v3 motion with shape [T, 48] or [T, 12, 4], "
+                f"got array with ndim={motion.ndim}"
+            )
+
+        # Sanity-check connectivity before rendering.
+        validate_v3_connectivity(segments)
+
+        joints = v3_segments_to_joints_2d(segments)
+        all_xy = np.concatenate(list(joints.values()), axis=0)
+        min_xy = all_xy.min(axis=0)
+        max_xy = all_xy.max(axis=0)
+        center = 0.5 * (min_xy + max_xy)
+        extent = float(np.max(max_xy - min_xy))
+        if not np.isfinite(extent) or extent <= 0.0:
+            extent = 1.0
+        padding = 0.2 * extent
+        half_span = 0.5 * extent + padding
+        xmin, xmax = center[0] - half_span, center[0] + half_span
+        ymin, ymax = center[1] - half_span, center[1] + half_span
+
+        # Choose a representative frame (midpoint of the sequence).
+        frame_idx = max(0, min(segments.shape[0] - 1, segments.shape[0] // 2))
+        frame_segments = segments[frame_idx]
+
+        self.ax.clear()
+        self.ax.set_xlim(xmin, xmax)
+        self.ax.set_ylim(ymin, ymax)
+        self.ax.set_aspect("equal")
+        self.ax.axis("off")
+        self.ax.set_facecolor(background_color)
+        self.fig.patch.set_facecolor(background_color)
+
+        # Draw limbs with rounded caps to match professional stick-figure sets.
+        line_width = 3.0
+        for x1, y1, x2, y2 in frame_segments:
+            (line,) = self.ax.plot(
+                [x1, x2],
+                [y1, y2],
+                color=line_color,
+                lw=line_width,
+                solid_capstyle="round",
+            )
+            self._apply_style(line)
+
+        if draw_joints:
+            # Joint markers (elbows, knees, wrists, ankles, shoulders, hips).
+            joint_radius = 0.04 * extent
+            if joint_radius <= 0.0:
+                joint_radius = 0.05
+
+            for name, coords in joints.items():
+                if name == "head_center":
+                    # Head is rendered separately as a larger circle.
+                    continue
+                x, y = coords[frame_idx]
+                joint_circle = patches.Circle(
+                    (float(x), float(y)),
+                    joint_radius,
+                    edgecolor=line_color,
+                    facecolor=background_color,
+                    linewidth=line_width * 0.7,
+                )
+                self.ax.add_patch(joint_circle)
+
+            # Head circle sized from neck->head_center distance when possible.
+            head_center = joints["head_center"][frame_idx]
+            neck = joints["neck"][frame_idx]
+            head_radius = float(np.linalg.norm(head_center - neck))
+            if not np.isfinite(head_radius) or head_radius <= 0.0:
+                head_radius = joint_radius * 2.5
+
+            head_circle = patches.Circle(
+                (float(head_center[0]), float(head_center[1])),
+                head_radius,
+                edgecolor=line_color,
+                facecolor=background_color,
+                linewidth=line_width * 1.1,
+            )
+            self.ax.add_patch(head_circle)
+
+        self.fig.savefig(output_path, bbox_inches="tight")
+        plt.close(self.fig)
 
     def render_raw_frames(
         self,

@@ -280,7 +280,7 @@ flowchart TB
 
     subgraph HEADS["🎯 MULTI-TASK DECODER HEADS"]
         direction LR
-        H1["🦴 Pose<br/>20-dim joints<br/>5 segments × 4 coords"]
+        H1["🦴 Pose<br/>48-dim joints<br/>12 segments × 4 coords (v3)"]
         H2["📍 Position<br/>2-dim global<br/>XY coordinates"]
         H3["➡️ Velocity<br/>2-dim movement<br/>direction & speed"]
         H4["🏷️ Actions<br/>60 classes<br/>walk, run, jump..."]
@@ -509,7 +509,7 @@ The Transformer core follows modern LLM best practices (Qwen/Llama standards):
 
 - **Embeddings**: 1024-dim (BAAI/bge-large-en-v1.5)
 - **Multi-Task Learning**: 6 decoder heads
-  - Pose reconstruction (20-dim per frame)
+  - Pose reconstruction (48-dim per frame, v3 canonical schema)
   - Position prediction (2-dim per frame)
   - Velocity prediction (2-dim per frame)
   - Action classification (60 action classes)
@@ -523,7 +523,7 @@ The Transformer core follows modern LLM best practices (Qwen/Llama standards):
 ```mermaid
 flowchart LR
     subgraph INPUTS["Inputs"]
-        P["🦴 Pose Sequence<br/>20-dim × T frames"]
+        P["🦴 Pose Sequence<br/>48-dim × T frames (v3)"]
         T["📝 Text Embedding<br/>1024-dim (BGE)"]
         A["🎬 Action Labels<br/>60 classes"]
         C["📷 Camera State<br/>(x, y, zoom)"]
@@ -537,7 +537,7 @@ flowchart LR
     end
 
     subgraph OUTPUTS["Decoder Heads"]
-        H1["🦴 Pose<br/>20-dim"]
+        H1["🦴 Pose<br/>48-dim (v3)"]
         H2["📍 Position<br/>2-dim"]
         H3["⚡ Velocity<br/>2-dim"]
         H4["🏷️ Action<br/>60 classes"]

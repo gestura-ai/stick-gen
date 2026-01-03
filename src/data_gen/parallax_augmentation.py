@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 
+import numpy as np
 import torch
 
 from src.data_gen.schema import IDX_TO_ACTION
@@ -20,21 +21,36 @@ def _export_actor_motion_to_file(
     out_path: str,
     fps: int = 25,
 ) -> None:
-    """Export a single actor's motion sequence to a .motion JSON file.
+    """Export a single actor's motion sequence to a ``.motion`` JSON file.
 
-    The input sample is in the canonical training format used by data_gen
-    (``motion``: [T, A, 20], ``actions``: [T, A]).
+    This helper targets the **renderer/export schema** and is compatible with
+    both the legacy v1 representation (5 segments, ``[T, 20]``) and the
+    canonical v3 representation (12 segments, ``[T, 48]``). The motion can be
+    provided as either:
+
+    * ``[T, D]`` for a single actor (``D`` in ``{20, 48}``), or
+    * ``[T, A, D]`` for multiple actors, where this function selects the
+      slice for ``actor_idx``.
     """
 
     motion = sample.get("motion")
     if motion is None:
         return
 
-    # Expect [T, actors, 20]
-    if motion.dim() != 3 or actor_idx >= motion.shape[1]:
-        return
+    if isinstance(motion, np.ndarray):
+        motion = torch.from_numpy(motion)
 
-    motion_actor = motion[:, actor_idx, :]  # [T, 20]
+    if motion.dim() == 2:
+        # [T, D] single-actor, D in {20, 48}
+        motion_actor = motion
+    elif motion.dim() == 3:
+        # [T, actors, D] multi-actor
+        if actor_idx >= motion.shape[1]:
+            return
+        motion_actor = motion[:, actor_idx, :]
+    else:
+        # Unexpected shape; skip this sample for parallax export.
+        return
 
     action_tensor = sample.get("actions")
     action_names = None
@@ -68,6 +84,7 @@ def generate_parallax_for_dataset(
     max_samples: int | None = None,
     fps: int = 25,
     frames_per_view: int = 1,
+    minimal: bool = True,
 ) -> None:
     """Generate 2.5D parallax PNG frames for a canonical ``.pt`` dataset.
 
@@ -94,6 +111,9 @@ def generate_parallax_for_dataset(
         Number of rendered PNG frames per camera trajectory ("view").
         When >1, filenames are suffixed with the intra-view frame index and
         the Node renderer emits a metadata JSON sidecar per sample/actor.
+    minimal:
+        If True (default), pass --minimal to renderer for clean backgrounds
+        without distracting scene elements. Recommended for training data.
     """
 
     if views_per_motion <= 0:
@@ -128,7 +148,25 @@ def generate_parallax_for_dataset(
             break
 
         motion = sample.get("motion")
-        if motion is None or motion.dim() != 3:
+        if motion is None:
+            continue
+
+        if isinstance(motion, np.ndarray):
+            motion = torch.from_numpy(motion)
+            sample["motion"] = motion
+
+        # Handle 2D tensors (single actor) by unsqueezing to [T, 1, D]
+        if motion.dim() == 2:
+            motion = motion.unsqueeze(1)
+            # Update the sample so _export_actor_motion_to_file sees the 3D tensor
+            sample["motion"] = motion
+
+        if motion.dim() != 3:
+            continue
+
+        # Skip samples with all-zero motion (corrupted/invalid data)
+        if motion.abs().sum() < 1e-6:
+            print(f"[parallax] Skipping sample {sample_idx}: all-zero motion")
             continue
 
         _, num_actors, _ = motion.shape
@@ -137,6 +175,7 @@ def generate_parallax_for_dataset(
                 tmp_motion_root,
                 f"sample{sample_idx:06d}_actor{actor_idx}.motion",
             )
+            # Pass the modified sample
             _export_actor_motion_to_file(sample, actor_idx, motion_path, fps=fps)
 
             actor_output = os.path.join(
@@ -157,11 +196,17 @@ def generate_parallax_for_dataset(
                 str(views_per_motion),
                 "--frames-per-view",
                 str(frames_per_view),
+                "--width",
+                "256",
+                "--height",
+                "256",
                 "--sample-id",
                 f"sample_{sample_idx:06d}",
                 "--actor-id",
                 str(actor_idx),
             ]
+            if minimal:
+                cmd.append("--minimal")
             print(
                 f"[parallax] Rendering {os.path.basename(motion_path)} -> {actor_output}"
             )
