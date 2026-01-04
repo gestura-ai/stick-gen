@@ -1,0 +1,93 @@
+# Stick-Gen Fine-tuning Configuration - Action Style Expert
+# Focus: High energy, dynamic motion, fast-paced sequences
+# Use case: Action scenes, chase sequences, sports, combat
+# Usage: python -m src.train.finetune --config configs/finetune/action_style.yaml ...
+
+# Domain-specific settings
+domain:
+  name: "action_style"
+  description: "Style expert for action scenes with high energy and dynamic motion"
+  
+  # Action motions have high velocity and dynamic range
+  expected_velocity_range: [0.2, 0.9]
+  expected_smoothness: 0.65
+  
+  # Loss weights tuned for action dynamics
+  temporal_weight: 0.1        # Standard - fast motion needs less smoothing
+  physics_weight: 0.35        # Higher - action must be physically plausible
+  action_weight: 0.25         # Higher - action type recognition is key
+  
+  # Action-related categories to emphasize
+  emphasized_actions:
+    - "run"
+    - "sprint"
+    - "jump"
+    - "leap"
+    - "roll"
+    - "dodge"
+    - "kick"
+    - "punch"
+    - "throw"
+    - "catch"
+    - "swing"
+    - "slide"
+    - "climb"
+  
+  # Multimodal conditioning weights
+  image_condition_weight: 0.3
+  text_only_weight: 0.7
+
+# Training settings
+batch_size: 4
+grad_accum_steps: 8
+epochs: 20
+learning_rate: 0.00012          # Higher LR for dynamic learning
+warmup_steps: 350
+max_grad_norm: 1.0
+
+# LoRA settings - Style expert (both phases)
+lora:
+  enabled: true
+  rank: 12                      # Medium rank for action dynamics
+  alpha: 24.0
+  dropout: 0.05
+  target_phase: "both"          # Style experts target both phases
+  transformer_targets:
+    - "transformer_encoder\\.layers\\.\\d+\\.self_attn\\.(in_proj|out_proj)"
+    - "transformer_encoder\\.layers\\.\\d+\\.linear[12]"
+    - "pose_decoder\\.\\d+"
+    - "text_projection\\.\\d+"
+    - "velocity_head\\.\\d+"     # Include velocity for dynamic motion
+  diffusion_targets:
+    - "encoder.*conv"
+    - "decoder.*conv"
+    - "bottleneck.*conv"
+
+# Model architecture (must match base model)
+input_dim: 48
+d_model: 384
+nhead: 12
+num_layers: 8
+embedding_dim: 1024
+num_actions: 64
+
+# Multimodal settings
+enable_image_conditioning: true
+image_encoder_arch: "lightweight_cnn"
+fusion_strategy: "gated"
+image_size: [256, 256]
+
+# Diffusion settings
+enable_diffusion: true
+diffusion_timesteps: 1000
+diffusion_weight: 0.08          # Lower - preserve dynamic motion detail
+
+# Data settings
+train_split: 0.9
+num_workers: 0
+
+# Output settings
+checkpoint_dir: "checkpoints/finetune/action_style"
+save_every: 5
+log_every: 10
+

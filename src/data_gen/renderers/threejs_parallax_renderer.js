@@ -317,8 +317,18 @@ function clampOutlierJoints(joints) {
 
 /**
  * Extract canonical joints from a v3 48D frame.
+ *
+ * V3 data from `clean_canonical_joints` is already:
+ * - Aligned to upright (spine points up)
+ * - Degeneracy-separated (L/R paired joints forced apart)
+ * - Anthropometrically clamped (limb lengths within biological limits)
+ * - Head-rectified (head above neck)
+ *
+ * Therefore, we skip redundant geometric transformations for v3 data.
+ * This improves rendering performance and avoids double-processing.
  */
 function extractJointsFromV3Frame(frame) {
+  // V3 data is pre-cleaned during data prep - just extract joint positions
   const joints = {
     neck: { x: frame[0], y: frame[1] },
     head_center: { x: frame[2], y: frame[3] },
@@ -338,25 +348,13 @@ function extractJointsFromV3Frame(frame) {
     r_ankle: { x: frame[42], y: frame[43] },
   };
 
-  // Apply data quality fixes
-  const neck = joints.neck;
-  const pelvis = joints.pelvis_center;
-  let dx = neck.x - pelvis.x;
-  let dy = neck.y - pelvis.y;
-  let len = Math.sqrt(dx * dx + dy * dy);
-  let rx = 1, ry = 0;
-  if (len > 0.0001) {
-    rx = dy / len;
-    ry = -dx / len;
-  }
-
-  separateDegenerateJoints(joints, rx, ry);
-
-  // 1. Align to Upright (Fixes rotation/upside-down)
-  alignSkeletonToUpright(joints);
-
-  // 2. Strict Anthropometric Clamping (Fixes exploded limbs)
-  applyAnthropometricClamping(joints);
+  // NOTE: V3 data is already cleaned by clean_canonical_joints() during data prep.
+  // The following transformations are SKIPPED for v3:
+  // - separateDegenerateJoints() -> handled by extended degeneracy separation in data prep
+  // - alignSkeletonToUpright() -> handled by upright alignment in data prep
+  // - applyAnthropometricClamping() -> handled by parent-relative clamping in data prep
+  //
+  // This avoids redundant computation and potential double-correction artifacts.
 
   return joints;
 }

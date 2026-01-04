@@ -8,6 +8,7 @@ import torch
 from .convert_amass import compute_basic_physics
 from .joint_utils import (
     CanonicalJoints2D,
+    clean_canonical_joints,
     joints_to_v3_segments_2d,
     validate_v3_connectivity,
 )
@@ -253,6 +254,9 @@ def joints_to_v3_segments(joints: np.ndarray) -> np.ndarray:
         "l_ankle": l_ankle,
         "r_ankle": r_ankle,
     }
+    
+    # Cleaning Step: Upright Alignment, Clamping, Head Rectification
+    canonical_joints = clean_canonical_joints(canonical_joints)
 
     segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
     validate_v3_connectivity(segments)

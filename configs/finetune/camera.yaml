@@ -1,0 +1,88 @@
+# Stick-Gen Fine-tuning Configuration - Camera Expert (Orthogonal)
+# Focus: Cinematic camera trajectories, framing, shot composition
+# Phase: TRANSFORMER ONLY - Camera is a planning decision, not refinement
+# Use case: Pan, zoom, tracking shots, establishing shots, rule of thirds
+# Usage: python -m src.train.finetune --config configs/finetune/camera.yaml ...
+
+# Domain-specific settings
+domain:
+  name: "camera"
+  description: "Orthogonal expert for cinematic camera movement and shot composition"
+  
+  # Camera motion characteristics (for camera trajectory, not body motion)
+  expected_velocity_range: [0.01, 0.15]   # Camera moves slowly relative to action
+  expected_smoothness: 0.95               # Camera motion should be very smooth
+  
+  # Loss weights tuned for camera learning
+  temporal_weight: 0.3        # Very high - smooth camera trajectories
+  physics_weight: 0.0         # Not applicable for camera motion
+  action_weight: 0.0          # Not applicable for camera
+  
+  # Camera-related keywords (for routing, not action classification)
+  emphasized_actions:
+    - "establishing_shot"
+    - "close_up"
+    - "wide_shot"
+    - "pan_left"
+    - "pan_right"
+    - "zoom_in"
+    - "zoom_out"
+    - "tracking"
+    - "dolly"
+    - "tilt"
+    - "crane"
+    - "static"
+  
+  # Multimodal conditioning weights
+  image_condition_weight: 0.6    # Reference frames important for composition
+  text_only_weight: 0.4
+
+# Training settings
+batch_size: 8                   # Camera expert can use larger batches (smaller footprint)
+grad_accum_steps: 4
+epochs: 20
+learning_rate: 0.00015          # Higher LR for specialized layer
+warmup_steps: 200
+max_grad_norm: 1.0
+
+# LoRA settings - ORTHOGONAL EXPERT (transformer only)
+lora:
+  enabled: true
+  rank: 8                       # Lower rank - camera is simpler than body
+  alpha: 16.0
+  dropout: 0.05
+  target_phase: "transformer_only"   # Camera is a planning decision
+  transformer_targets:
+    # Target ONLY camera-related layers
+    - "camera_projection\\.\\d+"     # Main camera conditioning projection
+    - "fusion_module\\.camera.*"     # Camera components in fusion
+  diffusion_targets: []              # Empty - not targeting diffusion
+
+# Model architecture (must match base model)
+input_dim: 48
+d_model: 384
+nhead: 12
+num_layers: 8
+embedding_dim: 1024
+num_actions: 64
+
+# Multimodal settings
+enable_image_conditioning: true
+image_encoder_arch: "lightweight_cnn"
+fusion_strategy: "gated"
+image_size: [256, 256]
+
+# Diffusion settings - DISABLED for camera expert
+enable_diffusion: false         # Camera expert doesn't use diffusion
+diffusion_timesteps: 1000
+diffusion_weight: 0.0
+
+# Data settings
+train_split: 0.9
+num_workers: 0
+
+# Output settings
+checkpoint_dir: "checkpoints/finetune/camera"
+save_every: 5
+log_every: 10
+

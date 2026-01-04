@@ -33,7 +33,13 @@ from typing import Any
 import numpy as np
 import torch
 
-from .joint_utils import CanonicalJoints2D, joints_to_v3_segments_2d, validate_v3_connectivity
+from .joint_utils import (
+    CanonicalJoints2D,
+    clean_canonical_joints,
+    joints_to_v3_segments_2d,
+    normalize_skeleton_height,
+    validate_v3_connectivity,
+)
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -411,6 +417,16 @@ class AMASSConverter:
             "l_ankle": l_ankle,
             "r_ankle": r_ankle,
         }
+
+        # Cleaning Step: Upright alignment, clamping, and head rectification
+        canonical_joints = clean_canonical_joints(canonical_joints)
+
+        # Height normalization: rescale skeleton so head-to-ankle height
+        # matches ~1.8 units (meters), for cross-dataset physics consistency.
+        canonical_joints = normalize_skeleton_height(
+            canonical_joints,
+            target_height=1.8,
+        )
 
         segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
 

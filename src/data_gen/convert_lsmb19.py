@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from .convert_amass import compute_basic_physics
-from .convert_ntu_rgbd import NTU_ACTION_LABELS, _action_to_enum, joints_to_stick
+from .convert_ntu_rgbd import NTU_ACTION_LABELS, _action_to_enum, joints_to_v3_segments
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX
 from .validator import DataValidator
@@ -110,7 +110,7 @@ def _build_canonical_sample_from_joints(
     joints: np.ndarray, meta: dict[str, Any], fps: int
 ) -> dict[str, Any]:
     """Convert [T,25,3] NTU-style joints to our canonical sample dict."""
-    motion_np = joints_to_stick(joints)  # [T, 20]
+    motion_np = joints_to_v3_segments(joints)  # [T, 48]
     motion = torch.from_numpy(motion_np)
     physics = compute_basic_physics(motion, fps=fps)
 

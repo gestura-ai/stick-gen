@@ -132,20 +132,29 @@ class DataValidator:
     # Core physics and structure checks
     # ---------------------------------------------------------------------
     def check_physics_consistency(
-        self, physics_tensor: torch.Tensor
+        self, physics_tensor: torch.Tensor, clip_fps: Optional[int] = None
     ) -> tuple[bool, float, str]:
         """Check that velocity and acceleration are within realistic bounds.
 
         Args:
             physics_tensor: Tensor of shape ``[F, A, 6]`` or ``[F, 6]`` with
                 components ``(vx, vy, ax, ay, mx, my)``.
+            clip_fps: Optional fps of the specific clip. If provided and differs
+                from the validator's base fps, thresholds are scaled accordingly.
+                This is important because:
+                - Velocity scales linearly with fps (v = dx * fps)
+                - Acceleration scales quadratically with fps (a = dv * fps = dx * fps^2)
+                So the same physical motion at 60fps will have 2.4x higher velocity
+                and 5.76x higher acceleration values compared to 25fps.
 
         Returns:
             Tuple ``(is_valid, score, reason)``.
         """
 
         # Support both [F, A, 6] (multi-actor) and [F, 6] (single-actor) formats.
-        # Convert numpy arrays to tensors if needed.
+        # Convert lists and numpy arrays to tensors if needed.
+        if isinstance(physics_tensor, list):
+            physics_tensor = torch.tensor(physics_tensor, dtype=torch.float32)
         if isinstance(physics_tensor, np.ndarray):
             physics_tensor = torch.from_numpy(physics_tensor)
         if physics_tensor.dim() == 2:
@@ -157,6 +166,22 @@ class DataValidator:
                 f"Unexpected physics tensor shape: {tuple(physics_tensor.shape)}",
             )
 
+        # Compute fps-aware threshold scaling
+        # If clip_fps is provided and differs from validator's base fps,
+        # scale thresholds to account for the fps difference.
+        if clip_fps is not None and clip_fps != self.fps:
+            fps_ratio = clip_fps / self.fps
+            # Velocity scales linearly with fps
+            vel_scale = fps_ratio
+            # Acceleration scales quadratically with fps
+            acc_scale = fps_ratio ** 2
+        else:
+            vel_scale = 1.0
+            acc_scale = 1.0
+
+        effective_max_velocity = self.max_velocity * vel_scale
+        effective_max_acceleration = self.max_acceleration * acc_scale
+
         # Magnitudes
         velocity = torch.linalg.norm(physics_tensor[:, :, 0:2], dim=2)  # [F, A]
         acceleration = torch.linalg.norm(physics_tensor[:, :, 2:4], dim=2)  # [F, A]
@@ -164,18 +189,18 @@ class DataValidator:
         max_v = velocity.max().item()
         max_a = acceleration.max().item()
 
-        if max_v > self.max_velocity:
+        if max_v > effective_max_velocity:
             return (
                 False,
                 0.0,
-                f"Velocity limit exceeded: {max_v:.2f} > {self.max_velocity}",
+                f"Velocity limit exceeded: {max_v:.2f} > {effective_max_velocity:.2f}",
             )
 
-        if max_a > self.max_acceleration:
+        if max_a > effective_max_acceleration:
             return (
                 False,
                 0.0,
-                f"Acceleration limit exceeded: {max_a:.2f} > {self.max_acceleration}",
+                f"Acceleration limit exceeded: {max_a:.2f} > {effective_max_acceleration:.2f}",
             )
 
         # For now, if valid, return a neutral score of 1.0. This can be refined
@@ -196,7 +221,9 @@ class DataValidator:
         """
 
         # Support both [F, A, D] (multi-actor) and [F, D] (single-actor) layouts.
-        # Convert numpy arrays to tensors if needed.
+        # Convert lists and numpy arrays to tensors if needed.
+        if isinstance(motion_tensor, list):
+            motion_tensor = torch.tensor(motion_tensor, dtype=torch.float32)
         if isinstance(motion_tensor, np.ndarray):
             motion_tensor = torch.from_numpy(motion_tensor)
         if motion_tensor.dim() == 2:
@@ -281,7 +308,9 @@ class DataValidator:
         """
 
         # Normalise to [F, A, D].
-        # Convert numpy arrays to tensors if needed.
+        # Convert lists and numpy arrays to tensors if needed.
+        if isinstance(motion_tensor, list):
+            motion_tensor = torch.tensor(motion_tensor, dtype=torch.float32)
         if isinstance(motion_tensor, np.ndarray):
             motion_tensor = torch.from_numpy(motion_tensor)
         if motion_tensor.dim() == 2:
@@ -365,7 +394,9 @@ class DataValidator:
         """
 
         # Normalise to a single-actor [F, D] view.
-        # Convert numpy arrays to tensors if needed.
+        # Convert lists and numpy arrays to tensors if needed.
+        if isinstance(motion_tensor, list):
+            motion_tensor = torch.tensor(motion_tensor, dtype=torch.float32)
         if isinstance(motion_tensor, np.ndarray):
             motion_tensor = torch.from_numpy(motion_tensor)
         if motion_tensor.dim() == 2:

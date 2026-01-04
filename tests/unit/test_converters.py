@@ -45,13 +45,15 @@ from src.data_gen.convert_100style_canonical import (
     _build_canonical_sample as build_100style_canonical_sample,
 )
 from src.data_gen.convert_amass import (
-    build_canonical_sample as build_amass_canonical_sample,
-)
+	    AMASSConverter,
+	    build_canonical_sample as build_amass_canonical_sample,
+	)
 from src.data_gen.joint_utils import (
-    CanonicalJoints2D,
-    joints_to_v3_segments_2d,
-    validate_v3_connectivity,
-)
+	    CanonicalJoints2D,
+	    joints_to_v3_segments_2d,
+	    v3_segments_to_joints_2d,
+	    validate_v3_connectivity,
+	)
 from src.data_gen.metadata_extractors import build_enhanced_metadata
 from src.data_gen.schema import ActionType, EnhancedSampleMetadata
 from src.data_gen.validator import DataValidator
@@ -558,6 +560,58 @@ def test_amass_build_canonical_sample_v3_end_to_end() -> None:
 
     assert sample["source"] == "amass"
     _assert_canonical_sample_structure(sample, expect_camera=False)
+
+
+def test_amass_smpl_to_v3_segments_height_normalization() -> None:
+	    """AMASS smpl_to_v3_segments_2d should normalize body height to ~1.8.
+
+	    We construct a simple upright SMPL skeleton with an arbitrary scale and
+	    verify that after conversion the median head-to-ankle distance is close
+	    to the 1.8-unit target used across converters.
+	    """
+
+	    T = 10
+	    smpl_joints = np.zeros((T, 22, 3), dtype=np.float32)
+	    idx = AMASSConverter.SMPL_JOINTS
+
+	    for t in range(T):
+	        # Axial chain
+	        smpl_joints[t, idx["pelvis"]] = [0.0, 0.0, 0.0]
+	        smpl_joints[t, idx["neck"]] = [0.0, 0.8, 0.0]
+	        smpl_joints[t, idx["head"]] = [0.0, 1.4, 0.0]
+
+	        # Hips and legs (symmetric around pelvis)
+	        smpl_joints[t, idx["l_hip"]] = [-0.15, -0.1, 0.0]
+	        smpl_joints[t, idx["r_hip"]] = [0.15, -0.1, 0.0]
+	        smpl_joints[t, idx["l_knee"]] = [-0.15, -0.7, 0.0]
+	        smpl_joints[t, idx["r_knee"]] = [0.15, -0.7, 0.0]
+	        smpl_joints[t, idx["l_ankle"]] = [-0.15, -1.4, 0.0]
+	        smpl_joints[t, idx["r_ankle"]] = [0.15, -1.4, 0.0]
+
+	        # Shoulders and arms
+	        smpl_joints[t, idx["l_shoulder"]] = [-0.25, 0.8, 0.0]
+	        smpl_joints[t, idx["r_shoulder"]] = [0.25, 0.8, 0.0]
+	        smpl_joints[t, idx["l_elbow"]] = [-0.6, 0.5, 0.0]
+	        smpl_joints[t, idx["r_elbow"]] = [0.6, 0.5, 0.0]
+	        smpl_joints[t, idx["l_wrist"]] = [-0.9, 0.2, 0.0]
+	        smpl_joints[t, idx["r_wrist"]] = [0.9, 0.2, 0.0]
+
+	    converter = AMASSConverter()
+	    segments = converter.smpl_to_v3_segments_2d(smpl_joints)
+
+	    # Recover canonical joints to measure height after normalization.
+	    joints = v3_segments_to_joints_2d(segments, validate=True)
+	    head = joints["head_center"]
+	    l_ankle = joints["l_ankle"]
+	    r_ankle = joints["r_ankle"]
+
+	    heights = np.maximum(
+	        np.linalg.norm(head - l_ankle, axis=1),
+	        np.linalg.norm(head - r_ankle, axis=1),
+	    )
+	    median_height = float(np.median(heights))
+
+	    assert np.isclose(median_height, 1.8, atol=1e-2)
 
 
 def test_humanml3d_build_sample_v3_end_to_end() -> None:

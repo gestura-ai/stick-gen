@@ -1,0 +1,111 @@
+# =============================================================================
+# Expert Registry Configuration
+# =============================================================================
+# This file defines the available LoRA experts for Stick-Gen's multi-expert
+# composition system. Experts are loaded at inference time and dynamically
+# blended based on the user's prompt.
+#
+# Expert Types:
+# - style: Mutually exclusive experts routed via softmax (weights sum to 1.0)
+# - orthogonal: Always-active experts with learned gating (independent weights)
+#
+# Target Phases:
+# - both: Expert affects both transformer (planning) and diffusion (refinement)
+# - transformer_only: Expert affects only the transformer phase
+# - diffusion_only: Expert affects only the diffusion phase
+# =============================================================================
+
+# Router configuration
+router:
+  embed_dim: 1024               # BAAI/bge-large-en-v1.5 embedding dimension
+  temperature: 0.1              # Lower = sharper routing (more winner-take-all)
+  min_expert_weight: 0.05       # Experts below this weight are not activated
+
+# Style experts (mutually exclusive, softmax-routed)
+style_experts:
+  dramatic_style:
+    enabled: true
+    checkpoint_path: "checkpoints/lora/dramatic_style.pt"
+    target_phase: "both"
+    description: "Emotional pacing, slower tempo, expressive movements for dramatic scenes"
+    prototype_prompts:
+      - "A slow, emotional scene with a character expressing deep sadness"
+      - "Dramatic pause before revealing important information"
+      - "Intense confrontation with measured, deliberate movements"
+      - "Romantic slow dance under moonlight"
+      - "Character processes grief with restrained body language"
+
+  action_style:
+    enabled: true
+    checkpoint_path: "checkpoints/lora/action_style.pt"
+    target_phase: "both"
+    description: "High energy, fast cuts, dynamic motion for action sequences"
+    prototype_prompts:
+      - "Fast-paced chase sequence through an urban environment"
+      - "Explosive fight scene with martial arts moves"
+      - "Athletic character performing parkour jumps"
+      - "High-energy sports competition with dynamic movements"
+      - "Quick action sequence with rapid cuts and movements"
+
+  expressive_body:
+    enabled: true
+    checkpoint_path: "checkpoints/lora/expressive_body.pt"
+    target_phase: "both"
+    description: "Body dynamics and natural motion quality for expressive performances"
+    prototype_prompts:
+      - "Character uses exaggerated gestures while telling a story"
+      - "Animated conversation with natural body language"
+      - "Expressive dance with full body movements"
+      - "Character acts out a pantomime scene"
+      - "Physical comedy with exaggerated reactions"
+
+  multi_actor:
+    enabled: true
+    checkpoint_path: "checkpoints/lora/multi_actor.pt"
+    target_phase: "both"
+    description: "Multi-actor coordination for scenes with multiple characters"
+    prototype_prompts:
+      - "Two characters engaged in synchronized dance"
+      - "Group conversation with multiple speakers"
+      - "Team performing coordinated action sequence"
+      - "Pair of characters in a physical altercation"
+      - "Multiple actors moving together in formation"
+
+# Orthogonal experts (always-on with learned gating)
+orthogonal_experts:
+  camera:
+    enabled: true
+    checkpoint_path: "checkpoints/lora/camera.pt"
+    target_phase: "transformer_only"
+    description: "Cinematic camera framing and composition (planning phase)"
+    prototype_prompts:
+      - "Cinematic wide shot establishing the scene"
+      - "Close-up on character's face during emotional moment"
+      - "Dynamic tracking shot following the action"
+      - "Sweeping pan across the landscape"
+      - "Dutch angle for dramatic tension"
+
+  timing:
+    enabled: true
+    checkpoint_path: "checkpoints/lora/timing.pt"
+    target_phase: "diffusion_only"
+    description: "Dramatic pacing, holds, and timing beats (refinement phase)"
+    prototype_prompts:
+      - "Dramatic pause before the reveal"
+      - "Quick cuts during action sequence"
+      - "Slow motion moment of impact"
+      - "Comedic timing with beat pause"
+      - "Rhythmic editing matching the music"
+
+# Default behavior when no experts are loaded
+defaults:
+  # If true, load all enabled experts on initialization
+  auto_load_experts: false
+  
+  # Fallback behavior when expert checkpoint not found
+  missing_checkpoint_behavior: "warn"  # "warn", "error", or "skip"
+  
+  # Enable prototype caching for faster startup
+  cache_prototypes: true
+  prototype_cache_path: "checkpoints/lora/prototype_cache.pt"
+

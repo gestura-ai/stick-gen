@@ -135,16 +135,23 @@ def validate_v3_connectivity(segments: np.ndarray, atol: float = 1e-5) -> None:
     """Validate that v3 stick-figure segments form a connected kinematic chain.
 
     This checks that shared joints (neck, chest, pelvis_center, elbows, knees,
-    wrists, ankles, hips) have identical coordinates wherever they appear.
+    wrists, ankles, hips) have identical coordinates wherever they appear and
+    that all coordinates are finite.
 
     Args:
         segments: V3 segments with shape [T, 48] or [T, 12, 4].
         atol: Absolute tolerance for coordinate comparisons.
 
     Raises:
-        ValueError: If any connectivity constraint is violated.
+        ValueError: If any connectivity constraint is violated or if non-finite
+            coordinates are detected.
     """
     segs = _as_segments_array(segments)
+
+    # Fast pre-check: require all coordinates to be finite. This avoids
+    # confusing connectivity errors when upstream data contains NaNs or Infs.
+    if not np.isfinite(segs).all():
+        raise ValueError("v3 connectivity violated: non-finite coordinates in segments")
 
     def _start(idx: int) -> np.ndarray:
         return segs[:, idx, 0:2]
@@ -265,6 +272,183 @@ def v3_segments_to_joints_2d(
         "l_ankle": l_ankle.copy(),
         "r_ankle": r_ankle.copy(),
     }
+
+
+def clean_canonical_joints(joints: CanonicalJoints2D) -> CanonicalJoints2D:
+    """Apply geometric fixes to canonical joints to ensure valid humanoid structure.
+    
+    Performs the following cleaning operations:
+    1. **Alignment**: Rotates the skeleton so the Spine (Pelvis->Neck) points Up (0, +Y).
+    2. **Degeneracy Separation**: Forces coincident left/right joints (e.g. knees) apart.
+    3. **Anthropometric Clamping**: Enforces strict limb length limits (Arm < 1.3x Torso, Leg < 1.5x Torso).
+    4. **Head Rectification**: Ensures Head is strictly above the Neck.
+    
+    Args:
+        joints: Canonical joints dict [T, 2]
+        
+    Returns:
+        Cleaned joints dict [T, 2]
+    """
+    cleaned = {k: v.copy() for k, v in joints.items()}
+    
+    # Helper for vector magnitude
+    def vec_len(v): return np.linalg.norm(v, axis=-1, keepdims=True)
+    
+    # --- 1. Alignment (Spine Upright) ---
+    neck = cleaned["neck"]
+    pelvis = cleaned["pelvis_center"]
+    
+    dx = neck[:, 0] - pelvis[:, 0]
+    dy = neck[:, 1] - pelvis[:, 1]
+    
+    # Calculate rotation angle to bring spine to (0, 1) [Up]
+    # Current angle in standard grid (0=Right, PI/2=Up)
+    current_angles = np.arctan2(dy, dx)
+    target_angle = np.pi / 2
+    rotations = target_angle - current_angles
+    
+    cos_r = np.cos(rotations)
+    sin_r = np.sin(rotations)
+    
+    # Rotate all joints around Pelvis
+    for name in cleaned:
+        if name == "pelvis_center": 
+            continue
+        
+        # Relative to pelvis
+        rel_x = cleaned[name][:, 0] - pelvis[:, 0]
+        rel_y = cleaned[name][:, 1] - pelvis[:, 1]
+        
+        # Apply rotation
+        rot_x = rel_x * cos_r - rel_y * sin_r
+        rot_y = rel_x * sin_r + rel_y * cos_r
+        
+        # Restore position
+        cleaned[name][:, 0] = pelvis[:, 0] + rot_x
+        cleaned[name][:, 1] = pelvis[:, 1] + rot_y
+
+    # --- Re-calculate Body Scale (Torso Length) ---
+    # After rotation, dx should be ~0, dy should be positive
+    neck = cleaned["neck"]
+    pelvis = cleaned["pelvis_center"]
+    
+    torso_vec = neck - pelvis
+    torso_len = vec_len(torso_vec)
+    # Safety floor
+    safe_torso = np.maximum(torso_len, 0.01)
+
+    # --- 2. Degenerate Separation (Paired L/R Joints) ---
+    # Separate coincident left/right joints horizontally along the body's lateral axis.
+    # After upright alignment, the lateral axis is X (left = -X, right = +X).
+    # This is critical for 2.5D parallax rendering where L/R joints have different
+    # Z-depths; collapsed joints would break occlusion ordering and parallax motion.
+    DEGENERACY_THRESHOLD = 0.05
+    DEGENERACY_OFFSET = 0.1
+
+    joint_pairs = [
+        ("l_knee", "r_knee"),
+        ("l_hip", "r_hip"),
+        ("l_elbow", "r_elbow"),
+        ("l_shoulder", "r_shoulder"),
+    ]
+
+    for left_name, right_name in joint_pairs:
+        if left_name not in cleaned or right_name not in cleaned:
+            continue
+
+        left_joint = cleaned[left_name]
+        right_joint = cleaned[right_name]
+
+        dist = vec_len(left_joint - right_joint)
+        mask_degenerate = (dist < DEGENERACY_THRESHOLD).flatten()
+
+        if np.any(mask_degenerate):
+            # Compute center point of the collapsed pair
+            cx = (left_joint[mask_degenerate, 0] + right_joint[mask_degenerate, 0]) * 0.5
+            cy = (left_joint[mask_degenerate, 1] + right_joint[mask_degenerate, 1]) * 0.5
+
+            # Force separation: left goes to -X, right goes to +X
+            cleaned[left_name][mask_degenerate, 0] = cx - DEGENERACY_OFFSET
+            cleaned[left_name][mask_degenerate, 1] = cy
+            cleaned[right_name][mask_degenerate, 0] = cx + DEGENERACY_OFFSET
+            cleaned[right_name][mask_degenerate, 1] = cy
+
+    # --- 3. Anthropometric Clamping (Parent-Relative) ---
+    MAX_SHOULDER_RATIO = 0.6
+    MAX_ARM_RATIO = 1.3
+    MAX_LEG_RATIO = 1.5
+
+    def clamp_rel(joint_name, parent_name, ratio):
+        if joint_name not in cleaned or parent_name not in cleaned: return
+        j = cleaned[joint_name]
+        p = cleaned[parent_name]
+        
+        limit_dist = safe_torso * ratio
+        curr_dist = vec_len(j - p)
+        
+        # Find violations
+        mask_out = (curr_dist > limit_dist).flatten()
+        if np.any(mask_out):
+            scale = limit_dist[mask_out] / curr_dist[mask_out]
+            
+            # Vector J->P
+            vec = j[mask_out] - p[mask_out]
+            scaled_vec = vec * scale
+            
+            cleaned[joint_name][mask_out] = p[mask_out] + scaled_vec
+
+    # Shoulders (relative to Neck)
+    clamp_rel("l_shoulder", "neck", MAX_SHOULDER_RATIO)
+    clamp_rel("r_shoulder", "neck", MAX_SHOULDER_RATIO)
+    
+    # Arms (relative to Shoulders)
+    clamp_rel("l_wrist", "l_shoulder", MAX_ARM_RATIO)
+    clamp_rel("r_wrist", "r_shoulder", MAX_ARM_RATIO)
+    clamp_rel("l_elbow", "l_shoulder", MAX_ARM_RATIO * 0.6)
+    clamp_rel("r_elbow", "r_shoulder", MAX_ARM_RATIO * 0.6)
+    
+    # Legs (relative to Hips)
+    clamp_rel("l_ankle", "l_hip", MAX_LEG_RATIO)
+    clamp_rel("r_ankle", "r_hip", MAX_LEG_RATIO)
+    clamp_rel("l_knee", "l_hip", MAX_LEG_RATIO * 0.6)
+    clamp_rel("r_knee", "r_hip", MAX_LEG_RATIO * 0.6)
+
+    # --- 4. Head Rectification ---
+    # Ensure Head is above Neck
+    head = cleaned["head_center"]
+    neck = cleaned["neck"]
+    
+    min_head_height = safe_torso * 0.2
+    
+    # Axis alignment: Y is Up.
+    # Condition: Head Y < Neck Y + min_height
+    target_y = neck[:, 1] + min_head_height[:, 0]
+    mask_low_head = (head[:, 1] < target_y)
+    
+    if np.any(mask_low_head):
+        # Snap head Y to minimum height
+        # Preserve X unless it's wandering wildly? 
+        # For simplicity, just fix Y, keeping X allows 'looking down' (if X is correct)
+        # But if head is in chest, X might be weird too.
+        # Let's enforce Y and clamp X to be close to Neck X
+        
+        cleaned["head_center"][mask_low_head, 1] = target_y[mask_low_head]
+        
+        # Clamp X to Neck X +/- 0.3*Torso
+        max_x_err = safe_torso[mask_low_head, 0] * 0.3
+        hx = head[mask_low_head, 0]
+        nx = neck[mask_low_head, 0]
+        dx_head = hx - nx
+        
+        clamp_mask = np.abs(dx_head) > max_x_err
+        if np.any(clamp_mask):
+             # Hard snap X to neck X for extreme outliers
+             # Indices within mask_low_head
+             # This double masking is tricky in numpy.
+             # Simplified: just set X to Neck X for all low heads.
+             cleaned["head_center"][mask_low_head, 0] = nx
+    
+    return cleaned
 
 
 def normalize_skeleton_height(

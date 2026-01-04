@@ -1,0 +1,91 @@
+# Stick-Gen Fine-tuning Configuration - Timing Expert (Orthogonal)
+# Focus: Dramatic pacing, timing beats, holds, anticipation, follow-through
+# Phase: DIFFUSION ONLY - Timing is a refinement-level decision
+# Use case: Dramatic pauses, comedic timing, musical sync, action beats
+# Usage: python -m src.train.finetune --config configs/finetune/timing.yaml ...
+
+# Domain-specific settings
+domain:
+  name: "timing"
+  description: "Orthogonal expert for dramatic pacing and temporal refinement"
+  
+  # Timing affects temporal structure, not velocity magnitude
+  expected_velocity_range: [0.0, 1.0]    # Full range - timing applies to all speeds
+  expected_smoothness: 0.75              # Variable - timing can include sharp beats
+  
+  # Loss weights tuned for timing refinement
+  temporal_weight: 0.4        # Very high - timing IS temporal control
+  physics_weight: 0.1         # Lower - timing may bend physics for effect
+  action_weight: 0.0          # Not applicable for timing refinement
+  
+  # Timing-related keywords (for routing/annotation)
+  emphasized_actions:
+    - "pause"
+    - "hold"
+    - "anticipation"
+    - "follow_through"
+    - "beat"
+    - "accent"
+    - "slow_motion"
+    - "speed_up"
+    - "freeze"
+    - "ease_in"
+    - "ease_out"
+    - "snap"
+  
+  # Multimodal conditioning weights
+  image_condition_weight: 0.2    # Timing is less visual, more rhythmic
+  text_only_weight: 0.8
+
+# Training settings
+batch_size: 8                   # Timing expert has smaller footprint
+grad_accum_steps: 4
+epochs: 25
+learning_rate: 0.0002           # Higher LR for diffusion layers
+warmup_steps: 250
+max_grad_norm: 1.0
+
+# LoRA settings - ORTHOGONAL EXPERT (diffusion only)
+lora:
+  enabled: true
+  rank: 8                       # Lower rank for focused timing control
+  alpha: 16.0
+  dropout: 0.03
+  target_phase: "diffusion_only"    # Timing is refinement-level control
+  transformer_targets: []            # Empty - not targeting transformer
+  diffusion_targets:
+    # Target temporal/sequential processing in UNet
+    - "encoder.*conv"
+    - "decoder.*conv"
+    - "bottleneck.*conv"
+    # Could also target temporal attention if added:
+    # - "temporal_attn.*"
+
+# Model architecture (must match base model)
+input_dim: 48
+d_model: 384
+nhead: 12
+num_layers: 8
+embedding_dim: 1024
+num_actions: 64
+
+# Multimodal settings - minimal for timing expert
+enable_image_conditioning: false    # Timing doesn't need image conditioning
+image_encoder_arch: "lightweight_cnn"
+fusion_strategy: "gated"
+image_size: [256, 256]
+
+# Diffusion settings - REQUIRED for timing expert
+enable_diffusion: true          # Timing expert REQUIRES diffusion
+diffusion_timesteps: 1000
+diffusion_weight: 1.0           # Full weight on diffusion loss
+
+# Data settings
+train_split: 0.9
+num_workers: 0
+
+# Output settings
+checkpoint_dir: "checkpoints/finetune/timing"
+save_every: 5
+log_every: 10
+

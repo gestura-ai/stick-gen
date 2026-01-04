@@ -179,3 +179,53 @@ Each model size has tuned curation settings in its config file:
 | Large | 0.25 | 0.35 | 0.85 |
 
 Larger models use stricter thresholds to ensure higher-quality training data.
+
+## 7. Domain-Specific Data for LoRA Fine-Tuning
+
+When fine-tuning LoRA experts (see `docs/training/FINETUNING.md`), curated domain-specific
+data subsets are essential. Each expert targets a specific motion style or technical aspect.
+
+### 7.1 Style Expert Data Requirements
+
+| Expert | Source Preference | Key Characteristics |
+|--------|------------------|---------------------|
+| `dramatic_style` | AMASS (emotional), BEAT | Slower tempo, expressive gestures, pauses |
+| `action_style` | NTU RGB+D (sports), KIT-ML | Fast movements, high velocity, dynamic |
+| `expressive_body` | 100STYLE, BEAT | Exaggerated body language, varied dynamics |
+| `multi_actor` | InterHuman | Coordinated movement, interaction timing |
+
+### 7.2 Orthogonal Expert Data
+
+| Expert | Data Source | Focus |
+|--------|-------------|-------|
+| `camera` | Synthetic parallax renders | Varied camera angles, zooms, tracking shots |
+| `timing` | Post-processed clips | Variable pacing, holds, acceleration curves |
+
+### 7.3 Domain Curation Process
+
+1. **Filter by action type**: Use `action_types` from expert config to filter samples
+2. **Apply quality thresholds**: Domain data should meet SFT-level quality (≥0.8)
+3. **Balance representation**: Ensure diversity within domain (e.g., not all sad scenes)
+4. **Text alignment**: Verify text descriptions match the intended expert domain
+
+```python
+# Example: Filter for dramatic_style training data
+from src.data_gen.curation import DomainCurator
+
+curator = DomainCurator(
+    action_types=["emotional_gesture", "dramatic_pause", "slow_dance"],
+    min_quality=0.8,
+    velocity_range=(0.0, 1.5),  # Slower movements
+)
+dramatic_samples = curator.filter(all_sft_samples)
+```
+
+### 7.4 Data Split Recommendations
+
+| Expert | Training Samples | Validation | Notes |
+|--------|------------------|------------|-------|
+| Style experts | 5,000-20,000 | 500-1,000 | Quality over quantity |
+| Orthogonal experts | 10,000-50,000 | 1,000-2,000 | More data for generalization |
+
+LoRA fine-tuning is parameter-efficient, so smaller high-quality datasets outperform
+larger noisy datasets. Prioritize motion clarity and text-motion alignment.

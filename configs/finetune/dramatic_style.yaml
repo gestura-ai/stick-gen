@@ -1,0 +1,90 @@
+# Stick-Gen Fine-tuning Configuration - Dramatic Style Expert
+# Focus: Emotional pacing, slower tempo, expressive movements
+# Use case: Dramatic scenes, emotional moments, character reactions
+# Usage: python -m src.train.finetune --config configs/finetune/dramatic_style.yaml ...
+
+# Domain-specific settings
+domain:
+  name: "dramatic_style"
+  description: "Style expert for dramatic scenes with emotional pacing and expressive movements"
+  
+  # Dramatic motions have slower, more deliberate pacing
+  expected_velocity_range: [0.05, 0.35]
+  expected_smoothness: 0.9
+  
+  # Loss weights tuned for dramatic expression
+  temporal_weight: 0.2       # Higher for smooth, emotional transitions
+  physics_weight: 0.1        # Lower - dramatic license for expressiveness
+  action_weight: 0.15        # Moderate - focus on motion quality over action classification
+  
+  # Dramatic action categories to emphasize
+  emphasized_actions:
+    - "stand"
+    - "walk"
+    - "turn"
+    - "reach"
+    - "gesture"
+    - "point"
+    - "nod"
+    - "bow"
+    - "kneel"
+    - "sit"
+    - "rise"
+  
+  # Multimodal conditioning weights
+  image_condition_weight: 0.45   # Reference images help convey emotion
+  text_only_weight: 0.55
+
+# Training settings
+batch_size: 4
+grad_accum_steps: 8
+epochs: 25
+learning_rate: 0.00006          # Lower LR for nuanced learning
+warmup_steps: 400
+max_grad_norm: 1.0
+
+# LoRA settings - Style expert (both phases)
+lora:
+  enabled: true
+  rank: 16                      # Higher rank for expressive nuance
+  alpha: 32.0
+  dropout: 0.05
+  target_phase: "both"          # Style experts target both phases
+  transformer_targets:
+    - "transformer_encoder\\.layers\\.\\d+\\.self_attn\\.(in_proj|out_proj)"
+    - "transformer_encoder\\.layers\\.\\d+\\.linear[12]"
+    - "pose_decoder\\.\\d+"
+    - "text_projection\\.\\d+"
+  diffusion_targets:
+    - "encoder.*conv"
+    - "decoder.*conv"
+    - "bottleneck.*conv"
+
+# Model architecture (must match base model)
+input_dim: 48
+d_model: 384
+nhead: 12
+num_layers: 8
+embedding_dim: 1024
+num_actions: 64
+
+# Multimodal settings
+enable_image_conditioning: true
+image_encoder_arch: "lightweight_cnn"
+fusion_strategy: "gated"
+image_size: [256, 256]
+
+# Diffusion settings
+enable_diffusion: true
+diffusion_timesteps: 1000
+diffusion_weight: 0.18          # Higher for smoother dramatic refinement
+
+# Data settings
+train_split: 0.9
+num_workers: 0
+
+# Output settings
+checkpoint_dir: "checkpoints/finetune/dramatic_style"
+save_every: 5
+log_every: 10
+

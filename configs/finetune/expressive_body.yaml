@@ -1,0 +1,91 @@
+# Stick-Gen Fine-tuning Configuration - Expressive Body Expert
+# Focus: Body dynamics, natural motion quality, realistic movement
+# Use case: Character animation, natural gestures, body language
+# Usage: python -m src.train.finetune --config configs/finetune/expressive_body.yaml ...
+
+# Domain-specific settings
+domain:
+  name: "expressive_body"
+  description: "Core expert for natural body dynamics and high-quality motion"
+  
+  # Natural body motion has moderate velocity with high smoothness
+  expected_velocity_range: [0.03, 0.4]
+  expected_smoothness: 0.92
+  
+  # Loss weights tuned for natural motion quality
+  temporal_weight: 0.25       # Higher for smooth, fluid movements
+  physics_weight: 0.2         # Moderate - natural physics constraints
+  action_weight: 0.15         # Lower - focus on motion quality over action type
+  
+  # Body expression categories to emphasize
+  emphasized_actions:
+    - "wave"
+    - "point"
+    - "gesture"
+    - "nod"
+    - "shake_head"
+    - "shrug"
+    - "clap"
+    - "beckon"
+    - "bow"
+    - "stretch"
+    - "idle"
+    - "breathe"
+  
+  # Multimodal conditioning weights
+  image_condition_weight: 0.5    # Reference images crucial for body dynamics
+  text_only_weight: 0.5
+
+# Training settings
+batch_size: 4
+grad_accum_steps: 8
+epochs: 30                      # More epochs for quality refinement
+learning_rate: 0.00004          # Lower LR for precision
+warmup_steps: 500
+max_grad_norm: 1.0
+
+# LoRA settings - Style expert (both phases)
+lora:
+  enabled: true
+  rank: 14                      # Medium-high rank for body nuance
+  alpha: 28.0
+  dropout: 0.03
+  target_phase: "both"          # Core body expert targets both phases
+  transformer_targets:
+    - "transformer_encoder\\.layers\\.\\d+\\.self_attn\\.(in_proj|out_proj)"
+    - "transformer_encoder\\.layers\\.\\d+\\.linear[12]"
+    - "pose_decoder\\.\\d+"
+    - "text_projection\\.\\d+"
+  diffusion_targets:
+    - "encoder.*conv"
+    - "decoder.*conv"
+    - "bottleneck.*conv"
+
+# Model architecture (must match base model)
+input_dim: 48
+d_model: 384
+nhead: 12
+num_layers: 8
+embedding_dim: 1024
+num_actions: 64
+
+# Multimodal settings
+enable_image_conditioning: true
+image_encoder_arch: "lightweight_cnn"
+fusion_strategy: "cross_attention"  # Cross-attention for better semantic alignment
+image_size: [256, 256]
+
+# Diffusion settings
+enable_diffusion: true
+diffusion_timesteps: 1000
+diffusion_weight: 0.15          # Moderate - balance quality and detail
+
+# Data settings
+train_split: 0.9
+num_workers: 0
+
+# Output settings
+checkpoint_dir: "checkpoints/finetune/expressive_body"
+save_every: 5
+log_every: 10
+

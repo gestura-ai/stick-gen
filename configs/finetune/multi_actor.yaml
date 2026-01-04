@@ -1,0 +1,94 @@
+# Stick-Gen Fine-tuning Configuration - Multi-Actor Expert
+# Focus: Multi-actor coordination, spatial relationships, scene blocking
+# Use case: Dialogue scenes, group interactions, synchronized movements
+# Usage: python -m src.train.finetune --config configs/finetune/multi_actor.yaml ...
+
+# Domain-specific settings
+domain:
+  name: "multi_actor"
+  description: "Expert for multi-actor coordination, scene blocking, and spatial awareness"
+  
+  # Multi-actor coordination requires moderate velocity with coordination awareness
+  expected_velocity_range: [0.05, 0.4]
+  expected_smoothness: 0.8
+  
+  # Loss weights tuned for coordination
+  temporal_weight: 0.2        # Important for synchronized timing
+  physics_weight: 0.25        # Higher - avoid collisions, maintain spacing
+  action_weight: 0.2          # Important - interaction type recognition
+  
+  # Multi-actor interaction categories to emphasize
+  emphasized_actions:
+    - "handshake"
+    - "hug"
+    - "high_five"
+    - "push"
+    - "pull"
+    - "pass"
+    - "receive"
+    - "conversation"
+    - "follow"
+    - "lead"
+    - "mirror"
+    - "dance_together"
+    - "fight"
+    - "assist"
+  
+  # Multimodal conditioning weights
+  image_condition_weight: 0.4   # Reference images help with spatial layout
+  text_only_weight: 0.6
+
+# Training settings
+batch_size: 2                   # Smaller batch for multi-actor complexity
+grad_accum_steps: 16
+epochs: 25
+learning_rate: 0.00007
+warmup_steps: 450
+max_grad_norm: 1.0
+
+# LoRA settings - Style expert (both phases)
+lora:
+  enabled: true
+  rank: 16                      # Higher rank for complex interactions
+  alpha: 32.0
+  dropout: 0.05
+  target_phase: "both"          # Multi-actor requires both planning and refinement
+  transformer_targets:
+    - "transformer_encoder\\.layers\\.\\d+\\.self_attn\\.(in_proj|out_proj)"
+    - "transformer_encoder\\.layers\\.\\d+\\.linear[12]"
+    - "pose_decoder\\.\\d+"
+    - "text_projection\\.\\d+"
+    - "partner_projection\\.\\d+"   # Include partner conditioning layers
+  diffusion_targets:
+    - "encoder.*conv"
+    - "decoder.*conv"
+    - "bottleneck.*conv"
+
+# Model architecture (must match base model)
+input_dim: 48
+d_model: 384
+nhead: 12
+num_layers: 8
+embedding_dim: 1024
+num_actions: 64
+
+# Multimodal settings
+enable_image_conditioning: true
+image_encoder_arch: "lightweight_cnn"
+fusion_strategy: "gated"
+image_size: [256, 256]
+
+# Diffusion settings
+enable_diffusion: true
+diffusion_timesteps: 1000
+diffusion_weight: 0.12          # Moderate diffusion for coordination refinement
+
+# Data settings
+train_split: 0.9
+num_workers: 0
+
+# Output settings
+checkpoint_dir: "checkpoints/finetune/multi_actor"
+save_every: 5
+log_every: 10
+

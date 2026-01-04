@@ -336,7 +336,13 @@ def convert_interhuman(
             # Multi-actor motions already satisfy a structural layout; here we only
             # enforce basic physics bounds to avoid discarding valid interactions
             # due to 2D projection artifacts.
-            ok, score, reason = validator.check_physics_consistency(sample["physics"])
+            # Pass the clip's actual fps to the validator so thresholds are scaled
+            # correctly. InterHuman data is often at 60fps, which produces higher
+            # velocity/acceleration values for the same physical motion compared
+            # to 20-25fps datasets like HumanML3D.
+            ok, score, reason = validator.check_physics_consistency(
+                sample["physics"], clip_fps=fps_clip
+            )
             if not ok:
                 if verbose:
                     print(f"[InterHuman] Skipping {clip_id}: {reason}")

@@ -19,10 +19,18 @@ try:
         load_environment_adapter,
         load_environment_adapter_from_file,
         get_registered_environments,
+        MultiExpertLoRAManager,
     )
     LORA_AVAILABLE = True
 except ImportError:
     LORA_AVAILABLE = False
+
+# Multi-expert LoRA routing support
+try:
+    from src.model.lora_router import MultiLoRARouter, ExpertConfig
+    LORA_ROUTER_AVAILABLE = True
+except ImportError:
+    LORA_ROUTER_AVAILABLE = False
 
 try:  # Optional dependency for image loading
     from PIL import Image  # type: ignore
@@ -179,6 +187,11 @@ class InferenceGenerator:
         elif enable_safety_check and not SAFETY_CRITIC_AVAILABLE:
             print("⚠️  Safety critic requested but not available. Disabling.")
 
+        # Multi-expert LoRA router for dynamic expert composition
+        self.lora_router: MultiLoRARouter | None = None
+        self.lora_manager: MultiExpertLoRAManager | None = None
+        self._lora_experts_loaded = False
+
     def check_motion_safety(
         self,
         motion: torch.Tensor,
@@ -266,6 +279,239 @@ class InferenceGenerator:
         else:
             logger.warning("No environment_type or adapter_path specified.")
             return False, 0
+
+    def initialize_multi_expert_routing(
+        self,
+        registry_path: str = "configs/experts/registry.yaml",
+        auto_load: bool = False,
+    ) -> bool:
+        """Initialize multi-expert LoRA routing from registry config.
+
+        This sets up the MultiLoRARouter and optionally loads all enabled experts.
+
+        Args:
+            registry_path: Path to expert registry YAML config
+            auto_load: If True, load all enabled expert checkpoints immediately
+
+        Returns:
+            True if router initialized successfully
+        """
+        if not LORA_ROUTER_AVAILABLE or not LORA_AVAILABLE:
+            logger.warning(
+                "Multi-expert routing not available. "
+                "Ensure lora_router and lora modules are installed."
+            )
+            return False
+
+        import yaml
+
+        try:
+            with open(registry_path) as f:
+                config = yaml.safe_load(f)
+        except FileNotFoundError:
+            logger.error(f"Expert registry not found: {registry_path}")
+            return False
+
+        # Initialize router with config settings
+        router_cfg = config.get("router", {})
+        self.lora_router = MultiLoRARouter(
+            embed_dim=router_cfg.get("embed_dim", 1024),
+            temperature=router_cfg.get("temperature", 0.1),
+            min_expert_weight=router_cfg.get("min_expert_weight", 0.05),
+        )
+
+        # Inject LoRA adapters into model if not already done
+        try:
+            inject_lora_adapters(self.model, target_modules=["q_proj", "v_proj"])
+        except Exception as e:
+            logger.warning(f"Failed to inject LoRA adapters: {e}")
+
+        # Initialize manager for loading expert checkpoints
+        self.lora_manager = MultiExpertLoRAManager(
+            self.model, device=str(self.device)
+        )
+
+        # Register style experts
+        for name, expert_cfg in config.get("style_experts", {}).items():
+            if not expert_cfg.get("enabled", True):
+                continue
+            expert_config = ExpertConfig(
+                name=name,
+                checkpoint_path=expert_cfg.get("checkpoint_path", ""),
+                expert_type="style",
+                target_phase=expert_cfg.get("target_phase", "both"),
+                prototype_prompts=expert_cfg.get("prototype_prompts", []),
+            )
+            self.lora_router.register_expert(expert_config)
+
+        # Register orthogonal experts
+        for name, expert_cfg in config.get("orthogonal_experts", {}).items():
+            if not expert_cfg.get("enabled", True):
+                continue
+            expert_config = ExpertConfig(
+                name=name,
+                checkpoint_path=expert_cfg.get("checkpoint_path", ""),
+                expert_type="orthogonal",
+                target_phase=expert_cfg.get("target_phase", "both"),
+                prototype_prompts=expert_cfg.get("prototype_prompts", []),
+            )
+            self.lora_router.register_expert(expert_config)
+
+        # Compute prototype embeddings for routing
+        self.lora_router.compute_prototype_embeddings(
+            self.embed_model, self.tokenizer
+        )
+
+        logger.info(
+            f"Initialized multi-expert router with "
+            f"{len(self.lora_router.style_experts)} style experts and "
+            f"{len(self.lora_router.orthogonal_experts)} orthogonal experts"
+        )
+
+        # Optionally auto-load all experts
+        if auto_load:
+            defaults = config.get("defaults", {})
+            if defaults.get("auto_load_experts", False):
+                self._load_all_experts(config)
+
+        return True
+
+    def _load_all_experts(self, config: dict) -> int:
+        """Load all enabled expert checkpoints.
+
+        Args:
+            config: Registry config dict
+
+        Returns:
+            Number of experts loaded
+        """
+        if self.lora_manager is None:
+            return 0
+
+        loaded = 0
+        missing_behavior = config.get("defaults", {}).get(
+            "missing_checkpoint_behavior", "warn"
+        )
+
+        # Load style experts
+        for name, expert_cfg in config.get("style_experts", {}).items():
+            if not expert_cfg.get("enabled", True):
+                continue
+            path = expert_cfg.get("checkpoint_path", "")
+            if self.lora_manager.load_expert(name, path):
+                loaded += 1
+            elif missing_behavior == "error":
+                raise FileNotFoundError(f"Expert checkpoint not found: {path}")
+
+        # Load orthogonal experts
+        for name, expert_cfg in config.get("orthogonal_experts", {}).items():
+            if not expert_cfg.get("enabled", True):
+                continue
+            path = expert_cfg.get("checkpoint_path", "")
+            if self.lora_manager.load_expert(name, path):
+                loaded += 1
+            elif missing_behavior == "error":
+                raise FileNotFoundError(f"Expert checkpoint not found: {path}")
+
+        self._lora_experts_loaded = loaded > 0
+        logger.info(f"Loaded {loaded} expert checkpoints")
+        return loaded
+
+    def load_expert(self, name: str, checkpoint_path: str) -> bool:
+        """Load a single LoRA expert checkpoint.
+
+        Args:
+            name: Expert name (must be registered in router)
+            checkpoint_path: Path to checkpoint file
+
+        Returns:
+            True if loaded successfully
+        """
+        if self.lora_manager is None:
+            logger.warning("LoRA manager not initialized. Call initialize_multi_expert_routing first.")
+            return False
+
+        success = self.lora_manager.load_expert(name, checkpoint_path)
+        if success:
+            self._lora_experts_loaded = True
+        return success
+
+    def route_and_apply_experts(
+        self,
+        text_embedding: torch.Tensor,
+        threshold: float | None = None,
+    ) -> dict[str, float]:
+        """Route based on text embedding and apply blended experts.
+
+        This is the main entry point for dynamic expert composition.
+
+        Args:
+            text_embedding: Text embedding from BAAI/bge-large-en-v1.5 [1, 1024]
+            threshold: Minimum weight to activate expert (uses router default if None)
+
+        Returns:
+            Dict of expert names to their routing weights
+        """
+        if self.lora_router is None or self.lora_manager is None:
+            logger.warning("Multi-expert routing not initialized.")
+            return {}
+
+        if not self._lora_experts_loaded:
+            logger.warning("No expert checkpoints loaded.")
+            return {}
+
+        # Get routing weights from text embedding
+        weights = self.lora_router(text_embedding)
+
+        # Filter by threshold
+        if threshold is None:
+            threshold = self.lora_router.min_expert_weight
+        active_weights = {
+            name: w for name, w in weights.items() if w > threshold
+        }
+
+        # Apply blended experts to model
+        if active_weights:
+            self.lora_manager.apply_blended_experts(
+                active_weights, min_weight=threshold
+            )
+            logger.debug(f"Applied experts: {active_weights}")
+
+        return active_weights
+
+    def get_routing_weights(
+        self,
+        prompt: str,
+        threshold: float | None = None,
+    ) -> dict[str, float]:
+        """Get routing weights for a text prompt without applying them.
+
+        Useful for debugging or visualization.
+
+        Args:
+            prompt: Text prompt to route
+            threshold: Minimum weight to include (uses router default if None)
+
+        Returns:
+            Dict of expert names to weights
+        """
+        if self.lora_router is None:
+            return {}
+
+        # Encode prompt
+        with torch.no_grad():
+            inputs = self.tokenizer(
+                prompt, return_tensors="pt", padding=True, truncation=True, max_length=512
+            )
+            outputs = self.embed_model(**inputs)
+            text_embedding = outputs.last_hidden_state.mean(dim=1)
+
+        weights = self.lora_router(text_embedding)
+
+        if threshold is not None:
+            weights = {k: v for k, v in weights.items() if v > threshold}
+
+        return weights
 
     def _load_image_tensor(self, image_path: str) -> torch.Tensor:
         """Load an RGB image from disk and preprocess for the image encoder.

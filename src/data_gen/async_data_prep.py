@@ -483,13 +483,14 @@ class AsyncDataPrepPipeline:
             The priority is: CLI override > env vars > config file.
             See MotionConditionedSampleGenerator for full override logic.
         """
-        from .dataset_generator import generate_dataset_async
+        from .dataset_generator import generate_dataset_async, merge_samples
         from .async_processor import ResourceLimits
 
         output = output_path or os.path.join(
             os.path.dirname(self.checkpoint_path).replace("/.pipeline", ""),
             "canonical", "synthetic.pt"
         )
+        samples_dir = os.path.dirname(output)
 
         if motion_source_path and os.path.exists(motion_source_path):
             print(f"[Pipeline] Generating {num_samples} motion-conditioned synthetic samples...")
@@ -509,12 +510,26 @@ class AsyncDataPrepPipeline:
         await generate_dataset_async(
             config_path=self.config_path,
             num_samples=num_samples,
-            output_dir=os.path.dirname(output),
+            output_dir=samples_dir,
             resource_limits=limits,
             use_llm_override=use_llm_override,
             motion_source_path=motion_source_path,
         )
-        print(f"[Pipeline] ✓ Synthetic generation complete")
+
+        # Merge individual JSON sample files into a single .pt dataset
+        # This is required for the pipeline merge step to find the synthetic data
+        print(f"[Pipeline] Merging JSON samples into {output}...")
+        try:
+            merge_samples(
+                samples_dir=samples_dir,
+                output_path=output,
+                delete_after_merge=True,  # Clean up JSON files
+                verbose=True,
+            )
+            print(f"[Pipeline] ✓ Synthetic generation complete: {output}")
+        except ValueError as e:
+            print(f"[Pipeline] ⚠️ Synthetic merge failed: {e}")
+            print(f"[Pipeline] JSON files remain in {samples_dir}")
 
     async def run_merge(
         self,

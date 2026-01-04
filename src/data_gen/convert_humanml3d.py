@@ -32,7 +32,9 @@ import torch
 from .convert_amass import compute_basic_physics
 from .joint_utils import (
     CanonicalJoints2D,
+    clean_canonical_joints,
     joints_to_v3_segments_2d,
+    normalize_skeleton_height,
     validate_v3_connectivity,
 )
 from .metadata_extractors import build_enhanced_metadata
@@ -129,24 +131,160 @@ ACTION_KEYWORDS = {
 }
 
 
+def _compute_stats_from_features(feats_dir: str) -> dict[str, np.ndarray]:
+    """Compute normalization statistics from raw feature files.
+
+    Used when Mean.npy/Std.npy are missing or corrupted. Computes mean and std
+    across all frames from all feature files in the directory, skipping any
+    files that contain NaN or Inf values.
+
+    Args:
+        feats_dir: Directory containing .npy feature files.
+
+    Returns:
+        Dict with 'mean' and 'std' arrays of shape (D,).
+    """
+    npy_files = sorted(glob.glob(os.path.join(feats_dir, "*.npy")))
+    if not npy_files:
+        raise ValueError(f"No .npy files found in {feats_dir}")
+
+    logger.info(f"Computing normalization stats from {len(npy_files)} feature files...")
+
+    # First pass: filter out files with NaN/Inf and accumulate for mean
+    sample = np.load(npy_files[0])
+    D = sample.shape[1]
+
+    valid_files: list[str] = []
+    skipped_files = 0
+
+    # Pre-filter files to exclude those with NaN/Inf
+    for fpath in npy_files:
+        data = np.load(fpath)
+        if np.isfinite(data).all():
+            valid_files.append(fpath)
+        else:
+            skipped_files += 1
+
+    if skipped_files > 0:
+        logger.warning(
+            f"Skipped {skipped_files} files with NaN/Inf values during stats computation"
+        )
+
+    if not valid_files:
+        raise ValueError("All feature files contain NaN/Inf values")
+
+    logger.info(f"Using {len(valid_files)} valid files for stats computation")
+
+    # Accumulate all valid features for computing mean and std
+    # Use explicit accumulation to avoid numerical issues with sum(generator)
+    weighted_sum = np.zeros(D, dtype=np.float64)
+    total_count = 0
+
+    chunk_size = 1000
+    for i in range(0, len(valid_files), chunk_size):
+        chunk_files = valid_files[i : i + chunk_size]
+        chunk_feats = [np.load(f) for f in chunk_files]
+        chunk_concat = np.concatenate(chunk_feats, axis=0)
+        weighted_sum += np.sum(chunk_concat, axis=0)
+        total_count += chunk_concat.shape[0]
+
+    mean = (weighted_sum / total_count).astype(np.float64)
+
+    # Second pass for std (using the computed mean)
+    sum_sq = np.zeros(D, dtype=np.float64)
+    for i in range(0, len(valid_files), chunk_size):
+        chunk_files = valid_files[i : i + chunk_size]
+        chunk_feats = [np.load(f) for f in chunk_files]
+        chunk_concat = np.concatenate(chunk_feats, axis=0)
+        sum_sq += np.sum((chunk_concat - mean) ** 2, axis=0)
+
+    std = np.sqrt(sum_sq / total_count).astype(np.float32)
+    # Avoid division by zero
+    std = np.where(std < 1e-8, 1.0, std)
+
+    logger.info(
+        f"Computed stats: mean range [{mean.min():.4f}, {mean.max():.4f}], "
+        f"std range [{std.min():.4f}, {std.max():.4f}]"
+    )
+
+    return {"mean": mean.astype(np.float32), "std": std}
+
+
 def _load_normalization(stats_dir: str) -> dict[str, np.ndarray] | None:
-    """Load normalization statistics with error handling."""
+    """Load normalization statistics with error handling.
+
+    If Mean.npy/Std.npy are missing or corrupted (contain NaN values),
+    automatically recomputes statistics from the raw feature files in
+    new_joint_vecs/ and caches them to Mean_computed.npy/Std_computed.npy.
+
+    Args:
+        stats_dir: Directory containing Mean.npy, Std.npy, and new_joint_vecs/.
+
+    Returns:
+        Dict with 'mean' and 'std' arrays, or None if stats cannot be obtained.
+    """
     mean_path = os.path.join(stats_dir, "Mean.npy")
     std_path = os.path.join(stats_dir, "Std.npy")
+    feats_dir = os.path.join(stats_dir, "new_joint_vecs")
 
-    if not os.path.exists(mean_path) or not os.path.exists(std_path):
-        logger.warning(f"Missing normalization files in {stats_dir}")
-        return None
+    # Paths for cached computed stats
+    mean_computed_path = os.path.join(stats_dir, "Mean_computed.npy")
+    std_computed_path = os.path.join(stats_dir, "Std_computed.npy")
 
-    try:
-        mean = np.load(mean_path)
-        std = np.load(std_path)
-        # Avoid division by zero
+    # Check for pre-computed cached stats first
+    if os.path.exists(mean_computed_path) and os.path.exists(std_computed_path):
+        logger.info("Using cached computed normalization stats")
+        mean = np.load(mean_computed_path)
+        std = np.load(std_computed_path)
         std = np.where(std < 1e-8, 1.0, std)
         return {"mean": mean.astype(np.float32), "std": std.astype(np.float32)}
-    except Exception as e:
-        logger.error(f"Failed to load normalization stats: {e}")
-        return None
+
+    # Try to load original stats
+    stats_valid = False
+    if os.path.exists(mean_path) and os.path.exists(std_path):
+        try:
+            mean = np.load(mean_path)
+            std = np.load(std_path)
+
+            # Check if stats are corrupted (contain NaN values)
+            if np.isnan(mean).any() or np.isnan(std).any():
+                nan_count_mean = np.sum(np.isnan(mean))
+                nan_count_std = np.sum(np.isnan(std))
+                logger.warning(
+                    f"Mean.npy has {nan_count_mean}/{len(mean)} NaN values, "
+                    f"Std.npy has {nan_count_std}/{len(std)} NaN values. "
+                    "Will recompute from raw features."
+                )
+            elif np.isinf(mean).any() or np.isinf(std).any():
+                logger.warning("Stats contain Inf values. Will recompute from raw features.")
+            else:
+                stats_valid = True
+                # Avoid division by zero
+                std = np.where(std < 1e-8, 1.0, std)
+                return {"mean": mean.astype(np.float32), "std": std.astype(np.float32)}
+        except Exception as e:
+            logger.warning(f"Failed to load normalization stats: {e}")
+
+    # Stats missing or corrupted - compute from raw features
+    if not stats_valid:
+        if not os.path.isdir(feats_dir):
+            logger.error(f"Cannot compute stats: feature directory not found at {feats_dir}")
+            return None
+
+        try:
+            stats = _compute_stats_from_features(feats_dir)
+
+            # Cache computed stats for future runs
+            np.save(mean_computed_path, stats["mean"])
+            np.save(std_computed_path, stats["std"])
+            logger.info(f"Cached computed stats to {mean_computed_path} and {std_computed_path}")
+
+            return stats
+        except Exception as e:
+            logger.error(f"Failed to compute normalization stats: {e}")
+            return None
+
+    return None
 
 
 def _denorm(arr: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
@@ -329,8 +467,30 @@ def _features_to_stick(feats: np.ndarray) -> np.ndarray:
             "r_ankle": r_ankle,
         }
 
+        # Drop frames with non-finite canonical joints up front. Real HumanML3D
+        # clips occasionally contain NaNs in a few frames; we prefer to remove
+        # those frames rather than reject the entire clip.
+        stacked = np.stack(list(canonical_joints.values()), axis=1)  # [T, J, 2]
+        finite_mask = np.isfinite(stacked).all(axis=(1, 2))
+        if not np.any(finite_mask):
+            raise ValueError("Non-finite canonical joints for all frames")
+        if not finite_mask.all():
+            for name in canonical_joints.keys():
+                canonical_joints[name] = canonical_joints[name][finite_mask]
+
+        # 1. Clean geometric inconsistencies (alignment, clamping, head fix)
+        canonical_joints = clean_canonical_joints(canonical_joints)
+
+        # 2. Normalize height to ~1.8m (standard units) to fix physics scale issues
+        # This is critical for KIT-ML which often triggers velocity checks due to scale
+        canonical_joints = normalize_skeleton_height(
+            canonical_joints, target_height=1.8
+        )
+
+        # 3. Convert to v3 segments and enforce connectivity. Any problem here is
+        # surfaced as a dedicated exception so upstream callers can categorize
+        # skip reasons (e.g. "connectivity" vs "physics").
         segments = joints_to_v3_segments_2d(canonical_joints, flatten=True)
-        # Cheap safety check to catch mapping bugs early.
         validate_v3_connectivity(segments)
         return segments.astype(np.float32)
 
@@ -508,7 +668,17 @@ def _process_single_clip(
         return sample, None
 
     except Exception as e:  # noqa: BLE001
-        logger.warning(f"Error processing {clip_id}: {e}")
+        msg = str(e)
+        logger.warning(f"Error processing {clip_id}: {msg}")
+
+        # Provide more informative skip reasons for downstream aggregation.
+        if "v3 connectivity violated" in msg:
+            return None, "connectivity"
+        if "Non-finite canonical joints" in msg:
+            return None, "non_finite_joints"
+        if "non-finite coordinates in segments" in msg:
+            return None, "non_finite_segments"
+
         return None, "exception"
 
 

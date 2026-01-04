@@ -436,3 +436,174 @@ def load_adapter_registry_from_config(config_path: str) -> int:
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Failed to load adapter registry from {config_path}: {e}")
         return 0
+
+
+# ============================================================================
+# Multi-Expert LoRA Blending Support
+# ============================================================================
+
+
+def blend_lora_state_dicts(
+    lora_states: list[dict[str, torch.Tensor]],
+    weights: list[float],
+) -> dict[str, torch.Tensor]:
+    """Blend multiple LoRA state dicts with given weights.
+
+    This enables dynamic composition of multiple experts at inference time.
+
+    Args:
+        lora_states: List of LoRA state dicts
+        weights: Corresponding blend weights (should be non-negative)
+
+    Returns:
+        Blended LoRA state dict
+    """
+    if len(lora_states) == 0:
+        return {}
+    if len(lora_states) != len(weights):
+        raise ValueError(
+            f"Number of states ({len(lora_states)}) must match weights ({len(weights)})"
+        )
+
+    # Normalize weights to sum to 1.0
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        # All weights zero, return zeros
+        return {k: torch.zeros_like(v) for k, v in lora_states[0].items()}
+
+    normalized_weights = [w / total_weight for w in weights]
+
+    # Blend parameters
+    blended: dict[str, torch.Tensor] = {}
+    all_keys = set()
+    for state in lora_states:
+        all_keys.update(state.keys())
+
+    for key in all_keys:
+        tensors = []
+        key_weights = []
+        for state, weight in zip(lora_states, normalized_weights, strict=True):
+            if key in state:
+                tensors.append(state[key])
+                key_weights.append(weight)
+
+        if tensors:
+            # Re-normalize weights for this key (in case some states don't have it)
+            key_total = sum(key_weights)
+            if key_total > 0:
+                blended_tensor = sum(
+                    t * (w / key_total) for t, w in zip(tensors, key_weights, strict=True)
+                )
+                blended[key] = blended_tensor
+
+    return blended
+
+
+class MultiExpertLoRAManager:
+    """Manages multiple LoRA experts and their dynamic blending.
+
+    This class handles:
+    - Loading multiple LoRA checkpoints
+    - Caching loaded expert states
+    - Applying weighted blends to a model
+
+    Args:
+        model: The base model with LoRA adapters injected
+        device: Device to load checkpoints to
+    """
+
+    def __init__(self, model: nn.Module, device: str = "cpu") -> None:
+        self.model = model
+        self.device = device
+        self.expert_states: dict[str, dict[str, torch.Tensor]] = {}
+        self.loaded_experts: set[str] = set()
+
+    def load_expert(self, name: str, checkpoint_path: str) -> bool:
+        """Load a LoRA expert checkpoint.
+
+        Args:
+            name: Expert name (e.g., "dramatic_style", "camera")
+            checkpoint_path: Path to the LoRA checkpoint file
+
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        try:
+            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            # Handle both direct state dicts and wrapped checkpoints
+            if "lora_state_dict" in checkpoint:
+                lora_state = checkpoint["lora_state_dict"]
+            elif "state_dict" in checkpoint:
+                # Filter to just LoRA params
+                lora_state = {
+                    k: v for k, v in checkpoint["state_dict"].items()
+                    if "lora_A" in k or "lora_B" in k
+                }
+            else:
+                # Assume it's a direct LoRA state dict
+                lora_state = checkpoint
+
+            self.expert_states[name] = lora_state
+            self.loaded_experts.add(name)
+            return True
+        except (FileNotFoundError, RuntimeError) as e:
+            print(f"Warning: Failed to load expert '{name}' from {checkpoint_path}: {e}")
+            return False
+
+    def apply_blended_experts(
+        self,
+        expert_weights: dict[str, float],
+        min_weight: float = 0.0,
+    ) -> int:
+        """Apply a weighted blend of loaded experts to the model.
+
+        Args:
+            expert_weights: Mapping of expert names to blend weights
+            min_weight: Experts with weight below this threshold are skipped
+
+        Returns:
+            Number of parameters updated
+        """
+        # Filter to loaded experts with sufficient weight
+        active_experts = [
+            (name, weight)
+            for name, weight in expert_weights.items()
+            if name in self.loaded_experts and weight > min_weight
+        ]
+
+        if not active_experts:
+            return 0
+
+        # Get states and weights for blending
+        states = [self.expert_states[name] for name, _ in active_experts]
+        weights = [weight for _, weight in active_experts]
+
+        # Blend and apply
+        blended_state = blend_lora_state_dicts(states, weights)
+        loaded = load_lora_state_dict(self.model, blended_state)
+
+        return loaded
+
+    def get_loaded_experts(self) -> list[str]:
+        """Get list of loaded expert names."""
+        return list(self.loaded_experts)
+
+    def unload_expert(self, name: str) -> bool:
+        """Unload an expert from memory.
+
+        Args:
+            name: Expert name to unload
+
+        Returns:
+            True if unloaded, False if not loaded
+        """
+        if name in self.expert_states:
+            del self.expert_states[name]
+            self.loaded_experts.discard(name)
+            return True
+        return False
+
+    def clear_all(self) -> None:
+        """Unload all experts."""
+        self.expert_states.clear()
+        self.loaded_experts.clear()

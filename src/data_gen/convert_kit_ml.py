@@ -28,39 +28,16 @@ import torch
 
 from .convert_amass import compute_basic_physics
 from .convert_humanml3d import (
+    _denorm,
     _features_to_stick as humanml3d_features_to_stick,
-)
-from .convert_humanml3d import (
     _infer_action_from_text,
+    _load_normalization,
 )
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX
 from .validator import DataValidator
 
 logger = logging.getLogger(__name__)
-
-
-def _load_normalization(stats_dir: str) -> dict[str, np.ndarray] | None:
-    """Load normalization statistics with error handling."""
-    mean_path = os.path.join(stats_dir, "Mean.npy")
-    std_path = os.path.join(stats_dir, "Std.npy")
-
-    if not os.path.exists(mean_path) or not os.path.exists(std_path):
-        logger.warning(f"Missing normalization files in {stats_dir}")
-        return None
-
-    try:
-        mean = np.load(mean_path)
-        std = np.load(std_path)
-        std = np.where(std < 1e-8, 1.0, std)
-        return {"mean": mean.astype(np.float32), "std": std.astype(np.float32)}
-    except Exception as e:
-        logger.error(f"Failed to load normalization stats: {e}")
-        return None
-
-
-def _denorm(arr: np.ndarray, stats: dict[str, np.ndarray]) -> np.ndarray:
-    return arr * stats["std"] + stats["mean"]
 
 
 def _features_to_stick(feats: np.ndarray) -> np.ndarray:
@@ -257,9 +234,17 @@ def convert_kit_ml(
             samples.append(sample)
 
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"Error processing {clip_id}: {e}")
+            msg = str(e)
+            logger.warning(f"Error processing {clip_id}: {msg}")
             skipped += 1
-            _record_skip("exception")
+            if "v3 connectivity violated" in msg:
+                _record_skip("connectivity")
+            elif "Non-finite canonical joints" in msg:
+                _record_skip("non_finite_joints")
+            elif "non-finite coordinates in segments" in msg:
+                _record_skip("non_finite_segments")
+            else:
+                _record_skip("exception")
 
     logger.info(f"Converted {len(samples)}/{len(paths)} clips ({skipped} skipped)")
     if skipped > 0:
