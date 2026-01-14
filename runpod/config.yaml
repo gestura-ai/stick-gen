@@ -83,9 +83,13 @@ training:
   parallax:
     enabled: true
     views_per_motion: 250      # Camera trajectories per motion sequence
-    frames_per_view: 4         # PNG frames per camera trajectory
+    frames_per_view: 50        # PNG frames per camera trajectory (2 seconds at 25fps)
     image_size: [256, 256]     # [H, W] output PNG dimensions
-    # Storage estimate: ~20-50GB for 500k samples with default settings
+    # Multi-frame sequence settings for temporal learning
+    sequence_length: 25        # Frames per training sequence (1 second at 25fps)
+    sequence_stride: 8         # Sliding window stride (~3-4 sequences per view)
+    conditioning_mode: "first_frame"  # Options: first_frame, random_frame, all_frames
+    # Storage estimate: ~150-300GB for 500k samples with 50 frames/view
     # CPU-bound (Node.js renderer), GPU optional for training
 
   # Multimodal Training Configuration

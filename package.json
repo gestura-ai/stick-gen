@@ -12,6 +12,6 @@
     "render-parallax": "node src/data_gen/renderers/threejs_parallax_renderer.js"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   }
 }

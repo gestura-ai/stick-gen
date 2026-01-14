@@ -1,3 +1,4 @@
+
 import os
 import shutil
 import subprocess
@@ -54,13 +55,19 @@ def _export_actor_motion_to_file(
 
     action_tensor = sample.get("actions")
     action_names = None
-    if action_tensor is not None and action_tensor.dim() == 2:
-        ids = action_tensor[:, actor_idx].tolist()
-        action_names = []
-        for i in ids:
-            idx = int(i)
-            action = IDX_TO_ACTION.get(idx)
-            action_names.append(action.value if action is not None else "unknown")
+    import torch
+    if action_tensor is not None:
+        # Ensure it's a tensor to access .dim()
+        if not torch.is_tensor(action_tensor):
+            action_tensor = torch.tensor(action_tensor)
+        
+        if action_tensor.dim() == 2:
+            ids = action_tensor[:, actor_idx].tolist()
+            action_names = []
+            for i in ids:
+                idx = int(i)
+                action = IDX_TO_ACTION.get(idx)
+                action_names.append(action.value if action is not None else "unknown")
 
     description = sample.get("description", f"sample_actor_{actor_idx}")
 
@@ -151,14 +158,17 @@ def generate_parallax_for_dataset(
         if motion is None:
             continue
 
-        if isinstance(motion, np.ndarray):
+        # Normalize to tensor
+        if isinstance(motion, list):
+            motion = torch.tensor(motion, dtype=torch.float32)
+            sample["motion"] = motion
+        elif isinstance(motion, np.ndarray):
             motion = torch.from_numpy(motion)
             sample["motion"] = motion
 
-        # Handle 2D tensors (single actor) by unsqueezing to [T, 1, D]
+        # Single-actor [T, D] → [T, 1, D]
         if motion.dim() == 2:
             motion = motion.unsqueeze(1)
-            # Update the sample so _export_actor_motion_to_file sees the 3D tensor
             sample["motion"] = motion
 
         if motion.dim() != 3:
@@ -171,6 +181,16 @@ def generate_parallax_for_dataset(
 
         _, num_actors, _ = motion.shape
         for actor_idx in range(num_actors):
+            # Skip actors whose motion is effectively all zeros (unused slots in
+            # multi-actor sequences). Rendering these would produce collapsed or
+            # invisible stick-figures, which looks like a rendering bug.
+            motion_actor = motion[:, actor_idx, :]
+            if motion_actor.abs().sum() < 1e-6:
+                print(
+                    f"[parallax] Skipping sample {sample_idx}, actor {actor_idx}: zero-motion actor",
+                )
+                continue
+
             motion_path = os.path.join(
                 tmp_motion_root,
                 f"sample{sample_idx:06d}_actor{actor_idx}.motion",

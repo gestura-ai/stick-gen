@@ -733,7 +733,36 @@ async def run_full_pipeline(
     parallax_enabled = only_parallax or (
         parallax_config.get("enabled", False) and not skip_parallax
     )
-    parallax_root = config.get("data", {}).get("parallax_root", "data/2.5d_parallax")
+
+    # Basic config validation for multi-frame sequence training.
+    # When sequence mode is enabled (`data.use_parallax_sequences: true`), we
+    # expect each camera trajectory to have at least as many frames as the
+    # requested training sequence length. If this is not true, the
+    # MultimodalParallaxSequenceDataset may end up with zero sequences or
+    # heavily truncated windows.
+    data_cfg = config.get("data", {})
+    seq_len = data_cfg.get("parallax_sequence_length")
+    use_sequences = data_cfg.get("use_parallax_sequences", False)
+    frames_per_view = parallax_config.get("frames_per_view")
+
+    if (
+        parallax_enabled
+        and use_sequences
+        and isinstance(seq_len, int)
+        and isinstance(frames_per_view, int)
+        and frames_per_view < seq_len
+    ):
+        print(
+            "[Pipeline] ⚠️  Configuration mismatch: "
+            "data_generation.parallax.frames_per_view "
+            f"({frames_per_view}) < data.parallax_sequence_length ({seq_len})."
+        )
+        print(
+            "[Pipeline]      The sequence dataset may be empty or truncated. "
+            "Increase frames_per_view or reduce parallax_sequence_length."
+        )
+
+    parallax_root = data_cfg.get("parallax_root", "data/2.5d_parallax")
     curated_dir = os.path.join(output_root, "curated")
 
     print("=" * 60)

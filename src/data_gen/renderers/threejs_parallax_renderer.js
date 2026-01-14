@@ -674,7 +674,10 @@ function main() {
   };
 
   for (let i = 0; i < views; i += 1) {
-    const baseFrame = Math.floor(Math.random() * frames.length);
+    // Ensure baseFrame allows full framesPerView without clamping
+    // This guarantees contiguous motion frames for temporal learning
+    const maxBaseFrame = Math.max(0, frames.length - framesPerView);
+    const baseFrame = Math.floor(Math.random() * (maxBaseFrame + 1));
 
     // Camera orbit parameters
     const baseAngle = Math.random() * Math.PI * 2;

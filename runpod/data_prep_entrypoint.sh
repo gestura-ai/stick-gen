@@ -417,10 +417,13 @@ prepare_data_async() {
     cd "${WORKSPACE}"
 
     # Build command arguments
+    # Uses configs/base.yaml which has updated multi-frame parallax settings:
+    #   frames_per_view: 50, sequence_length: 25, sequence_stride: 8
     local async_args=(
         "--data-root" "${DATA_PATH}"
         "--output-root" "${DATA_PATH}/processed"
         "--smpl-path" "${DATA_PATH}/smpl_models"
+        "--config" "configs/base.yaml"
         "--max-concurrent" "${ASYNC_MAX_CONCURRENT}"
         "--synthetic-samples" "${SYNTHETIC_SAMPLES}"
     )

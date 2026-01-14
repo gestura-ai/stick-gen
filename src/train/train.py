@@ -17,11 +17,15 @@ from src.train.config import TrainingConfig
 
 # Optional multimodal dataset support
 try:
-    from src.train.parallax_dataset import MultimodalParallaxDataset
+    from src.train.parallax_dataset import (
+        MultimodalParallaxDataset,
+        MultimodalParallaxSequenceDataset,
+    )
 
     MULTIMODAL_AVAILABLE = True
 except ImportError:
     MULTIMODAL_AVAILABLE = False
+    MultimodalParallaxSequenceDataset = None  # type: ignore
 
 # Configure logging
 # Set to DEBUG for verbose output, INFO for normal output
@@ -114,6 +118,11 @@ def temporal_consistency_loss(predictions):
     """
     logger.debug("    ENTER temporal_consistency_loss()")
     logger.debug(f"      predictions shape: {predictions.shape}")
+
+    # Handle single-frame case (no temporal consistency possible)
+    if predictions.shape[0] <= 1:
+        logger.debug("      Single frame - returning zero temporal loss")
+        return torch.tensor(0.0, device=predictions.device, dtype=predictions.dtype)
 
     # Penalize large frame-to-frame changes
     frame_diff = predictions[1:] - predictions[:-1]
@@ -225,20 +234,29 @@ def compute_evaluation_metrics(predictions, targets):
     """
     Compute additional evaluation metrics beyond MSE loss
 
+    Args:
+        predictions: [seq_len, batch, dim] tensor of predictions
+        targets: [seq_len, batch, dim] tensor of targets
+
     Returns:
         dict of metrics
     """
     with torch.no_grad():
-        # Smoothness: variance of frame-to-frame changes
-        pred_diff = predictions[1:] - predictions[:-1]
-        target_diff = targets[1:] - targets[:-1]
-        smoothness_error = torch.mean((pred_diff - target_diff) ** 2)
-
-        # Position accuracy (first 2 coords of each frame)
+        # Position accuracy (first 2 coords of each frame) - works for any seq_len
         position_error = torch.mean((predictions[:, :, :2] - targets[:, :, :2]) ** 2)
 
+        # Smoothness: variance of frame-to-frame changes
+        # Requires at least 2 frames; for single-frame data, return 0.0
+        if predictions.shape[0] <= 1:
+            # Single-frame case: no temporal information available
+            smoothness_error = 0.0
+        else:
+            pred_diff = predictions[1:] - predictions[:-1]
+            target_diff = targets[1:] - targets[:-1]
+            smoothness_error = torch.mean((pred_diff - target_diff) ** 2).item()
+
         return {
-            "smoothness_error": smoothness_error.item(),
+            "smoothness_error": smoothness_error if isinstance(smoothness_error, float) else smoothness_error,
             "position_error": position_error.item(),
         }
 
@@ -347,6 +365,11 @@ def train(
     IMAGE_ENCODER_ARCH = config.get("model.image_encoder_arch", "lightweight_cnn")
     FUSION_STRATEGY = config.get("model.fusion_strategy", "gated")
     IMAGE_BACKEND = config.get("data.image_backend", "pil")
+    # Sequence mode settings for temporal learning
+    USE_PARALLAX_SEQUENCES = config.get("data.use_parallax_sequences", True)
+    PARALLAX_SEQUENCE_LENGTH = config.get("data.parallax_sequence_length", 4)
+    PARALLAX_SEQUENCE_STRIDE = config.get("data.parallax_sequence_stride", 1)
+    PARALLAX_CONDITIONING_MODE = config.get("data.parallax_conditioning_mode", "first_frame")
 
     if USE_PARALLAX and not MULTIMODAL_AVAILABLE:
         print(
@@ -747,20 +770,45 @@ def train(
     print(f"  - Data path: {data_path}")
 
     # Choose dataset type based on multimodal configuration
-    multimodal_dataset: MultimodalParallaxDataset | None = None
+    multimodal_dataset: MultimodalParallaxDataset | MultimodalParallaxSequenceDataset | None = None
+    use_sequence_mode = False
     if USE_PARALLAX:
         print("  - Mode: MULTIMODAL (2.5D parallax augmentation)")
         print(f"  - Parallax root: {PARALLAX_ROOT}")
         print(f"  - Image backend: {IMAGE_BACKEND}")
-        multimodal_dataset = MultimodalParallaxDataset(
-            parallax_root=PARALLAX_ROOT,
-            motion_data_path=data_path,
-            image_size=PARALLAX_IMAGE_SIZE,
-            image_backend=IMAGE_BACKEND,
-        )
-        print(f"  - Multimodal samples (PNG frames): {len(multimodal_dataset)}")
+
+        # Try sequence mode first if enabled
+        if USE_PARALLAX_SEQUENCES and MultimodalParallaxSequenceDataset is not None:
+            try:
+                multimodal_dataset = MultimodalParallaxSequenceDataset(
+                    parallax_root=PARALLAX_ROOT,
+                    motion_data_path=data_path,
+                    sequence_length=PARALLAX_SEQUENCE_LENGTH,
+                    stride=PARALLAX_SEQUENCE_STRIDE,
+                    image_size=PARALLAX_IMAGE_SIZE,
+                    image_backend=IMAGE_BACKEND,
+                    conditioning_mode=PARALLAX_CONDITIONING_MODE,
+                )
+                use_sequence_mode = True
+                print(f"  - Sequence mode: ENABLED (seq_len={PARALLAX_SEQUENCE_LENGTH}, stride={PARALLAX_SEQUENCE_STRIDE})")
+                print(f"  - Conditioning mode: {PARALLAX_CONDITIONING_MODE}")
+                print(f"  - Multimodal sequences: {len(multimodal_dataset)}")
+            except ValueError as e:
+                print(f"  - ⚠️ Sequence mode failed ({e}), falling back to single-frame mode")
+                multimodal_dataset = None
+
+        # Fallback to single-frame mode
+        if multimodal_dataset is None:
+            multimodal_dataset = MultimodalParallaxDataset(
+                parallax_root=PARALLAX_ROOT,
+                motion_data_path=data_path,
+                image_size=PARALLAX_IMAGE_SIZE,
+                image_backend=IMAGE_BACKEND,
+            )
+            print(f"  - Sequence mode: DISABLED (single-frame)")
+            print(f"  - Multimodal samples (PNG frames): {len(multimodal_dataset)}")
+
         # For multimodal, we use the parallax dataset directly
-        # (each item = one PNG frame with associated motion/camera/text)
         dataset = multimodal_dataset
     else:
         print("  - Mode: MOTION-ONLY")
@@ -808,6 +856,11 @@ def train(
     print(f"  - Validation samples: {val_size} (10%)")
     print(f"  - Test samples: {test_size} (10%)")
 
+    # Note about temporal metrics when using single-frame data
+    if USE_PARALLAX and multimodal_dataset is not None:
+        print("\n  NOTE: Using single-frame parallax data.")
+        print("        Temporal and Smoothness metrics will be 0.0 (not applicable).")
+
     print("\n" + "=" * 60)
     print("STARTING TRAINING LOOP")
     print("=" * 60)
@@ -846,53 +899,83 @@ def train(
             enhanced_metas = None  # Enhanced metadata for style-conditioned diffusion
 
             if USE_PARALLAX and multimodal_dataset is not None:
-                # Multimodal batch: (image, motion_frame, camera_pose, text_prompt, action, environment_type)
-                # Note: text_prompt is a string, we need to embed it or use cached embeddings
-                image_tensor, motion_frame, camera_pose, text_prompts, actions, environment_types = (
+                # Multimodal batch: (image, motion, camera_pose, text_prompt, action, environment_type)
+                # Sequence mode: motion is [batch, seq_len, D], image is [batch, 1, 3, H, W] or [batch, seq_len, 3, H, W]
+                # Single-frame mode: motion is [batch, D], image is [batch, 3, H, W]
+                image_tensor, motion_data, camera_pose, text_prompts, actions, environment_types = (
                     batch_data
                 )
 
-                # For multimodal training with parallax frames:
-                # - motion_frame is [batch, 20] single frame
-                # - We create a pseudo-sequence by repeating the frame
-                # - Target is the same as input (reconstruction objective)
-                batch_size_curr = motion_frame.shape[0]
+                # Detect sequence mode by motion tensor shape
+                if motion_data.dim() == 3:
+                    # Sequence mode: motion_data is [batch, seq_len, D]
+                    data = motion_data  # Already [batch, seq_len, D]
+                    target = data.clone()  # Reconstruction target
+                    batch_size_curr = data.shape[0]
 
-                # Create single-frame sequences: [batch, 1, 20]
-                data = motion_frame.unsqueeze(1)  # [batch, 1, dim]
-                target = data.clone()  # Reconstruction target
+                    # Image tensor: [batch, 1, 3, H, W] or [batch, seq_len, 3, H, W]
+                    # For conditioning, use first frame: [batch, 3, H, W]
+                    if image_tensor.dim() == 5:
+                        image_tensor = image_tensor[:, 0, :, :, :]  # [batch, 3, H, W]
+
+                    # Camera pose: [batch, seq_len, 7] - use first frame for conditioning
+                    if camera_pose.dim() == 3:
+                        image_camera_pose = camera_pose[:, 0, :]  # [batch, 7]
+                    else:
+                        image_camera_pose = camera_pose
+
+                    # Actions: [batch, seq_len] - already in correct shape
+                    # (no unsqueeze needed)
+                else:
+                    # Single-frame mode: motion_data is [batch, D]
+                    batch_size_curr = motion_data.shape[0]
+                    data = motion_data.unsqueeze(1)  # [batch, 1, D]
+                    target = data.clone()
+                    image_camera_pose = camera_pose
+
+                    # Reshape actions for single-frame
+                    if actions is not None and not isinstance(actions, type(None)):
+                        actions = actions.unsqueeze(1) if actions.dim() == 1 else actions
 
                 # Get embeddings from the motion data (pre-computed in the .pt file)
                 # For multimodal, we retrieve embeddings via sample index
-                # Note: environment_types is now directly provided by the dataset
                 embeddings_list = []
                 for i in range(batch_size_curr):
                     # Get sample index from dataset
-                    sample_idx = multimodal_dataset.index[
-                        (
+                    # Handle both sequence and single-frame datasets
+                    if hasattr(multimodal_dataset, "sequence_index"):
+                        # Sequence dataset
+                        idx_in_dataset = (
                             train_dataset.indices[batch_idx * BATCH_SIZE + i]
                             if hasattr(train_dataset, "indices")
-                            else i
+                            else batch_idx * BATCH_SIZE + i
                         )
-                    ]["sample_idx"]
-                    sample = multimodal_dataset.samples.get(sample_idx, {})
-                    emb = sample.get("embedding")
+                        if idx_in_dataset < len(multimodal_dataset.sequence_index):
+                            sample_idx = multimodal_dataset.sequence_index[idx_in_dataset]["sample_idx"]
+                        else:
+                            sample_idx = 0
+                    else:
+                        # Single-frame dataset
+                        sample_idx = multimodal_dataset.index[
+                            (
+                                train_dataset.indices[batch_idx * BATCH_SIZE + i]
+                                if hasattr(train_dataset, "indices")
+                                else i
+                            )
+                        ]["sample_idx"]
+
+                    # samples is a list, not a dict - access by index
+                    if 0 <= sample_idx < len(multimodal_dataset.samples):
+                        sample = multimodal_dataset.samples[sample_idx]
+                    else:
+                        sample = {}
+                    emb = sample.get("embedding") if isinstance(sample, dict) else None
                     if emb is None:
                         # Fallback: zero embedding (should not happen with proper data)
                         emb = torch.zeros(1024)
                     embeddings_list.append(emb)
                 embedding = torch.stack(embeddings_list)
-                # environment_types is already unpacked from batch_data above
-
-                image_camera_pose = camera_pose
                 physics = None
-
-                # Reshape actions for single-frame
-                if actions is not None and not isinstance(actions, type(None)):
-                    # actions is per-frame action label [batch]
-                    actions = actions.unsqueeze(1) if actions.dim() == 1 else actions
-                else:
-                    actions = None
 
             elif len(batch_data) == 7:
                 # New format with enhanced_meta for style conditioning
@@ -1064,6 +1147,28 @@ def train(
                         f"  Step {(batch_idx + 1) // GRAD_ACCUM_STEPS}, Batch {batch_idx+1}/{len(train_loader)}, Avg Loss: {avg_loss:.4f}"
                     )
 
+                # Save intra-epoch checkpoint every 1000 gradient steps (crash protection)
+                INTRA_EPOCH_SAVE_INTERVAL = 1000
+                if global_step > 0 and global_step % INTRA_EPOCH_SAVE_INTERVAL == 0:
+                    intra_checkpoint_data = {
+                        "epoch": epoch,
+                        "global_step": global_step,
+                        "batch_idx": batch_idx,
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "scheduler_state_dict": scheduler.state_dict(),
+                        "train_loss": total_train_loss / (batch_idx + 1),
+                        "best_val_loss": best_val_loss,
+                        "training_stage": TRAINING_STAGE,
+                        "lora_enabled": USE_LORA,
+                        "is_intra_epoch": True,
+                    }
+                    if USE_LORA:
+                        intra_checkpoint_data["lora_state_dict"] = get_lora_state_dict(model)
+                    intra_ckpt_path = os.path.join(checkpoint_dir, "checkpoint_latest.pth")
+                    torch.save(intra_checkpoint_data, intra_ckpt_path)
+                    logger.info(f"  Intra-epoch checkpoint saved: {intra_ckpt_path} (step {global_step})")
+
         # Step optimizer if there are remaining gradients
         logger.debug("Checking for remaining gradients...")
         if (batch_idx + 1) % GRAD_ACCUM_STEPS != 0:
@@ -1100,10 +1205,75 @@ def train(
         total_val_position = 0
 
         with torch.no_grad():
-            for batch_data in val_loader:
+            for val_batch_idx, batch_data in enumerate(val_loader):
                 # Unpack batch (Phase 2: includes physics, environment_types)
                 environment_types = None
-                if len(batch_data) == 6:
+                physics = None
+                image_tensor = None
+
+                if USE_PARALLAX and multimodal_dataset is not None:
+                    # Multimodal batch: (image, motion, camera_pose, text_prompt, action, environment_type)
+                    image_tensor, motion_data, camera_pose, text_prompts, actions, environment_types = (
+                        batch_data
+                    )
+
+                    # Detect sequence mode by motion tensor shape
+                    if motion_data.dim() == 3:
+                        # Sequence mode: motion_data is [batch, seq_len, D]
+                        data = motion_data
+                        target = data.clone()
+                        batch_size_curr = data.shape[0]
+
+                        # Image tensor: [batch, 1, 3, H, W] or [batch, seq_len, 3, H, W]
+                        if image_tensor.dim() == 5:
+                            image_tensor = image_tensor[:, 0, :, :, :]
+                    else:
+                        # Single-frame mode: motion_data is [batch, D]
+                        batch_size_curr = motion_data.shape[0]
+                        data = motion_data.unsqueeze(1)
+                        target = data.clone()
+
+                        # Reshape actions for single-frame
+                        if actions is not None and not isinstance(actions, type(None)):
+                            actions = actions.unsqueeze(1) if actions.dim() == 1 else actions
+
+                    # Get embeddings from the motion data (pre-computed in the .pt file)
+                    embeddings_list = []
+                    for i in range(batch_size_curr):
+                        # Get sample index from dataset - use val_dataset indices
+                        if hasattr(multimodal_dataset, "sequence_index"):
+                            # Sequence dataset
+                            if hasattr(val_dataset, "indices"):
+                                dataset_idx = val_dataset.indices[val_batch_idx * BATCH_SIZE + i]
+                            else:
+                                dataset_idx = val_batch_idx * BATCH_SIZE + i
+                            if dataset_idx < len(multimodal_dataset.sequence_index):
+                                sample_idx = multimodal_dataset.sequence_index[dataset_idx]["sample_idx"]
+                            else:
+                                sample_idx = -1
+                        else:
+                            # Single-frame dataset
+                            if hasattr(val_dataset, "indices"):
+                                dataset_idx = val_dataset.indices[val_batch_idx * BATCH_SIZE + i]
+                            else:
+                                dataset_idx = val_batch_idx * BATCH_SIZE + i
+                            if dataset_idx < len(multimodal_dataset.index):
+                                sample_idx = multimodal_dataset.index[dataset_idx]["sample_idx"]
+                            else:
+                                sample_idx = -1
+
+                        # samples is a list, not a dict - access by index
+                        if 0 <= sample_idx < len(multimodal_dataset.samples):
+                            sample = multimodal_dataset.samples[sample_idx]
+                        else:
+                            sample = {}
+                        emb = sample.get("embedding") if isinstance(sample, dict) else None
+                        if emb is None:
+                            emb = torch.zeros(1024)
+                        embeddings_list.append(emb)
+                    embedding = torch.stack(embeddings_list)
+
+                elif len(batch_data) == 6:
                     data, embedding, target, actions, physics, environment_types = batch_data
                 elif len(batch_data) == 5:
                     data, embedding, target, actions, physics = batch_data
@@ -1122,12 +1292,17 @@ def train(
                     actions = actions.to(device)
                 if physics is not None:
                     physics = physics.to(device)
+                if image_tensor is not None:
+                    image_tensor = image_tensor.to(device)
 
                 data = data.permute(1, 0, 2)
                 target = target.permute(1, 0, 2)
 
                 if actions is not None:
-                    actions_seq = actions.permute(1, 0)
+                    if actions.dim() == 2:
+                        actions_seq = actions.permute(1, 0)
+                    else:
+                        actions_seq = actions.unsqueeze(0)
                 else:
                     actions_seq = None
 
@@ -1136,6 +1311,7 @@ def train(
                     embedding,
                     return_all_outputs=True,
                     action_sequence=actions_seq,
+                    image_tensor=image_tensor,
                 )
                 loss, _ = multi_task_loss(outputs, target, actions, physics, environment_types)
                 total_val_loss += loss.item()

@@ -68,6 +68,11 @@ data:
   parallax_root: "data/2.5d_parallax"
   parallax_image_size: [256, 256]
   image_backend: "pil"
+  # Sequence mode for temporal learning (requires frames_per_view >= sequence_length)
+  use_parallax_sequences: true
+  parallax_sequence_length: 25      # 1 second at 25fps - ideal for temporal learning
+  parallax_sequence_stride: 8       # Slide by 8 frames (~3 sequences per 50-frame view)
+  parallax_conditioning_mode: "first_frame"  # "first_frame", "random_frame", or "all_frames"
 
 # Data Generation Settings (primary use of this config)
 data_generation:
@@ -88,7 +93,7 @@ data_generation:
   parallax:
     enabled: true              # Auto-trigger parallax generation in async_data_prep
     views_per_motion: 250      # Number of camera trajectories per actor motion
-    frames_per_view: 4         # Frames rendered per camera trajectory
+    frames_per_view: 50        # Frames rendered per camera trajectory (2 seconds at 25fps)
     node_script: "src/data_gen/renderers/threejs_parallax_renderer.js"
     max_samples: null          # Limit samples for debugging (null = all)
 
