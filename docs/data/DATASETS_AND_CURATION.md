@@ -71,11 +71,54 @@ All real motion datasets are first converted into the **canonical format**
   - `explosions`: Unrealistic velocity spikes.
 - **Action Summary**: Dominant action labels derived from text or classifier.
 
-## 3. Curation policy
+## 3. Embedding-Based Action Classification
+
+The `action_label` field is critical for training the 60-class action classification head.
+To reduce "unknown" labels and improve classification accuracy, Stick-Gen uses an
+**embedding-based action classifier** (`src/data_gen/action_classifier.py`).
+
+### 3.1 How It Works
+
+1. **Action Prototypes**: Each of the 46 `ActionType` categories has 3-5 representative
+   text descriptions (e.g., "A person walking forward", "Someone strolling casually").
+2. **Text Embedding**: The BGE encoder (`BAAI/bge-large-en-v1.5`) embeds both the
+   prototype descriptions and the input text into 1024-dimensional vectors.
+3. **Cosine Similarity**: The classifier finds the action prototype with the highest
+   cosine similarity to the input text embedding.
+4. **Fallback**: If embedding fails, regex-based keyword matching is used as fallback.
+
+### 3.2 Integration Points
+
+The embedding classifier is integrated throughout the data pipeline:
+
+| Component | File | Usage |
+|-----------|------|-------|
+| HumanML3D converter | `convert_humanml3d.py` | Primary action inference from descriptions |
+| KIT-ML converter | `convert_kit_ml.py` | Via shared `_infer_action_from_text()` |
+| InterHuman converter | `convert_interhuman.py` | Via shared `_infer_action_from_text()` |
+| AMASS converter | `convert_amass.py` | Fallback for filename-based inference |
+| BABEL converter | `convert_babel.py` | Fallback for unmapped BABEL actions |
+| NTU-RGBD converter | `convert_ntu_rgbd.py` | Fallback for action ID mapping |
+| 100STYLE converter | `convert_100style_canonical.py` | Style-to-action mapping |
+| Dataset generator | `dataset_generator.py` | Synthetic sample action inference |
+| Merge script | `merge_datasets.py` | Fallback for missing action labels |
+
+### 3.3 Validation
+
+Use `scripts/validate_action_labels.py` to measure action label distribution:
+
+```bash
+python scripts/validate_action_labels.py data/processed/merged_canonical.pt
+```
+
+This shows the percentage of "unknown" labels and the distribution across action types.
+The goal is to keep "unknown" labels below 10% of the dataset.
+
+## 4. Curation policy
 
 Curation (`src/data_gen/curation.py`) applies strict filters to build the Pretrain and SFT splits.
 
-### 3.1 Filtering Criteria
+### 4.1 Filtering Criteria
 Before any thresholds are applied, **canonical single-actor v3 motion** (`[T, 48]`)
 is first **height-normalized and lightly smoothed** in canonical joint space. This
 ensures connectivity is preserved while reducing scale variance and high-frequency
@@ -85,34 +128,34 @@ noise before physics checks and quality scoring.
 2.  **Sequence Length**: Only sequences between **25 and 500 frames** are kept.
 3.  **Artifact Threshold**: Samples with `max_artifact_score > 0.5` are dropped.
 
-### 3.2 Quality Thresholds
+### 4.2 Quality Thresholds
 - **Pretraining**: `quality_score >= 0.5`. Diverse, large scale.
 - **SFT**: `quality_score >= 0.8`. High fidelity, instructional quality.
 - **Camera Stability**: SFT samples must have stable camera movement (`stability >= 0.6`).
 
-### 3.3 Source Balancing (New)
+### 4.3 Source Balancing (New)
 To prevent synthetic data from dominating the dataset (which can lead to hallucination):
 - **Max Source Fraction**: No single source (e.g., Synthetic) can exceed **40%** of the SFT split.
 - **Priority**: Real MoCap (AMASS, KIT-ML) is prioritized over Synthetic data during balancing.
 
-### 3.4 Action Balancing
+### 4.4 Action Balancing
 - **Max Action Fraction**: No single action class (e.g., "walk") can exceed **30%** of SFT.
 - Ensures the model learns rare actions (e.g., "cartwheel") effectively.
 
-## 4. Dataset Merging
+## 5. Dataset Merging
 
 Before curation, individual converted datasets must be merged into a unified training set.
 `scripts/merge_datasets.py` handles this step with:
 
-### 4.1 Source Balancing
+### 5.1 Source Balancing
 - **Max Source Fraction**: Caps any single source at a configurable percentage (default: 30%).
 - Prevents synthetic data or any single MoCap source from dominating.
 
-### 4.2 Quality Filtering
+### 5.2 Quality Filtering
 - **Length Filter**: Removes sequences outside the 25-500 frame range.
 - **Artifact Filter**: Optionally removes samples with high artifact scores.
 
-### 4.3 Usage
+### 5.3 Usage
 ```bash
 # Merge all converted datasets with source balancing
 python -m scripts.merge_datasets \
@@ -128,13 +171,13 @@ Output:
 - `merged_all.pt`: Merged dataset ready for curation.
 - `merged_all.stats.json`: Statistics on source distribution, action distribution, diversity scores.
 
-## 5. Outputs
+## 6. Outputs
 
 Running `scripts/prepare_curated_datasets.py` produces:
 - `pretrain_data.pt` / `sft_data.pt`: Curated splits.
 - `curation_stats.json`: Detailed report on dropped samples, artifact rates, and source distribution.
 
-## 6. End-to-End Pipeline
+## 7. End-to-End Pipeline
 
 The complete data preparation pipeline runs these steps in order:
 
@@ -146,7 +189,7 @@ The complete data preparation pipeline runs these steps in order:
 5. Train model (train.py with appropriate config)
 ```
 
-### 6.1 RunPod Automation
+### 7.1 RunPod Automation
 
 On RunPod, this is orchestrated by `runpod/data_prep_entrypoint.sh` with `USE_CURATED_DATA=true`.
 
@@ -168,7 +211,7 @@ On RunPod, this is orchestrated by `runpod/data_prep_entrypoint.sh` with `USE_CU
 | `CURATION_MIN_CAMERA_STABILITY_SFT` | `0.6` | Min camera stability for SFT |
 | `CURATION_BALANCE_MAX_FRACTION` | `0.3` | Max fraction per action |
 
-### 6.2 Model-Size Specific Settings
+### 7.2 Model-Size Specific Settings
 
 Each model size has tuned curation settings in its config file:
 
@@ -180,12 +223,12 @@ Each model size has tuned curation settings in its config file:
 
 Larger models use stricter thresholds to ensure higher-quality training data.
 
-## 7. Domain-Specific Data for LoRA Fine-Tuning
+## 8. Domain-Specific Data for LoRA Fine-Tuning
 
 When fine-tuning LoRA experts (see `docs/training/FINETUNING.md`), curated domain-specific
 data subsets are essential. Each expert targets a specific motion style or technical aspect.
 
-### 7.1 Style Expert Data Requirements
+### 8.1 Style Expert Data Requirements
 
 | Expert | Source Preference | Key Characteristics |
 |--------|------------------|---------------------|
@@ -194,14 +237,14 @@ data subsets are essential. Each expert targets a specific motion style or techn
 | `expressive_body` | 100STYLE, BEAT | Exaggerated body language, varied dynamics |
 | `multi_actor` | InterHuman | Coordinated movement, interaction timing |
 
-### 7.2 Orthogonal Expert Data
+### 8.2 Orthogonal Expert Data
 
 | Expert | Data Source | Focus |
 |--------|-------------|-------|
 | `camera` | Synthetic parallax renders | Varied camera angles, zooms, tracking shots |
 | `timing` | Post-processed clips | Variable pacing, holds, acceleration curves |
 
-### 7.3 Domain Curation Process
+### 8.3 Domain Curation Process
 
 1. **Filter by action type**: Use `action_types` from expert config to filter samples
 2. **Apply quality thresholds**: Domain data should meet SFT-level quality (≥0.8)
@@ -220,7 +263,7 @@ curator = DomainCurator(
 dramatic_samples = curator.filter(all_sft_samples)
 ```
 
-### 7.4 Data Split Recommendations
+### 8.4 Data Split Recommendations
 
 | Expert | Training Samples | Validation | Notes |
 |--------|------------------|------------|-------|

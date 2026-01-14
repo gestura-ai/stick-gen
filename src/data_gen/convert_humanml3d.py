@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from .action_classifier import classify_action_from_texts
 from .convert_amass import compute_basic_physics
 from .joint_utils import (
     CanonicalJoints2D,
@@ -40,6 +41,9 @@ from .joint_utils import (
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
+
+# Flag to control whether to use embedding-based classification
+USE_EMBEDDING_CLASSIFIER = True
 
 # Configure logging
 logging.basicConfig(
@@ -380,11 +384,29 @@ def _load_texts(root_dir: str) -> dict[str, list[str]]:
 
 
 def _infer_action_from_text(texts: list[str]) -> ActionType:
-    """Infer primary action type from text annotations using keyword matching."""
+    """Infer primary action type from text annotations.
+
+    Uses embedding-based semantic classification as primary method,
+    with regex keyword matching as fallback if embedding classifier
+    is disabled or unavailable.
+
+    Args:
+        texts: List of text descriptions for the motion.
+
+    Returns:
+        Inferred ActionType.
+    """
     if not texts:
         return ActionType.IDLE
 
-    # Combine all texts for matching
+    # Primary: Use embedding-based classifier for semantic matching
+    if USE_EMBEDDING_CLASSIFIER:
+        try:
+            return classify_action_from_texts(texts)
+        except Exception as e:
+            logger.warning(f"Embedding classifier failed, falling back to regex: {e}")
+
+    # Fallback: Regex-based keyword matching
     combined = " ".join(texts).lower()
 
     # Count matches for each action

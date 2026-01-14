@@ -40,6 +40,7 @@ from .joint_utils import (
     normalize_skeleton_height,
     validate_v3_connectivity,
 )
+from .action_classifier import classify_action
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -616,7 +617,10 @@ AMASS_ACTION_MAPPING = {
 
 def infer_action_from_filename(npz_path: str) -> ActionType:
     """
-    Infer action type from AMASS filename
+    Infer action type from AMASS filename.
+
+    Uses keyword matching first, then embedding-based classification
+    on the filename as fallback.
 
     Args:
         npz_path: Path to AMASS .npz file
@@ -634,6 +638,15 @@ def infer_action_from_filename(npz_path: str) -> ActionType:
     for keyword, action in AMASS_ACTION_MAPPING.items():
         if keyword in filename:
             return action
+
+    # Fallback: Use embedding-based classifier on filename parts
+    # This can catch semantic matches like "strolling" → WALK
+    try:
+        # Convert filename to human-readable text
+        readable = filename.replace("_", " ").replace("-", " ")
+        return classify_action(f"A person {readable}")
+    except Exception:
+        pass
 
     # Default to IDLE if no match
     return ActionType.IDLE
@@ -814,6 +827,7 @@ def build_canonical_sample(
         "description": desc,
         "motion": motion,  # [T, 48] (v3 12-segment skeleton)
         "actions": actions,  # [T]
+        "action_label": action.value,  # String label for action classification
         "physics": physics,  # [T, 6]
         "camera": torch.zeros(T, 3),  # [T, 3] (no camera in AMASS)
         "source": "amass",

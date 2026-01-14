@@ -7,6 +7,7 @@ import numpy as np
 import torch
 
 from .convert_amass import AMASSConverter, compute_basic_physics
+from .convert_humanml3d import _infer_action_from_text
 from .metadata_extractors import build_enhanced_metadata, compute_interaction_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -201,8 +202,11 @@ def _build_sample(
     # motion: [T, 2, 48] in v3 12-segment schema
     physics = compute_basic_physics(motion, fps=fps)  # [T, 2, 6]
 
-    # For now treat all InterHuman clips as generic interactions.
-    action_enum = ActionType.FIGHT
+    # Infer action from text descriptions if available, otherwise default to FIGHT
+    if texts:
+        action_enum = _infer_action_from_text(texts)
+    else:
+        action_enum = ActionType.FIGHT  # Default for interaction dataset
     action_idx = ACTION_TO_IDX[action_enum]
     T = motion.shape[0]
     actions = torch.full((T, 2), action_idx, dtype=torch.long)
@@ -228,6 +232,7 @@ def _build_sample(
         "motion": motion,
         "physics": physics,
         "actions": actions,
+        "action_label": action_enum.value,  # String label for action classification
         "camera": None,
         "source": "interhuman",
         "meta": meta,

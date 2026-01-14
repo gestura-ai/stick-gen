@@ -40,6 +40,7 @@ from typing import Any
 
 import torch
 
+from src.data_gen.action_classifier import classify_action_from_texts
 from src.data_gen.curation import (
     CurationConfig,
     _get_source,
@@ -47,6 +48,7 @@ from src.data_gen.curation import (
     filter_by_artifacts,
     filter_by_length,
 )
+from src.data_gen.schema import ActionType
 from src.eval.metrics import (
     compute_dataset_fid_statistics,
     compute_motion_diversity,
@@ -54,6 +56,60 @@ from src.eval.metrics import (
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def _infer_action_label(sample: dict[str, Any]) -> str:
+    """Infer action label from sample when action_label is missing.
+
+    Tries multiple fallback strategies:
+    1. Use existing action_label if present
+    2. Infer from actions tensor (per-frame action indices)
+    3. Infer from description text using keyword matching
+    4. Default to "idle" if all else fails
+
+    Args:
+        sample: Sample dictionary
+
+    Returns:
+        Action label string
+    """
+    # Strategy 1: Use existing action_label
+    existing = sample.get("action_label")
+    if existing and existing != "unknown":
+        return str(existing)
+
+    # Strategy 2: Infer from actions tensor
+    actions = sample.get("actions")
+    if actions is not None:
+        try:
+            tens = torch.as_tensor(actions, dtype=torch.long)
+            if tens.ndim > 1:
+                tens = tens.reshape(-1)
+            if tens.numel() > 0:
+                idx = int(torch.mode(tens).values.item())
+                if 0 <= idx < len(ActionType):
+                    return list(ActionType)[idx].value
+        except Exception:
+            pass
+
+    # Strategy 3: Infer from description text
+    desc = sample.get("description", "")
+    if isinstance(desc, list):
+        desc = desc[0] if desc else ""
+    all_descs = sample.get("all_descriptions", [])
+    if isinstance(all_descs, list) and all_descs:
+        texts = [str(d) for d in all_descs]
+    elif desc:
+        texts = [str(desc)]
+    else:
+        texts = []
+
+    if texts:
+        action_enum = classify_action_from_texts(texts)
+        return action_enum.value
+
+    # Strategy 4: Default to idle
+    return "idle"
 
 
 def load_dataset(path: str) -> list[dict[str, Any]]:
@@ -98,17 +154,26 @@ def merge_datasets(
     source_counts_input: dict[str, int] = {}
 
     # Load all datasets
+    inferred_action_count = 0
     for path in input_paths:
         logger.info(f"Loading {path}...")
         samples = load_dataset(path)
 
         if samples:
             # Tag samples with their file source if not already tagged
+            # and infer action_label if missing
             for s in samples:
                 if "source" not in s:
                     # Infer source from filename
                     fname = Path(path).stem.lower()
                     s["source"] = fname
+
+                # Infer action_label if missing or "unknown"
+                existing_label = s.get("action_label")
+                if not existing_label or existing_label == "unknown":
+                    inferred_label = _infer_action_label(s)
+                    s["action_label"] = inferred_label
+                    inferred_action_count += 1
 
             all_samples.extend(samples)
 
@@ -118,6 +183,7 @@ def merge_datasets(
                 source_counts_input[src] = source_counts_input.get(src, 0) + 1
 
     logger.info(f"Loaded {len(all_samples)} total samples")
+    logger.info(f"Inferred action labels for {inferred_action_count} samples")
     logger.info(f"Input source distribution: {source_counts_input}")
 
     # Create config for filtering

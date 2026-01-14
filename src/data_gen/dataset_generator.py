@@ -23,8 +23,11 @@ from .auto_annotator import annotate_sample
 from .llm_story_engine import LLMStoryGenerator
 from .prompt_generator import DynamicPromptGenerator, ScenePromptGenerator
 from .renderer import StickFigure
+from .convert_amass import compute_basic_physics
+from .action_classifier import classify_action
 from .schema import (
     ACTION_TO_IDX,
+    ActionType,
     FacialExpression,
     MouthShape,
 )
@@ -273,49 +276,73 @@ MOUTH_SHAPE_TO_IDX = {s: i for i, s in enumerate(MouthShape)}
 EYE_TYPE_TO_IDX = {"dots": 0, "curves": 1, "wide": 2, "closed": 3}
 
 
-def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
-    """
-    Apply data augmentation to motion sequence
+def augment_motion_sequence(motion_tensor: torch.Tensor, augmentation_type: str = "speed") -> torch.Tensor:
+    """Apply data augmentation to a motion sequence.
+
+    This function is schema-agnostic and works for both legacy 5-segment (20D)
+    and v3 12-segment (48D) representations, as long as the last dimension is
+    ``segments * 4``.
 
     Args:
-        motion_tensor: [frames, num_actors, 20] tensor
-        augmentation_type: Type of augmentation
+        motion_tensor: Motion tensor of shape ``[frames, actors, D]`` where
+            ``D % 4 == 0``.
+        augmentation_type: Type of augmentation to apply.
+
+    Returns:
+        Augmented motion tensor with the same shape (except for possible
+        temporal resampling in the "speed" augmentation).
     """
+
+    if motion_tensor.dim() != 3:
+        raise ValueError(
+            f"augment_motion_sequence expects [frames, actors, D], got {tuple(motion_tensor.shape)}"
+        )
+
+    frames, actors, features = motion_tensor.shape
+    if features % 4 != 0:
+        raise ValueError(
+            "augment_motion_sequence expects last dimension to be a multiple of 4 "
+            f"(segments × 4 endpoints), got D={features}"
+        )
+
+    num_segments = features // 4
+
     if augmentation_type == "speed":
         # Speed variation: ±20%
         speed_factor = random.uniform(0.8, 1.2)
         if speed_factor < 1.0:
             # Slow down: interpolate
-            num_frames = motion_tensor.shape[0]
+            num_frames = frames
             new_num_frames = int(num_frames / speed_factor)
             indices = torch.linspace(0, num_frames - 1, new_num_frames)
 
-            augmented = []
+            augmented_frames: list[torch.Tensor] = []
             for idx in indices:
                 idx_floor = int(idx.floor())
                 idx_ceil = min(int(idx.ceil()), num_frames - 1)
                 alpha = idx - idx_floor
-                # Interpolate for all actors and lines
+                # Interpolate for all actors and segments
                 frame = (1 - alpha) * motion_tensor[idx_floor] + alpha * motion_tensor[
                     idx_ceil
                 ]
-                augmented.append(frame)
-            return torch.stack(augmented)
+                augmented_frames.append(frame)
+            return torch.stack(augmented_frames)
         else:
             # Speed up: subsample
-            num_frames = motion_tensor.shape[0]
+            num_frames = frames
             new_num_frames = int(num_frames / speed_factor)
             indices = torch.linspace(0, num_frames - 1, new_num_frames).long()
             return motion_tensor[indices]
 
-    elif augmentation_type == "position":
-        # Position jitter: ±0.5 units (apply same jitter to all actors to preserve relative interaction)
+    if augmentation_type == "position":
+        # Position jitter: ±0.5 units (apply same jitter to all actors to
+        # preserve relative interaction).
         jitter_x = random.uniform(-0.5, 0.5)
         jitter_y = random.uniform(-0.5, 0.5)
         augmented = motion_tensor.clone()
-        # [frames, actors, 20] -> [frames, actors, 5 lines, 4 coords]
-        frames, actors, _ = augmented.shape
-        reshaped = augmented.view(frames, actors, 5, 4)
+
+        # [frames, actors, D] -> [frames, actors, segments, 4]
+        reshaped = augmented.view(frames, actors, num_segments, 4)
 
         reshaped[:, :, :, 0] += jitter_x  # x1
         reshaped[:, :, :, 1] += jitter_y  # y1
@@ -324,36 +351,33 @@ def augment_motion_sequence(motion_tensor, augmentation_type="speed"):
 
         return augmented
 
-    elif augmentation_type == "scale":
+    if augmentation_type == "scale":
         # Scale variation: ±10%
         scale_factor = random.uniform(0.9, 1.1)
         return motion_tensor * scale_factor
 
-    elif augmentation_type == "mirror":
+    if augmentation_type == "mirror":
         # Horizontal flip
         augmented = motion_tensor.clone()
-        frames, actors, _ = augmented.shape
-        reshaped = augmented.view(frames, actors, 5, 4)
+        reshaped = augmented.view(frames, actors, num_segments, 4)
 
         reshaped[:, :, :, 0] *= -1  # x1
         reshaped[:, :, :, 2] *= -1  # x2
 
         return augmented
 
-    elif augmentation_type == "noise":
+    if augmentation_type == "noise":
         # Add small Gaussian noise to motion coordinates
         noise_scale = random.uniform(0.01, 0.05)
         noise = torch.randn_like(motion_tensor) * noise_scale
         return motion_tensor + noise
 
-    elif augmentation_type == "time_shift":
+    if augmentation_type == "time_shift":
         # Shift the motion sequence in time (circular shift)
-        num_frames = motion_tensor.shape[0]
-        shift = random.randint(-num_frames // 4, num_frames // 4)
+        shift = random.randint(-frames // 4, frames // 4)
         return torch.roll(motion_tensor, shifts=shift, dims=0)
 
-    else:
-        return motion_tensor
+    return motion_tensor
 
 
 class MotionConditionedSampleGenerator:
@@ -760,7 +784,13 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
         return desc
 
     def _load_source_data(self) -> None:
-        """Load source motion samples from canonical dataset."""
+        """Load v3 source motion samples from canonical dataset.
+
+        Only samples whose ``motion`` field is a non-empty tensor with a
+        48-dimensional last axis (single-actor ``[T, 48]`` or multi-actor
+        ``[T, A, 48]``) are kept. Legacy 20D samples are ignored so the
+        motion-conditioned path remains v3-only.
+        """
         if not os.path.exists(self.motion_source_path):
             raise FileNotFoundError(f"Motion source not found: {self.motion_source_path}")
 
@@ -775,13 +805,26 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
         else:
             samples = [data]
 
-        # Filter to samples with valid motion tensors
-        valid_samples = []
+        valid_samples: list[dict] = []
         for s in samples:
-            if isinstance(s, dict) and "motion" in s:
-                motion = s["motion"]
-                if isinstance(motion, torch.Tensor) and motion.numel() > 0:
-                    valid_samples.append(s)
+            if not isinstance(s, dict) or "motion" not in s:
+                continue
+
+            motion = s["motion"]
+            if not isinstance(motion, torch.Tensor) or motion.numel() == 0:
+                continue
+
+            # Accept only v3 48D motion: [T, 48] or [T, A, 48]
+            if motion.dim() == 2 and motion.shape[1] == 48:
+                valid_samples.append(s)
+            elif motion.dim() == 3 and motion.shape[2] == 48:
+                valid_samples.append(s)
+
+        if not valid_samples:
+            raise RuntimeError(
+                "MotionConditionedSampleGenerator: No valid v3 source samples found "
+                "(expected motion with shape [T, 48] or [T, A, 48])."
+            )
 
         # Cache a subset for memory efficiency
         if len(valid_samples) > self.cache_size:
@@ -789,7 +832,7 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
         else:
             self._source_samples = valid_samples
 
-        print(f"[MotionConditioned] Loaded {len(self._source_samples)} source samples")
+        print(f"[MotionConditioned] Loaded {len(self._source_samples)} v3 source samples")
 
     def _sample_source_clip(self) -> dict:
         """Sample a random clip from the source data."""
@@ -813,16 +856,32 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
         return augmented
 
     def _normalize_motion_shape(self, motion: torch.Tensor) -> torch.Tensor:
-        """Normalize motion tensor to expected shape [frames, actors, 20]."""
-        # Handle various input shapes
+        """Normalize v3 motion to shape ``[target_frames, max_actors, 48]``.
+
+        This helper assumes v3 12-segment motion where the last dimension is 48.
+        It handles both single-actor ``[T, 48]`` and multi-actor ``[T, A, 48]``
+        inputs, resamples in time to ``target_frames``, and ensures there are
+        exactly ``max_actors`` actors by padding with translated clones of
+        existing actors (never zero-only shells).
+        """
+
         if motion.dim() == 2:
-            # [frames, 20] -> [frames, 1, 20]
+            # [frames, 48] -> [frames, 1, 48]
+            T, D = motion.shape
+            if D != 48:
+                raise ValueError(
+                    f"_normalize_motion_shape expected v3 motion [T, 48], got {tuple(motion.shape)}"
+                )
             motion = motion.unsqueeze(1)
         elif motion.dim() == 3:
-            # Already [frames, actors, 20]
-            pass
+            T, A, D = motion.shape
+            if D != 48:
+                raise ValueError(
+                    "_normalize_motion_shape expected v3 motion with last dim 48, "
+                    f"got shape {tuple(motion.shape)}"
+                )
         else:
-            raise ValueError(f"Unexpected motion shape: {motion.shape}")
+            raise ValueError(f"Unexpected motion shape: {tuple(motion.shape)}")
 
         frames, actors, features = motion.shape
 
@@ -832,29 +891,52 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
             padding = motion[-1:].expand(self.target_frames - frames, -1, -1)
             motion = torch.cat([motion, padding], dim=0)
         elif frames > self.target_frames:
-            # Truncate or resample
+            # Truncate or resample to target_frames
             indices = torch.linspace(0, frames - 1, self.target_frames).long()
             motion = motion[indices]
 
-        # Pad/truncate actors
-        if actors < self.max_actors:
-            padding = torch.zeros(
-                self.target_frames, self.max_actors - actors, features,
-                dtype=motion.dtype
-            )
-            motion = torch.cat([motion, padding], dim=1)
-        elif actors > self.max_actors:
-            motion = motion[:, :self.max_actors, :]
+        frames, actors, features = motion.shape
 
-        # Ensure 20 features
-        if features < 20:
-            padding = torch.zeros(
-                self.target_frames, self.max_actors, 20 - features,
-                dtype=motion.dtype
+        # Clamp to max_actors if there are already more actors
+        if actors > self.max_actors:
+            motion = motion[:, : self.max_actors, :]
+            actors = self.max_actors
+
+        # If we need to add actors, create translated clones of existing ones
+        if actors < self.max_actors:
+            # Start from existing actors
+            base = motion
+            new_motion = torch.zeros(
+                frames,
+                self.max_actors,
+                features,
+                dtype=motion.dtype,
+                device=motion.device,
             )
-            motion = torch.cat([motion, padding], dim=2)
-        elif features > 20:
-            motion = motion[:, :, :20]
+            new_motion[:, :actors, :] = base
+
+            # Estimate a reasonable horizontal offset from actor 0's width
+            base_actor = base[:, 0, :].view(frames, 12, 4)
+            x_coords = base_actor[..., [0, 2]]
+            min_x = x_coords.min().item()
+            max_x = x_coords.max().item()
+            width = max(max_x - min_x, 0.5)
+            base_offset = width * 1.2
+
+            for actor_idx in range(actors, self.max_actors):
+                # Round-robin source among existing actors to diversify clones
+                src_idx = actor_idx % max(actors, 1)
+                new_motion[:, actor_idx, :] = base[:, src_idx, :]
+
+                # Symmetric placement around center index
+                offset_mult = actor_idx - (self.max_actors - 1) / 2.0
+                dx = base_offset * offset_mult
+
+                segs = new_motion[:, actor_idx, :].view(frames, 12, 4)
+                segs[..., 0] += dx
+                segs[..., 2] += dx
+
+            motion = new_motion
 
         return motion
 
@@ -882,7 +964,7 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
             if not isinstance(source_motion, torch.Tensor):
                 source_motion = torch.tensor(source_motion, dtype=torch.float32)
 
-            # Normalize shape
+            # Normalize shape to v3 [target_frames, max_actors, 48]
             motion = self._normalize_motion_shape(source_motion)
 
             # Apply augmentations
@@ -896,19 +978,8 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
             # Re-normalize after augmentation (some may change frame count)
             motion = self._normalize_motion_shape(motion)
 
-            # Compute physics
-            fps = 25
-            dt = 1.0 / fps
-            head_pos = motion[:, :, 0:2]
-            velocity = torch.zeros_like(head_pos)
-            velocity[:-1] = (head_pos[1:] - head_pos[:-1]) / dt
-            velocity[-1] = velocity[-2] if motion.shape[0] > 1 else velocity[-1]
-
-            acceleration = torch.zeros_like(velocity)
-            acceleration[:-1] = (velocity[1:] - velocity[:-1]) / dt
-            acceleration[-1] = acceleration[-2] if motion.shape[0] > 1 else acceleration[-1]
-
-            physics_tensor = torch.cat([velocity, acceleration, velocity], dim=2)
+            # Compute physics using generic v3 helper (center-of-mass-based)
+            physics_tensor = compute_basic_physics(motion, fps=25)
 
             # Copy or generate other tensors
             actions = source.get("actions")
@@ -952,10 +1023,31 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
             # Generate description
             description = self._generate_description(source, augs_applied)
 
+            # Propagate action_label from source or infer using multiple strategies
+            action_label = source.get("action_label")
+            if not action_label or action_label == "unknown":
+                # Strategy 1: Infer from actions tensor
+                if actions is not None and actions.numel() > 0:
+                    try:
+                        flat_actions = actions.reshape(-1)
+                        mode_idx = int(torch.mode(flat_actions).values.item())
+                        if 0 <= mode_idx < len(ActionType):
+                            action_label = list(ActionType)[mode_idx].value
+                    except Exception:
+                        pass
+
+                # Strategy 2: Use embedding-based classifier on description
+                if not action_label or action_label == "unknown":
+                    try:
+                        action_label = classify_action(description).value
+                    except Exception:
+                        action_label = "idle"
+
             sample = {
                 "description": description,
                 "motion": motion,
                 "actions": actions,
+                "action_label": action_label,  # String label for action classification
                 "physics": physics_tensor,
                 "face": face,
                 "camera": camera,
@@ -971,7 +1063,7 @@ Start your sentence with: {metadata.get('suggested_start', 'Moving')}"""
             # - Source data was already validated when converted
             # - Augmentations (speed, mirror, etc.) preserve structural validity
             # - Only basic shape check needed
-            if motion.shape != (self.target_frames, self.max_actors, 20):
+            if motion.shape != (self.target_frames, self.max_actors, 48):
                 return None
 
             return sample
@@ -1721,10 +1813,31 @@ class AsyncSampleGenerator:
         env_type = getattr(scene, "environment_type", None)
         weather_type = getattr(scene, "weather_type", None)
 
+        # Infer dominant action label using multiple strategies
+        action_label = None
+
+        # Strategy 1: Infer from action tensor
+        if action_tensor.numel() > 0:
+            try:
+                flat_actions = action_tensor.reshape(-1)
+                mode_idx = int(torch.mode(flat_actions).values.item())
+                if 0 <= mode_idx < len(ActionType):
+                    action_label = list(ActionType)[mode_idx].value
+            except Exception:
+                pass
+
+        # Strategy 2: Use embedding-based classifier on description
+        if not action_label or action_label == "idle":
+            try:
+                action_label = classify_action(scene.description).value
+            except Exception:
+                action_label = "idle"
+
         sample = {
             "description": scene.description,
             "motion": motion_tensor,
             "actions": action_tensor,
+            "action_label": action_label,  # String label for action classification
             "physics": physics_tensor,
             "face": face_tensor,
             "camera": camera_tensor,
@@ -1857,6 +1970,7 @@ async def generate_dataset_async(
             return conditioned_gen.generate_conditioned_sample() or {
                 "description": "fallback motion",
                 "motion": torch.zeros(target_frames, max_actors, 20),
+                "action_label": "idle",
                 "source": "synthetic_conditioned",
             }
 

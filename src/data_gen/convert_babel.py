@@ -28,6 +28,7 @@ from typing import Any
 
 import torch
 
+from .action_classifier import classify_action
 from .convert_amass import AMASSConverter, compute_basic_physics
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
@@ -113,7 +114,11 @@ BABEL_TO_STICKGEN = {
 
 
 def _map_babel_action(babel_action: str) -> ActionType:
-    """Map BABEL action label to Stick-Gen ActionType."""
+    """Map BABEL action label to Stick-Gen ActionType.
+
+    Uses keyword matching first, then embedding-based classification
+    as fallback for semantic matching.
+    """
     action_lower = babel_action.lower().strip()
 
     # Direct lookup
@@ -124,6 +129,12 @@ def _map_babel_action(babel_action: str) -> ActionType:
     for key, action_type in BABEL_TO_STICKGEN.items():
         if key in action_lower or action_lower in key:
             return action_type
+
+    # Fallback: Use embedding-based classifier for semantic matching
+    try:
+        return classify_action(f"A person {babel_action}")
+    except Exception:
+        pass
 
     return ActionType.IDLE
 

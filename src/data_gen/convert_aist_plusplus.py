@@ -278,6 +278,7 @@ def _build_sample(
         "motion": motion,
         "physics": physics,
         "actions": actions,
+        "action_label": action_enum.value,  # String label for action classification
         "camera": camera,
         "source": "aist_plusplus",
         "meta": {**meta, "parsed_name": parsed},

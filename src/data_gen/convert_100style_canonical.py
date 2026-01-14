@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import torch
 
+from .action_classifier import classify_action
 from .convert_amass import compute_basic_physics
 from .joint_utils import CanonicalJoints2D, joints_to_v3_segments_2d, validate_v3_connectivity
 from .metadata_extractors import build_enhanced_metadata
@@ -131,11 +132,18 @@ _STYLE_DESCRIPTIONS: dict[str, str] = {
 def _style_to_action(style: str) -> ActionType:
     """Map 100STYLE style labels to :class:`ActionType`.
 
-    100STYLE is primarily locomotion with different styles, so we treat all of
-    them as :data:`ActionType.WALK` for now and keep the fine-grained style in
-    ``meta``.
+    Uses embedding-based classification to infer action from style description.
+    Falls back to WALK since 100STYLE is primarily locomotion.
     """
+    # Get the style description for better semantic matching
+    description = _STYLE_DESCRIPTIONS.get(style, f"A person {style}")
 
+    try:
+        return classify_action(description)
+    except Exception:
+        pass
+
+    # Default to WALK since 100STYLE is locomotion-focused
     return ActionType.WALK
 
 
@@ -265,6 +273,7 @@ def _build_canonical_sample(item: dict[str, Any], fps: int = 25) -> dict[str, An
         "motion": motion,
         "physics": physics,
         "actions": actions,
+        "action_label": action.value,  # String label for action classification
         "camera": torch.zeros(T, 3),
         "source": item.get("source", "100style_txt"),
         "meta": {

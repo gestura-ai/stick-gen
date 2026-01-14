@@ -141,6 +141,7 @@ def _build_canonical_sample_from_joints(
         "motion": motion,
         "physics": physics,
         "actions": actions,
+        "action_label": action_enum.value,  # String label for action classification
         "camera": None,
         "source": "lsmb19",
         "meta": meta,

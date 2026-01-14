@@ -12,6 +12,7 @@ from .joint_utils import (
     joints_to_v3_segments_2d,
     validate_v3_connectivity,
 )
+from .action_classifier import classify_action
 from .metadata_extractors import build_enhanced_metadata
 from .schema import ACTION_TO_IDX, ActionType
 from .validator import DataValidator
@@ -264,8 +265,15 @@ def joints_to_v3_segments(joints: np.ndarray) -> np.ndarray:
 
 
 def _action_to_enum(action_id: int) -> ActionType:
+    """Map NTU RGB+D action ID to ActionType.
+
+    Uses keyword matching first, then embedding-based classification
+    as fallback for semantic matching.
+    """
     name = NTU_ACTION_LABELS.get(action_id, "unknown")
     s = name.lower()
+
+    # Keyword-based matching for common actions
     if any(k in s for k in ["walk", "hopping", "jump"]):
         return ActionType.WALK
     if any(k in s for k in ["run", "stagger", "fall"]):
@@ -274,6 +282,14 @@ def _action_to_enum(action_id: int) -> ActionType:
         return ActionType.FIGHT
     if any(k in s for k in ["clap", "cheer", "dance"]):
         return ActionType.DANCE
+
+    # Fallback: Use embedding-based classifier for semantic matching
+    if name != "unknown":
+        try:
+            return classify_action(f"A person {name}")
+        except Exception:
+            pass
+
     return ActionType.IDLE
 
 
@@ -307,6 +323,7 @@ def _build_canonical_sample(
         "motion": motion,
         "physics": physics,
         "actions": actions,
+        "action_label": action_enum.value,  # String label for action classification
         "camera": None,
         "source": "ntu_rgbd",
         "meta": meta,

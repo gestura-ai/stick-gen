@@ -78,12 +78,14 @@ SUBDIRS=(
     "smpl_models"
     "amass"
     "100Style"
+    "BEAT"
     "HumanML3D"
     "InterHuman Dataset"
     "KIT-ML"
     "NTU_RGB_D"
     "aist_plusplus"
     "lsmb19-mocap"
+    "babel"
 )
 
 # Convert skip list to array
