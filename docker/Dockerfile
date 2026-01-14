@@ -104,7 +104,8 @@ COPY CITATIONS.md ${WORKSPACE_DIR}/
 
 # Make entrypoint scripts executable
 RUN chmod +x ${WORKSPACE_DIR}/runpod/train_entrypoint.sh \
-    && chmod +x ${WORKSPACE_DIR}/runpod/data_prep_entrypoint.sh
+    && chmod +x ${WORKSPACE_DIR}/runpod/data_prep_entrypoint.sh \
+    && chmod +x ${WORKSPACE_DIR}/runpod/sft_entrypoint.sh
 
 # Set Python path
 ENV PYTHONPATH="${WORKSPACE_DIR}:${PYTHONPATH}"
