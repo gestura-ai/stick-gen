@@ -1,0 +1,67 @@
+MIT License (Legacy Versions)
+
+This file documents the use of the MIT License for certain historical
+versions or components of the Stick-Gen project.
+
+The root of this repository is now licensed under the
+"Prosocial Public License – PPL-3% (Gestura AI / Stick-Gen Variant)"
+as described in the LICENSE file. However, some earlier versions or
+specific files may have been released under the MIT License. For those
+materials, the original MIT grant continues to apply.
+
+---
+
+## 1. Legacy MIT Grant
+
+For any release, commit, or file that was explicitly published under
+the MIT License before the adoption of PPL-3%, the following license
+terms remain in force for that material:
+
+````text
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+````
+
+Nothing in the newer PPL-3% license is intended to revoke or limit these
+rights for Legacy MIT Versions.
+
+---
+
+## 2. Identifying Legacy MIT Versions
+
+Over time, Gestura AI may publish documentation indicating which tags,
+releases, or files are considered "Legacy MIT Versions" (for example,
+by annotating Git tags or adding notes to release descriptions).
+
+Until such a catalog is formally published, downstream users who
+obtained the project under the MIT License may continue to rely on that
+license for the relevant versions or files they received.
+
+---
+
+## 3. PPL-3% for New Work
+
+New work, features, and files added after the adoption of the
+PPL-3% license are intended to be covered by the Prosocial Public
+License – PPL-3% (Gestura AI / Stick-Gen Variant), subject to any
+explicit exceptions or dual-licensing agreements made by Gestura AI.
+
+See the LICENSE and LICENSE_PPL_README.md files for details on the
+current primary license and how the PPL-3% model applies.

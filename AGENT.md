@@ -203,6 +203,12 @@ Runs: Synthetic Gen -> Embeddings -> AMASS Merge -> Training.
 -   **Z-Depth Ordering**: Painter's algorithm for proper limb occlusion.
 -   **Dynamic Line Width**: Depth-based stroke thickness.
 
+## Licensing
+Stick-Gen is licensed under a **Prosocial Public License – PPL-3% (Gestura AI / Stick-Gen Variant)**: for research/OSS and
+users below **USD $1M** annual revenue it behaves effectively like a permissive license, while organizations above that
+threshold using Stick-Gen in commercial products are expected to share **3% of Attributable Revenue** or obtain a
+separate commercial license; see `LICENSE` and `LICENSE_PPL_README.md` for details.
+
 ## Future Improvements
 -   Multi-actor coordination and complex interaction logic.
 -   Background environments and scenery generation.

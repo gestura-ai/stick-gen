@@ -866,7 +866,7 @@ stick-gen/
 ├── checkpoints/                       # Model checkpoints (gitignored)
 ├── requirements.txt                   # Python dependencies
 ├── HUGGINGFACE_ORG_README.md          # Hugging Face organization profile
-├── LICENSE                            # MIT License
+├── LICENSE                            # Prosocial Public License – PPL-3%
 └── README.md                          # This file
 ```
 
@@ -1022,7 +1022,16 @@ We thank:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Stick-Gen is licensed under a **Prosocial Public License – PPL-3% (Gestura AI / Stick-Gen Variant)**.
+
+- For most users (researchers, hobbyists, small teams, and non-profits), the project remains effectively free to use.
+- Organizations with **> USD $1,000,000** in global annual revenue that use Stick-Gen in revenue-generating products or services
+  are expected to share **3% of Attributable Revenue** or obtain a separate commercial license from Gestura AI.
+- Earlier versions or portions of the project that were explicitly released under the MIT License remain available under that
+  grant for those versions/files.
+
+See the [LICENSE](LICENSE) file for the full legal text and [LICENSE_PPL_README.md](LICENSE_PPL_README.md) for a plain-language
+overview of how the license works and how to comply.
 
 ## Contributing
 

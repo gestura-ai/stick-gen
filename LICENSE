@@ -1,22 +1,182 @@
-MIT License
+Prosocial Public License – PPL‑3% (Gestura AI / Stick‑Gen Variant)
+Version 1.0 – January 2026
 
-Copyright (c) 2025 Gestura AI
+Copyright (c) 2025–2026 Gestura AI
+All rights reserved except as expressly granted below.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Preamble
+--------
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Stick‑Gen is an open generative framework for synthesizing expressive,
+physics‑aware stick‑figure motion. This Prosocial Public License (PPL‑3%)
+is designed to:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+  • Enable generous open use by individuals, researchers, and early‑stage
+    teams; and
 
+  • Require successful commercial users above a defined revenue threshold
+    to share a small portion of value (3%) back to support ongoing R&D on
+    Stick‑Gen and related tooling.
+
+By using, copying, modifying, or distributing this software, you accept
+this License.
+
+This License is not legal advice. You should consult with your own legal
+counsel before relying on it.
+
+1. Definitions
+--------------
+
+“Project” means the Stick‑Gen motion generation framework and associated
+code and documentation in this repository that Gestura AI designates as
+licensed under this Prosocial Public License – PPL‑3% (the “License”).
+
+“You” (or “Your”) means an individual or legal entity exercising
+permissions under this License.
+
+“Commercial Use” means use of the Project in or for the provision of
+products or services for which You or Your affiliates receive monetary
+or other commercial value.
+
+“Attributable Revenue” means the portion of Your annual gross revenue
+reasonably attributable to products or services that incorporate or
+depend on the Project.
+
+“Qualifying User” means any You whose global annual gross revenue from
+all activities exceeds USD $1,000,000 in a given fiscal year and that
+engages in Commercial Use of the Project in that year.
+
+“Legacy MIT Versions” means any prior tagged releases or commits of this
+repository that Gestura AI has explicitly identified as licensed under
+the MIT License.
+
+2. Grant of Rights
+------------------
+
+Subject to the conditions in this License, Gestura AI hereby grants You
+a worldwide, non‑exclusive, non‑transferable, royalty‑free (except as
+set forth in Section 3), irrevocable license to:
+
+  • use, copy, and run the Project;
+  • create derivative works of the Project;
+  • distribute the Project and derivative works; and
+  • host or make available the Project as part of a service,
+
+in source or object form, for any purpose, including Commercial Use.
+
+3. Prosocial Revenue Share (PPL‑3%)
+-----------------------------------
+
+3.1 Non‑Qualifying Users (below threshold).
+If You are not a Qualifying User, You may exercise all rights granted in
+Section 2 without owing any payment under this Section 3, subject to the
+other conditions in this License.
+
+3.2 Qualifying Users (above threshold).
+If You are a Qualifying User and engage in Commercial Use of the
+Project during any fiscal year, You must either:
+
+  (a) Remit to Gestura AI, or to a designated non‑profit or foundation
+      controlled by Gestura AI, an amount equal to **3% (three percent)**
+      of Attributable Revenue for that year (“PPL‑3% Share”); or
+
+  (b) Obtain a separate written commercial license from Gestura AI that
+      supersedes or modifies this obligation.
+
+3.3 Revenue threshold.
+For clarity, the PPL‑3% Share applies only if both (i) Your global
+annual gross revenue from all activities exceeds USD $1,000,000 in the
+relevant fiscal year and (ii) You engage in Commercial Use of the
+Project in that year.
+
+4. Funding Mechanisms
+---------------------
+
+4.1 Approved mechanisms.
+Unless otherwise agreed in writing, the PPL‑3% Share may be satisfied by
+making annual payments via one or more of the following mechanisms:
+
+  • GitHub Sponsors or equivalent platforms to Gestura AI
+    (for example: https://github.com/sponsors/gestura-ai); or
+
+  • Direct contributions to a non‑profit foundation or fiscal sponsor
+    publicly designated by Gestura AI at https://gestura.ai as an
+    approved PPL funding recipient; or
+
+  • Any other mechanism expressly approved in writing by Gestura AI.
+
+4.2 Use of funds.
+Gestura AI intends (but is not legally obligated) to direct PPL‑3%
+funds primarily to research and development related to Stick‑Gen,
+including predictive gestures, 2.5D/3D rendering, multimodal
+conditioning, voice and agentic interfaces, and safety tooling.
+
+5. Non‑Commercial, Research, and OSS Uses
+-----------------------------------------
+
+Academic institutions, non‑profit organizations, individuals, and open‑
+source projects that use the Project for non‑commercial research,
+education, experimentation, or open‑source development do not owe any
+payment under Section 3, regardless of revenue, provided that they
+comply with the other terms of this License.
+
+6. Source Availability and Reciprocity
+--------------------------------------
+
+If You distribute the Project or derivative works of the Project, You
+must:
+
+  • include a copy of this License; and
+  • clearly indicate any modifications You have made; and
+  • license such modifications to the Project under this same License.
+
+This Section does not require You to open‑source Your entire product,
+only the portions of code that are derivative works of the Project.
+
+7. Dual Licensing and Exceptions
+--------------------------------
+
+Gestura AI may, at its sole discretion, offer separate commercial
+licenses with different terms (including royalty‑free licenses) to
+individuals or organizations that prefer not to be bound by the PPL‑3%
+Share. Any such agreement must be in writing and will govern to the
+extent of any conflict with this License.
+
+8. Governance and PPL Ecosystem
+-------------------------------
+
+Gestura AI intends to align this License with the broader Prosocial
+Public License (PPL) ecosystem and may participate in or reference a
+membership‑based non‑profit entity that provides policy guidance and
+legal support for PPL‑style licenses. Such alignment does not limit the
+rights granted to You under this License.
+
+9. Legacy MIT Versions
+----------------------
+
+Nothing in this License is intended to retroactively revoke or limit
+rights that were validly granted under the MIT License for any Legacy
+MIT Versions. To the extent any file, release, or commit has been
+explicitly identified by Gestura AI as licensed under the MIT License,
+Your rights under that MIT grant remain in effect for that material.
+
+10. Termination
+----------------
+
+If You materially breach this License and fail to cure such breach
+within thirty (30) days after receiving written notice from Gestura AI,
+Your rights under this License automatically terminate. Upon
+termination, You must cease all use and distribution of the Project,
+but this does not affect rights You granted to others in compliance
+with this License prior to termination.
+
+11. Disclaimer of Warranty
+--------------------------
+
+THE PROJECT IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+PROJECT OR THE USE OR OTHER DEALINGS IN THE PROJECT.
